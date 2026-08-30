@@ -455,15 +455,20 @@ try {
       warpRow.provenance.date === 'FLYER_TEXT' && warpRow.provenance.venue === 'FLYER_TEXT'
       && warpRow.provenance.title === 'AI_INFERENCE');
 
-    // No extraction available → the item still queues with the member's hints.
+    // No extraction available → a pending night is still built from the
+    // member's own answers, so the contribution can become visible later.
     const plain = await jules.form('/api/archive/contribute',
       uploadForm('Mystery ticket stub', 'late 90s', 'Bristol', { itemType: 'ticket_stub' }),
       { 'x-vision-fixture': 'null' });
     const plainData = await plain.json();
-    check('no extraction → item waits for admin with hints attached',
+    const plainEvent = (await q(
+      `select e.status, e.title, e.city from archive_items i
+         join archive_events e on e.id = i.archive_event_id where i.id = $1`,
+      [plainData.itemId]))[0];
+    check('no extraction → pending night built from the member hints',
       plain.status === 200 && plainData.attachedToExisting === false
-      && (await q(`select archive_event_id, contributor_note from archive_items where id = $1`,
-        [plainData.itemId]))[0].archive_event_id === null);
+      && plainEvent && plainEvent.status === 'pending'
+      && plainEvent.title === 'Mystery ticket stub' && plainEvent.city === 'Bristol');
     check('ingestion runs are recorded',
       (await q(`select count(*)::int as n from archive_ingestions where kind = 'upload'`))[0].n >= 3);
 
@@ -498,6 +503,29 @@ try {
       `select count(*)::int as n from email_outbox where member_id = $1 and created_at > now() - interval '5 minutes'`,
       [ids.nadia]))[0].n === 0);
     check('published artefact appears on the night', (await anon.html(mzUrl)).includes(uploadedMediaId));
+
+    // Publishing an item drags its night along — a published item invisible
+    // behind a pending or missing night is the bug this guards against.
+    const hinted = await jules.form('/api/archive/contribute',
+      uploadForm('Lost basement night', '1998', 'Leeds'), { 'x-vision-fixture': 'null' });
+    const hintedItem = (await hinted.json()).itemId;
+    await oshi.post('/api/admin/archive', { action: 'publish_item', itemId: hintedItem });
+    const hintedEvent = (await q(
+      `select e.status from archive_items i join archive_events e on e.id = i.archive_event_id
+        where i.id = $1`, [hintedItem]))[0];
+    check('publish_item publishes the pending night it is attached to',
+      hintedEvent && hintedEvent.status === 'published');
+
+    const orphanItem = (await q(
+      `insert into archive_items (item_type, title, contributor_note, status, provenance)
+       values ('flyer', 'Orphan flyer', 'somewhere in 1997', 'pending', '{}') returning id`))[0].id;
+    await oshi.post('/api/admin/archive', { action: 'publish_item', itemId: orphanItem });
+    const orphanEvent = (await q(
+      `select e.status, e.title, e.year from archive_items i
+         join archive_events e on e.id = i.archive_event_id where i.id = $1`, [orphanItem]))[0];
+    check('publish_item creates + publishes a night for an unattached item',
+      orphanEvent && orphanEvent.status === 'published'
+      && orphanEvent.title === 'Orphan flyer' && orphanEvent.year === 1997);
   }
 
   // -------------------------------------------------------------------------

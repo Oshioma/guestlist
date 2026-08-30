@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, requireAdmin } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
-import { mergeArchiveEvents } from '@/lib/archive/core';
+import { createArchiveEvent, hintsToInput, mergeArchiveEvents } from '@/lib/archive/core';
 import { runBulkImport } from '@/lib/archive/bulk';
 import { resolveArchiveDate } from '@/lib/archive/dates';
 
@@ -50,14 +50,38 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'publish_item' || action === 'reject_item') {
-      const row = await queryOne<{ id: string; archive_event_id: string | null }>(
+      const row = await queryOne<{
+        id: string; archive_event_id: string | null; item_type: string;
+        title: string | null; contributor_note: string | null; contributed_by: string | null;
+      }>(
         `update archive_items set
             status = $2, published_at = case when $2 = 'published' then now() end
-          where id = $1 returning id, archive_event_id`,
+          where id = $1 returning id, archive_event_id, item_type, title, contributor_note, contributed_by`,
         [String(body.itemId ?? ''), action === 'publish_item' ? 'published' : 'rejected']);
       if (!row) return NextResponse.json({ error: 'Item not found' }, { status: 404 });
-      if (action === 'publish_item' && row.archive_event_id) {
-        await notifyAttendees(row.archive_event_id, 'New material was added to a night you were at');
+      if (action === 'publish_item') {
+        // A published item is only visible when its night is published too
+        // — so publishing an item drags its night along, creating one from
+        // the contribution when nothing was ever attached.
+        let eventId = row.archive_event_id;
+        if (!eventId) {
+          const created = await createArchiveEvent(
+            hintsToInput(
+              { what: row.title, when: row.contributor_note, where: null },
+              { sourceAttribution: 'Member contribution' },
+              row.item_type),
+            row.contributed_by ?? admin.id);
+          if (!('error' in created)) {
+            eventId = created.id;
+            await query(`update archive_items set archive_event_id = $2 where id = $1`, [row.id, eventId]);
+          }
+        }
+        if (eventId) {
+          await query(
+            `update archive_events set status = 'published', published_at = coalesce(published_at, now())
+              where id = $1 and status in ('pending', 'needs_review', 'needs_research')`, [eventId]);
+          await notifyAttendees(eventId, 'New material was added to a night you were at');
+        }
       }
       return NextResponse.json({ ok: true });
     }
