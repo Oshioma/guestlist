@@ -7,6 +7,10 @@
 // "Add an old event" (JSON) creates a pending event the same way.
 
 import { NextRequest, NextResponse } from 'next/server';
+
+// Uploads do real work (image variants, storage writes, extraction) — the
+// serverless default of 10s is too tight for a large flyer.
+export const maxDuration = 60;
 import { AuthError, requireMember } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
 import { track } from '@/lib/analytics';
