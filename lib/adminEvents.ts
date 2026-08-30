@@ -1,6 +1,8 @@
 // Admin create/update logic for events: slug management, genre + lineup
 // wiring, dedupe flagging, publish transitions.
 
+import { onEventPublished } from './alerts';
+import { findOrCreateCity } from './locations';
 import { query, queryOne } from './db';
 import { checkForDuplicate } from './dedupe';
 import { normalizeTitle, slugify } from './util';
@@ -112,6 +114,26 @@ async function syncRelations(eventId: string, input: EventInput) {
   }
 }
 
+// Keep events on the canonical location graph — city strings are display
+// cache, the location row is identity (drives city pages, travel + home
+// city alerts, city health).
+async function linkLocation(
+  eventId: string,
+  city: string | null | undefined,
+  country: string | null | undefined,
+  timezone?: string | null
+) {
+  if (!city?.trim()) return;
+  try {
+    const loc = await findOrCreateCity({
+      name: city, countryName: country ?? null, timezone: timezone ?? null,
+    });
+    await query(`update events set location_id = $2 where id = $1`, [eventId, loc.id]);
+  } catch (err) {
+    console.error('location link failed', err);
+  }
+}
+
 export async function createEvent(
   input: EventInput,
   createdBy: string
@@ -158,6 +180,8 @@ export async function createEvent(
     );
   }
   await syncRelations(row!.id, input);
+  await linkLocation(row!.id, input.city, input.country, input.timezone);
+  if (status === 'live') void onEventPublished(row!.id);
   return { id: row!.id, slug, status, possibleDuplicateOf };
 }
 
@@ -226,6 +250,10 @@ export async function updateEvent(
     args
   );
   if (res.length === 0) return { ok: false };
+  if (input.city !== undefined) {
+    await linkLocation(id, input.city, input.country ?? null, input.timezone);
+  }
+  if (input.status === 'live') void onEventPublished(id);
   await syncRelations(id, input as EventInput);
   return { ok: true };
 }

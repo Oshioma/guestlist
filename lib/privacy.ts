@@ -77,6 +77,8 @@ export type MemberEmailPrefs = {
   travel_events: boolean;
   connection_going: boolean;
   weekly_digest: boolean;
+  event_reminders: boolean;
+  alert_frequency: 'instant' | 'daily' | 'weekly' | 'off';
 };
 
 export const EMAIL_PREF_DEFAULTS: MemberEmailPrefs = {
@@ -87,12 +89,17 @@ export const EMAIL_PREF_DEFAULTS: MemberEmailPrefs = {
   travel_events: true,
   connection_going: false,
   weekly_digest: true,
+  event_reminders: true,
+  // Conservative default: high-intent follows land in a daily digest, not
+  // instant email; members opt IN to as-it-happens.
+  alert_frequency: 'daily',
 };
 
 export async function getEmailPrefs(memberId: string): Promise<MemberEmailPrefs> {
   const row = await queryOne<MemberEmailPrefs>(
     `select followed_promoter_events, followed_venue_events, followed_artist_events,
-            genre_in_home_city, travel_events, connection_going, weekly_digest
+            genre_in_home_city, travel_events, connection_going, weekly_digest,
+            event_reminders, alert_frequency
        from member_email_prefs where member_id = $1`,
     [memberId]
   );
@@ -103,18 +110,25 @@ export async function updateEmailPrefs(memberId: string, patch: Partial<MemberEm
   const current = await getEmailPrefs(memberId);
   const next: MemberEmailPrefs = { ...current };
   for (const key of Object.keys(EMAIL_PREF_DEFAULTS) as (keyof MemberEmailPrefs)[]) {
-    if (typeof patch[key] === 'boolean') next[key] = patch[key]!;
+    if (key === 'alert_frequency') continue;
+    if (typeof patch[key] === 'boolean') (next as Record<string, unknown>)[key] = patch[key];
+  }
+  if (patch.alert_frequency && ['instant', 'daily', 'weekly', 'off'].includes(patch.alert_frequency)) {
+    next.alert_frequency = patch.alert_frequency;
   }
   await query(
     `insert into member_email_prefs (member_id, followed_promoter_events, followed_venue_events,
-       followed_artist_events, genre_in_home_city, travel_events, connection_going, weekly_digest)
-     values ($1,$2,$3,$4,$5,$6,$7,$8)
+       followed_artist_events, genre_in_home_city, travel_events, connection_going, weekly_digest,
+       event_reminders, alert_frequency)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
      on conflict (member_id) do update set
        followed_promoter_events=$2, followed_venue_events=$3, followed_artist_events=$4,
        genre_in_home_city=$5, travel_events=$6, connection_going=$7, weekly_digest=$8,
+       event_reminders=$9, alert_frequency=$10,
        updated_at=now()`,
     [memberId, next.followed_promoter_events, next.followed_venue_events, next.followed_artist_events,
-     next.genre_in_home_city, next.travel_events, next.connection_going, next.weekly_digest]
+     next.genre_in_home_city, next.travel_events, next.connection_going, next.weekly_digest,
+     next.event_reminders, next.alert_frequency]
   );
   return next;
 }

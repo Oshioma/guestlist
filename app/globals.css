@@ -1782,3 +1782,23 @@ button { font-family: inherit; }
 .cityStatus.seeding { color: var(--text-muted); }
 .cityStatus.live { color: #7ed99a; }
 .cityStatus.strong { color: var(--accent); }
+
+/* ── V2D: notification centre ───────────────────────────────────────────── */
+.bellLink { position: relative; font-size: 15px; text-decoration: none; }
+.bellBadge {
+  position: absolute; top: -6px; right: -10px;
+  background: var(--accent); color: #141005;
+  font-size: 9.5px; font-weight: 800; line-height: 1;
+  border-radius: 999px; padding: 3px 5px; min-width: 10px; text-align: center;
+}
+.notifCentreList { display: grid; gap: 6px; }
+.notifCentreRow {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 14px;
+  width: 100%; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 13px 16px;
+  color: var(--text); font-size: 14px; font-family: inherit;
+}
+.notifCentreRow:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+.notifCentreRow.isUnread { border-color: rgba(242, 201, 76, 0.45); background: rgba(242, 201, 76, 0.06); }
+.notifCentreText { min-width: 0; }

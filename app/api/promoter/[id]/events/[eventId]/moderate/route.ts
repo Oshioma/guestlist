@@ -7,6 +7,7 @@
 //              admin, with an audit trail
 
 import { NextRequest, NextResponse } from 'next/server';
+import { onEventPublished } from '@/lib/alerts';
 import { AuthError } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { requireOwnEvent, requirePromoterRole } from '@/lib/promoterAuth';
@@ -48,6 +49,7 @@ export async function POST(
         );
         await audit('event_confirmed', { actorId: member.id, promoterId: promoter.id, eventId });
         await notifyPromoter(promoter.id, 'event_published', { eventId });
+        void onEventPublished(eventId);
         return NextResponse.json({ ok: true, status: 'live' });
       }
       case 'ignore': {

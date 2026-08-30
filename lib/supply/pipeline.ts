@@ -8,6 +8,8 @@
 // application validation. All failures land as explicit extraction states —
 // nothing is silently swallowed.
 
+import { onEventPublished } from '../alerts';
+import { findOrCreateCity } from '../locations';
 import { query, queryOne } from '@/lib/db';
 import { normalizeTitle, slugify, EVENT_TYPES } from '@/lib/util';
 import { safeFetch, type SafeFetchOptions, type SafeFetchResult } from './safeFetch';
@@ -628,6 +630,18 @@ export async function runExtractionPipeline(
       [ctx.submissionId, eventId]
     );
   }
+
+  // Canonical location linkage (city pages, travel/home-city alerts).
+  if (city) {
+    try {
+      const loc = await findOrCreateCity({ name: city, countryName: country ?? null, timezone: tz.timezone });
+      await query(`update events set location_id = $2 where id = $1`, [eventId, loc.id]);
+    } catch (err) {
+      console.error('location link failed', err);
+    }
+  }
+  // Auto-published events trigger the member alert engine (fire-and-forget).
+  if (eventStatus === 'live') void onEventPublished(eventId);
 
   return {
     extractionId: exId,

@@ -170,3 +170,10 @@
 --   for select using (status = 'approved' or created_by = auth.uid());
 -- (writes via API/service role only; email_outbox, member_reports and
 --  event_duplicate_requests are service-role/admin surfaces.)
+
+-- ── V2D Retention engine (migration 006) ────────────────────────────────────
+-- email_outbox, email_suppressions and system_settings are service-role /
+-- admin surfaces — no member-facing policies (never selectable by clients).
+-- notifications already carries owner-only policies above; the new alert
+-- types inherit them. member_email_prefs is covered by "own email prefs".
+-- Unsubscribe links are authenticated by HMAC token, not by session.

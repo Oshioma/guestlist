@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/lib/db';
 import { AuthError, requireMember } from '@/lib/auth';
 import { track } from '@/lib/analytics';
+import { onMemberGoing } from '@/lib/alerts';
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -72,6 +73,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       if (nextRsvp === 'going' && body.source === 'clubmessenger') {
         await track('going_from_clubmessenger', { memberId: member.id, eventId: id });
       }
+      // Connection-going alerts (fire-and-forget, dedupe-safe).
+      if (nextRsvp === 'going') void onMemberGoing(member.id, id);
     }
 
     return NextResponse.json({ ok: true, saved: nextSaved, rsvp: nextRsvp });
