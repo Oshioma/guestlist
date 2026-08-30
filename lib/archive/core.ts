@@ -438,7 +438,7 @@ export async function currentEventsForArchive(archiveEventId: string, limit = 4)
 // ---------------------------------------------------------------------------
 
 export async function archiveHighlights() {
-  const [onThisWeek, recent, flyers, decades, entities, memories] = await Promise.all([
+  const [onThisWeek, recent, flyers, decades, entities, memories, mixes] = await Promise.all([
     // Exact/month-dated events whose calendar week matches now (any year).
     query(
       `select e.id, e.title, e.slug, e.display_date, e.city, e.year
@@ -489,8 +489,18 @@ export async function archiveHighlights() {
         where mem.status = 'visible'
         order by mem.created_at desc limit 6`
     ),
+    query(
+      `select x.id, x.title, x.artist_name, x.platform, x.url, x.credit_contributor,
+              m.display_name as contributor,
+              e.title as event_title, e.slug as event_slug, e.display_date
+         from archive_mixes x
+         join archive_events e on e.id = x.archive_event_id and e.status = 'published'
+         left join members m on m.id = x.contributed_by
+        where x.status = 'published'
+        order by x.published_at desc limit 6`
+    ),
   ]);
-  return { onThisWeek, recent, flyers, decades, entities, memories };
+  return { onThisWeek, recent, flyers, decades, entities, memories, mixes };
 }
 
 export async function searchArchive(q: string, viewerId: string | null) {

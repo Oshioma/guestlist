@@ -5,6 +5,7 @@ import { getCurrentMember } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { archiveHighlights, searchArchive } from '@/lib/archive/core';
 import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
+import { MixCard, type MixRow } from '@/components/archive/MixCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
     decades: { decade: number; n: number }[];
     entities: { id: string; name: string; slug: string; entity_type: string; city: string | null; country_name: string | null; active_from_year: number | null; active_to_year: number | null; members: number; archive_events: number }[];
     memories: { body: string; display_name: string; title: string; slug: string }[];
+    mixes: MixRow[];
   };
   const searchTyped = search as unknown as {
     entities: { id: string; name: string; slug: string; city: string | null; active_from_year: number | null; active_to_year: number | null }[];
@@ -125,6 +127,15 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                 <span className="flyerCaption">{f.title} · {f.display_date}</span>
               </Link>
             ))}
+          </div>
+        </section>
+      )}
+
+      {h.mixes.length > 0 && (
+        <section>
+          <div className="sectionLabel">The mixes</div>
+          <div className="mixGrid">
+            {h.mixes.map((x) => <MixCard key={x.id} mix={x} />)}
           </div>
         </section>
       )}
