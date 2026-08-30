@@ -41,19 +41,24 @@ const normTitle = (t) =>
 await q(`truncate analytics_events, event_classifications, member_event_actions,
   event_submissions, event_images, event_artists, event_genres, events,
   event_sources, artists, promoters, venues, member_follows, member_genres,
-  auth_sessions, members, genres restart identity cascade`);
+  auth_sessions, members, genres, locations, scene_entities, email_outbox
+  restart identity cascade`);
 
 // --- genres ---
+// Global taxonomy — an explicit editorial decision, not AI expansion.
+// New scenes still arrive through the controlled genre-suggestion workflow.
 const parentGenres = [
   'House', 'Drum & Bass', 'Jungle', 'Techno', 'Garage', 'Disco',
   'Trance', 'Hardcore', 'Reggae & Dub', 'Bass', 'Breaks', 'Balearic',
+  'Amapiano', 'Afrobeats', 'Dancehall', 'Latin Electronic',
 ];
 const subGenres = {
   'Drum & Bass': ['Liquid', 'Jump Up', 'Rollers', 'Neurofunk'],
-  House: ['Deep House', 'Vocal House', 'Classic House', 'Funky House', 'Progressive House'],
+  House: ['Deep House', 'Vocal House', 'Classic House', 'Funky House', 'Progressive House', 'Afro House'],
   Garage: ['UK Garage', '2-Step', 'Speed Garage'],
   Jungle: ['Old School Jungle', 'Ragga Jungle'],
-  Techno: ['Melodic Techno', 'Hard Techno'],
+  Techno: ['Melodic Techno', 'Hard Techno', 'Gqom'],
+  'Latin Electronic': ['Brazilian Bass'],
 };
 const genreId = {};
 let sort = 0;
@@ -88,6 +93,8 @@ const venuesData = [
   ['Laguna Beach Club', 'The Garden, Tisno', 'Tisno', 'Croatia', 43.8007, 15.6431],
   ['Kendwa Shores', 'Kendwa Beach', 'Zanzibar', 'Tanzania', -5.7515, 39.2871],
   ['The Undercroft', 'Trongate', 'Glasgow', 'United Kingdom', 55.8570, -4.2450],
+  ['The Grain Store', 'Woodstock', 'Cape Town', 'South Africa', -33.9276, 18.4487],
+  ['Greenpoint Works', 'Greenpoint Ave', 'New York', 'United States', 40.7304, -73.9540],
 ];
 const venueId = {};
 for (const [name, address, city, country, lat, lng] of venuesData) {
@@ -163,6 +170,11 @@ const membersData = [
   ['dev-rob@example.com', 'Rob Hacienda', 'member', 'Manchester', 'United Kingdom'],
   ['dev-carla@example.com', 'Carla B', 'member', 'Berlin', 'Germany'],
   ['dev-steve@example.com', 'Stevie G', 'member', 'Glasgow', 'United Kingdom'],
+  // Global members (V2C): the network is international from day one.
+  ['dev-lena@example.com', 'Lena Voss', 'member', 'Berlin', 'Germany'],
+  ['dev-amani@example.com', 'Amani J', 'member', 'Zanzibar', 'Tanzania'],
+  ['dev-thabo@example.com', 'Thabo M', 'member', 'Cape Town', 'South Africa'],
+  ['dev-maya@example.com', 'Maya R', 'member', 'New York', 'United States'],
 ];
 const memberId = {};
 const pw = hashPassword('guestlist');
@@ -183,6 +195,10 @@ const prefs = {
   'dev-marcus@example.com': ['Techno'],
   'dev-jules@example.com': ['House', 'Disco'],
   'dev-kwame@example.com': ['Garage', 'Bass'],
+  'dev-lena@example.com': ['Techno', 'Melodic Techno'],
+  'dev-amani@example.com': ['Afro House', 'House'],
+  'dev-thabo@example.com': ['Amapiano', 'Afro House'],
+  'dev-maya@example.com': ['House', 'Disco', 'Classic House'],
 };
 for (const [email, names] of Object.entries(prefs)) {
   for (const g of names) {
@@ -337,6 +353,16 @@ const eventsData = [
     ['Disco', 'Funky House'], ['The Ellington Twins'],
     27.5, 45, 'GBP', img.supper, {},
     'A nine-piece band, a horn section, and two hours of disco played live.'],
+  ['Umoja: Amapiano & Afro House All-Nighter', 'Log drums until sunrise over Table Mountain.',
+    day(21, 21), day(22, 6), 'Africa/Johannesburg', 'The Grain Store', null, 'club_night',
+    ['Amapiano', 'Afro House', 'House'], ['DJ Half Moon', 'Aya Sable'],
+    180, 250, 'ZAR', img.party, { travel: true },
+    'Cape Town’s deepest amapiano session takes over the old grain store: log drums, private-school piano and Afro house until the mountain turns pink. Local selectors carry the night.'],
+  ['Greenpoint Works: Loft Classics', 'New York house played where it was invented.',
+    day(28, 22), day(29, 6), 'America/New_York', 'Greenpoint Works', null, 'club_night',
+    ['House', 'Classic House', 'Disco'], ['Sister Midnight', 'Marcy Vale'],
+    30, 40, 'USD', img.hero, { travel: true },
+    'A Brooklyn warehouse, a rotary mixer, and six hours of the records that started everything. Loft Classics is a love letter to the city that built house music.'],
   ['Classic House Vinyl Social', 'Free afternoon session — bring your own records hour included.',
     day(6, 15), day(6, 21), 'Europe/London', 'The Boiler Yard', 'Analogue Love', 'day_party',
     ['House', 'Classic House', 'Deep House'], [],
@@ -506,6 +532,143 @@ for (const [a, b] of friendPairs) {
   await followMember(b, a);
 }
 for (const [a, b] of oneWayFollows) await followMember(a, b);
+
+// --- canonical locations (V2C) ---
+// Mirror of the migration-005 backfill so a freshly seeded dev database has
+// the same structured geography a migrated production database gets.
+await q(`
+create or replace function _seed_cc(name text) returns char(2)
+language sql immutable as $fn$
+  select case lower(coalesce(name, ''))
+    when 'united kingdom' then 'GB' when 'spain' then 'ES' when 'netherlands' then 'NL'
+    when 'germany' then 'DE' when 'croatia' then 'HR' when 'tanzania' then 'TZ'
+    when 'south africa' then 'ZA' when 'united states' then 'US' when 'france' then 'FR'
+    when 'italy' then 'IT' when 'portugal' then 'PT' when 'brazil' then 'BR'
+    when 'australia' then 'AU' when 'japan' then 'JP' when 'ireland' then 'IE'
+    else null end
+$fn$;
+insert into locations (kind, name, normalized_name, slug, country_code, country_name, timezone, latitude, longitude)
+select 'city', src.city, lower(trim(src.city)),
+       regexp_replace(lower(trim(src.city)), '[^a-z0-9]+', '-', 'g')
+         || case when count(*) over (partition by lower(trim(src.city))) > 1
+                 then coalesce('-' || lower(_seed_cc(src.country)), '-2') else '' end,
+       _seed_cc(src.country), src.country, src.tz, src.lat, src.lng
+  from (
+    select city, country, tz, lat, lng,
+           row_number() over (partition by lower(trim(city)), _seed_cc(country)
+                              order by tz nulls last, lat nulls last) as rn
+      from (
+        select e.city, e.country, mode() within group (order by e.timezone) as tz,
+               avg(e.latitude) as lat, avg(e.longitude) as lng
+          from events e where e.city is not null group by e.city, e.country
+        union all
+        select v.city, v.country, null, avg(v.latitude), avg(v.longitude)
+          from venues v where v.city is not null group by v.city, v.country
+        union all
+        select m.home_city, m.home_country, null, null, null
+          from members m where m.home_city is not null group by m.home_city, m.home_country
+      ) all_places
+  ) src
+ where src.rn = 1
+on conflict (kind, normalized_name, country_code) do nothing;
+update events e set location_id = l.id from locations l
+ where e.city is not null and e.location_id is null and l.kind = 'city'
+   and l.normalized_name = lower(trim(e.city))
+   and l.country_code is not distinct from _seed_cc(e.country);
+update venues v set location_id = l.id from locations l
+ where v.city is not null and v.location_id is null and l.kind = 'city'
+   and l.normalized_name = lower(trim(v.city))
+   and l.country_code is not distinct from _seed_cc(v.country);
+update members m set home_location_id = l.id from locations l
+ where m.home_city is not null and m.home_location_id is null and l.kind = 'city'
+   and l.normalized_name = lower(trim(m.home_city))
+   and l.country_code is not distinct from _seed_cc(m.home_country);
+update members set slug = regexp_replace(lower(display_name), '[^a-z0-9]+', '-', 'g') || '-' || left(id::text, 6)
+ where slug is null;
+drop function _seed_cc(text);
+`);
+
+// --- V2C: rave history, connections, travel, city follows (fictional) ---
+const sceneData = [
+  // [name, type, city, cc, country, from, to]
+  ['The End', 'club', 'London', 'GB', 'United Kingdom', 1995, 2009],
+  ['Space', 'club', 'Ibiza', 'ES', 'Spain', 1989, 2016],
+  ['Metalheadz Sunday Sessions', 'party', 'London', 'GB', 'United Kingdom', 1996, 2000],
+  ['Ministry of Sound', 'club', 'London', 'GB', 'United Kingdom', 1991, null],
+  ['Tresor', 'club', 'Berlin', 'DE', 'Germany', 1991, null],
+  ['Paradise Garage', 'club', 'New York', 'US', 'United States', 1977, 1987],
+  ['The Garden Festival', 'festival', 'Tisno', 'HR', 'Croatia', 2006, 2015],
+  ['Origin Sound System', 'promoter', 'Bristol', 'GB', 'United Kingdom', 1998, 2010],
+];
+const sceneId = {};
+for (const [name, type, city, cc, country, from, to] of sceneData) {
+  const normalized = name.toLowerCase().replace(/^the\s+/, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const [row] = await q(
+    `insert into scene_entities (name, normalized_name, entity_type, city, country_code, country_name,
+       active_from_year, active_to_year, status, created_by)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,'approved',$9) returning id`,
+    [name, normalized, type, city, cc, country, from, to, memberId['oshi@guestlist.net']]
+  );
+  sceneId[name] = row.id;
+}
+const histories = [
+  // [email, entity, from, to, genres]
+  ['oshi@guestlist.net', 'The End', 1998, 2002, ['House']],
+  ['oshi@guestlist.net', 'Space', 2001, 2008, ['House', 'Balearic']],
+  ['oshi@guestlist.net', 'Ministry of Sound', 1994, 1997, ['House']],
+  ['dev-nadia@example.com', 'Metalheadz Sunday Sessions', 1996, 1999, ['Jungle', 'Drum & Bass']],
+  ['dev-nadia@example.com', 'The End', 1999, 2003, ['Drum & Bass']],
+  ['dev-jules@example.com', 'Space', 2002, 2006, ['House', 'Disco']],
+  ['dev-kwame@example.com', 'The End', 2000, 2004, ['Garage', 'Bass']],
+  ['dev-carla@example.com', 'Tresor', 2005, 2015, ['Techno']],
+  ['dev-marcus@example.com', 'Tresor', 2008, 2012, ['Techno']],
+  ['dev-lena@example.com', 'Tresor', 2010, null, ['Techno']],
+  ['dev-elena@example.com', 'The Garden Festival', 2010, 2014, ['House', 'Balearic']],
+  ['dev-maya@example.com', 'Paradise Garage', 1984, 1987, ['House', 'Disco']],
+];
+for (const [email, entity, from, to, gs] of histories) {
+  const [row] = await q(
+    `insert into member_scene_history (member_id, entity_id, from_year, to_year)
+     values ($1,$2,$3,$4) returning id`,
+    [memberId[email], sceneId[entity], from, to]
+  );
+  for (const g of gs) {
+    await q(`insert into member_scene_history_genres (history_id, genre_id) values ($1,$2) on conflict do nothing`,
+      [row.id, genreId[g]]);
+  }
+}
+// Connections (accepted) — distinct from mutual follows.
+for (const [a, b] of [
+  ['oshi@guestlist.net', 'dev-jules@example.com'],
+  ['dev-carla@example.com', 'dev-marcus@example.com'],
+]) {
+  await q(
+    `insert into member_connections (requester_id, addressee_id, status, responded_at)
+     values ($1,$2,'connected',now())`,
+    [memberId[a], memberId[b]]
+  );
+}
+// City follows + a travel plan (relative dates stay useful forever).
+const locId = async (slug) => (await q(`select id from locations where slug = $1`, [slug]))[0]?.id;
+const ibizaLoc = await locId('ibiza');
+const londonLoc = await locId('london');
+if (londonLoc) {
+  await q(`insert into member_locations (member_id, location_id) values ($1,$2) on conflict do nothing`,
+    [memberId['dev-amani@example.com'], londonLoc]);
+  await q(`insert into member_locations (member_id, location_id) values ($1,$2) on conflict do nothing`,
+    [memberId['dev-maya@example.com'], londonLoc]);
+}
+if (ibizaLoc) {
+  await q(`insert into member_locations (member_id, location_id) values ($1,$2) on conflict do nothing`,
+    [memberId['oshi@guestlist.net'], ibizaLoc]);
+  const tFrom = new Date(now); tFrom.setDate(tFrom.getDate() + 10);
+  const tTo = new Date(now); tTo.setDate(tTo.getDate() + 17);
+  await q(
+    `insert into travel_plans (member_id, location_id, start_date, end_date, visibility)
+     values ($1,$2,$3,$4,'connections')`,
+    [memberId['oshi@guestlist.net'], ibizaLoc, tFrom.toISOString().slice(0, 10), tTo.toISOString().slice(0, 10)]
+  );
+}
 
 const counts = await q(`select
   (select count(*) from events) as events,

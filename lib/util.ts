@@ -65,7 +65,10 @@ export function sourceTypeLabel(value: string): string {
 }
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
-  GBP: '£', EUR: '€', USD: '$', TZS: 'TSh ', HRK: '€',
+  GBP: '£', EUR: '€', USD: '$', TZS: 'TSh ', HRK: '€', ZAR: 'R', AUD: 'A$',
+  NZD: 'NZ$', CAD: 'C$', BRL: 'R$', JPY: '¥', MXN: 'MX$', AED: 'AED ',
+  THB: '฿', SGD: 'S$', KES: 'KSh ', NGN: '₦', ILS: '₪', TRY: '₺',
+  SEK: 'kr ', NOK: 'kr ', DKK: 'kr ', CHF: 'CHF ', PLN: 'zł ', CZK: 'Kč ',
 };
 
 export function formatPrice(
@@ -74,7 +77,8 @@ export function formatPrice(
   currency: string | null
 ): string | null {
   if (priceFrom == null && priceTo == null) return null;
-  const sym = CURRENCY_SYMBOLS[currency ?? 'GBP'] ?? `${currency ?? ''} `;
+  // Always the event's ORIGINAL currency — never assume GBP, never convert.
+  const sym = currency ? (CURRENCY_SYMBOLS[currency] ?? `${currency} `) : '';
   const fmt = (v: string | number) => {
     const n = Number(v);
     return n === 0 ? 'Free' : `${sym}${Number.isInteger(n) ? n : n.toFixed(2)}`;

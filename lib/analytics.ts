@@ -28,7 +28,23 @@ export type AnalyticsEventType =
   | 'going_from_clubmessenger'
   | 'event_click_from_clubmessenger'
   | 'ticket_click_from_clubmessenger'
-  | 'heat_card_click';
+  | 'heat_card_click'
+  // V2C
+  | 'recommendation_impression'
+  | 'recommendation_click'
+  | 'event_hidden'
+  | 'event_not_for_me'
+  | 'taste_updated'
+  | 'history_added'
+  | 'scene_entity_added'
+  | 'scene_people_impression'
+  | 'member_profile_viewed'
+  | 'connection_requested'
+  | 'connection_accepted'
+  | 'travel_plan_created'
+  | 'city_followed'
+  | 'email_queued'
+  | 'email_rec_clicked';
 
 export async function track(
   type: AnalyticsEventType,

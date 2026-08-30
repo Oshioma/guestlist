@@ -9,6 +9,7 @@ const TABS = [
   ['/events', 'Events'],
   ['/sources', 'Sources'],
   ['/analytics', 'Analytics'],
+  ['/duplicates', 'Duplicates'],
   ['/profile', 'Profile'],
   ['/team', 'Team'],
 ] as const;

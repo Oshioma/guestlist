@@ -622,6 +622,7 @@ async function main() {
       genres: [{ name: 'liquid funk', confidence: 82 }, { name: 'moombahcore', confidence: 61 }],
       field_confidence: { title: 90, date: 88, venue: 85, city: 88, promoter: 85, genres: 80 },
     };
+    const genresBefore = await q(`select count(*)::int as n from genres`);
     const out = await runExtractionPipeline(urlU, {
       fetcher: mockFetcher({ [urlU]: { body: '<html><title>Second Night</title><body><main>Second Night at the Pressing Plant</main></body></html>' } }),
       ai: mockAI({ [urlU]: proposal }),
@@ -630,7 +631,7 @@ async function main() {
     const suggestions = await q(`select suggested_name, status from genre_suggestions where event_id = $1`, [out.eventId]);
     check('UNKNOWN GENRE SUGGESTION queued for admin', suggestions.length === 1 && (suggestions[0] as { suggested_name: string }).suggested_name === 'moombahcore');
     const genreCount = await q(`select count(*)::int as n from genres`);
-    check('no genre auto-created', (genreCount[0] as { n: number }).n === 28);
+    check('no genre auto-created', (genreCount[0] as { n: number }).n === (genresBefore[0] as { n: number }).n);
     const ev = (await q(`select status, venue_id, promoter_id from events where id = $1`, [out.eventId]))[0] as Record<string, unknown>;
     check('unknown genre → needs_review queue', ev.status === 'needs_review');
     const venues = await q(`select count(*)::int as n from venues where name = 'The Pressing Plant'`);

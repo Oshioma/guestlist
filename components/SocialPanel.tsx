@@ -13,9 +13,11 @@ type Attendee = {
   display_name: string;
   avatar_url: string | null;
   home_city: string | null;
+  slug?: string | null;
   is_me?: boolean;
   following?: boolean;
   is_friend?: boolean;
+  is_connected?: boolean;
 };
 
 // One attendee with a member-follow toggle. Following back makes you
@@ -53,8 +55,16 @@ function MemberRow({ member: m }: { member: Attendee }) {
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="name">
-          {m.display_name}
-          {friend && <span className="friendMark" title="Friends"> ✦</span>}
+          {m.slug ? (
+            <a href={`/members/${m.slug}`} style={{ textDecoration: 'none' }}>{m.display_name}</a>
+          ) : (
+            m.display_name
+          )}
+          {m.is_connected ? (
+            <span className="friendMark" title="Connected"> ✦</span>
+          ) : friend ? (
+            <span className="friendMark" title="Friends"> ✦</span>
+          ) : null}
         </div>
         {m.home_city && <div className="loc">{m.home_city}</div>}
       </div>

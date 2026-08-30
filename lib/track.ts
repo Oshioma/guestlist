@@ -13,7 +13,12 @@ export type ClientTrackType =
   | 'friend_arrival_seen'
   | 'friend_arrival_clicked'
   | 'event_click_from_clubmessenger'
-  | 'heat_card_click';
+  | 'heat_card_click'
+  // V2C view/UI events
+  | 'member_profile_viewed'
+  | 'scene_people_impression'
+  | 'recommendation_click'
+  | 'email_rec_clicked';
 
 // Stable anonymous id (per browser) so unique-viewer counts work without
 // accounts. Random UUID, no fingerprinting.

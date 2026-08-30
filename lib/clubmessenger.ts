@@ -7,7 +7,9 @@
 //
 // Definitions:
 //   friend            = MUTUAL member follow (both directions in
-//                       member_follows with entity_type = 'member').
+//                       member_follows with entity_type = 'member') OR an
+//                       accepted V2C connection — and never when either
+//                       member has blocked the other.
 //   extended network  = people the viewer follows one-way.
 //   active presence   = event_presence row with left_at null and
 //                       expires_at > now().
@@ -30,27 +32,50 @@ export const CLUB_LIMITS = {
   presenceMaxHours: 16,
 };
 
+// SQL predicate: expressions a and b (member-id SQL expressions) are
+// friends — mutual member follow OR accepted connection — with no block in
+// either direction.
+export function friendPairSql(a: string, b: string): string {
+  return `(
+    (
+      (exists (select 1 from member_follows f1
+                where f1.member_id = ${a} and f1.entity_type = 'member' and f1.entity_id = ${b})
+       and exists (select 1 from member_follows f2
+                where f2.member_id = ${b} and f2.entity_type = 'member' and f2.entity_id = ${a}))
+      or exists (select 1 from member_connections mc
+                  where mc.status = 'connected'
+                    and ((mc.requester_id = ${a} and mc.addressee_id = ${b})
+                      or (mc.requester_id = ${b} and mc.addressee_id = ${a})))
+    )
+    and not exists (select 1 from member_blocks mb
+                     where (mb.blocker_id = ${a} and mb.blocked_id = ${b})
+                        or (mb.blocker_id = ${b} and mb.blocked_id = ${a}))
+  )`;
+}
+
 // SQL predicate: can $viewer see presence row alias p (joined to its event)?
 // Parameters: viewerParam must be the SAME placeholder index everywhere it
 // appears; callers pass the viewer id once and reference via ${viewer}.
+// A block in either direction hides presence in every visibility mode.
 export function presenceVisibleSql(viewer: string, p = 'p'): string {
   return `(
     ${p}.member_id = ${viewer}
     or (
-      ${p}.visibility = 'friends'
-      and exists (select 1 from member_follows f1
-                   where f1.member_id = ${viewer} and f1.entity_type = 'member' and f1.entity_id = ${p}.member_id)
-      and exists (select 1 from member_follows f2
-                   where f2.member_id = ${p}.member_id and f2.entity_type = 'member' and f2.entity_id = ${viewer})
-    )
-    or (
-      ${p}.visibility = 'event'
+      not exists (select 1 from member_blocks mb
+                   where (mb.blocker_id = ${viewer} and mb.blocked_id = ${p}.member_id)
+                      or (mb.blocker_id = ${p}.member_id and mb.blocked_id = ${viewer}))
       and (
-        exists (select 1 from member_event_actions v_mea
-                 where v_mea.member_id = ${viewer} and v_mea.event_id = ${p}.event_id and v_mea.rsvp = 'going')
-        or exists (select 1 from event_presence v_p
-                    where v_p.member_id = ${viewer} and v_p.event_id = ${p}.event_id
-                      and v_p.left_at is null and v_p.expires_at > now())
+        (${p}.visibility = 'friends' and ${friendPairSql(viewer, `${p}.member_id`)})
+        or (
+          ${p}.visibility = 'event'
+          and (
+            exists (select 1 from member_event_actions v_mea
+                     where v_mea.member_id = ${viewer} and v_mea.event_id = ${p}.event_id and v_mea.rsvp = 'going')
+            or exists (select 1 from event_presence v_p
+                        where v_p.member_id = ${viewer} and v_p.event_id = ${p}.event_id
+                          and v_p.left_at is null and v_p.expires_at > now())
+          )
+        )
       )
     )
   )`;
@@ -61,11 +86,8 @@ export const PRESENCE_ACTIVE_SQL = (p = 'p') =>
 
 export async function friendIds(memberId: string): Promise<string[]> {
   const rows = await query<{ id: string }>(
-    `select f1.entity_id as id
-       from member_follows f1
-       join member_follows f2
-         on f2.member_id = f1.entity_id and f2.entity_type = 'member' and f2.entity_id = f1.member_id
-      where f1.member_id = $1 and f1.entity_type = 'member'`,
+    `select m.id from members m
+      where m.id <> $1 and ${friendPairSql('$1', 'm.id')}`,
     [memberId]
   );
   return rows.map((r) => r.id);
@@ -73,11 +95,7 @@ export async function friendIds(memberId: string): Promise<string[]> {
 
 export async function areFriends(a: string, b: string): Promise<boolean> {
   const row = await queryOne(
-    `select 1
-       from member_follows f1
-       join member_follows f2
-         on f2.member_id = f1.entity_id and f2.entity_type = 'member' and f2.entity_id = f1.member_id
-      where f1.member_id = $1 and f1.entity_type = 'member' and f1.entity_id = $2`,
+    `select 1 where ${friendPairSql('$1', '$2')}`,
     [a, b]
   );
   return !!row;
@@ -158,10 +176,7 @@ export async function peopleAtEvent(viewerId: string, eventId: string): Promise<
             case when h.member_id is not null then 'here' else 'going' end as state,
             h.status,
             (h.arrived_at)::text as arrived_at,
-            exists (select 1 from member_follows f1
-                     join member_follows f2 on f2.member_id = f1.entity_id
-                      and f2.entity_type = 'member' and f2.entity_id = f1.member_id
-                    where f1.member_id = $1 and f1.entity_type = 'member' and f1.entity_id = m.id) as is_friend
+            ${friendPairSql('$1', 'm.id')} as is_friend
        from members m
        left join here h on h.member_id = m.id
        left join member_event_actions mea
@@ -225,10 +240,7 @@ export async function tonightEvents(viewerId: string): Promise<TonightEvent[]> {
                   'avatar_url', m.avatar_url)) as friends
            from member_event_actions mea join members m on m.id = mea.member_id
           where mea.event_id = e.id and mea.rsvp = 'going' and mea.member_id <> $1
-            and exists (select 1 from member_follows f1
-                         join member_follows f2 on f2.member_id = f1.entity_id
-                          and f2.entity_type = 'member' and f2.entity_id = f1.member_id
-                        where f1.member_id = $1 and f1.entity_type = 'member' and f1.entity_id = mea.member_id)
+            and ${friendPairSql('$1', 'mea.member_id')}
        ) fg on true
        left join lateral (
          select count(*)::int as n from event_presence p
@@ -283,10 +295,7 @@ export async function friendActivity(viewerId: string, limit = 12): Promise<Acti
          and mea.member_id <> $1
          and e.status = 'live' and e.listing_status <> 'cancelled'
          and coalesce(e.end_at, e.start_at + interval '6 hours') > now()
-         and exists (select 1 from member_follows f1
-                      join member_follows f2 on f2.member_id = f1.entity_id
-                       and f2.entity_type = 'member' and f2.entity_id = f1.member_id
-                     where f1.member_id = $1 and f1.entity_type = 'member' and f1.entity_id = mea.member_id)
+         and ${friendPairSql('$1', 'mea.member_id')}
      )
      order by at desc
      limit ${Math.min(limit, 30)}`,

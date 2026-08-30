@@ -10,6 +10,7 @@ import { track } from '@/lib/analytics';
 import {
   CLUB_LIMITS,
   assertNotClubSuspended,
+  friendPairSql,
   myActivePresence,
   presenceExpiry,
 } from '@/lib/clubmessenger';
@@ -24,16 +25,15 @@ type Visibility = (typeof VISIBILITIES)[number];
 async function notifyFriendsOfArrival(memberId: string, eventId: string) {
   await query(
     `insert into notifications (member_id, type, actor_member_id, event_id)
-     select f1.member_id, 'friend_arrived', $1, $2
-       from member_follows f1
-       join member_follows f2
-         on f2.member_id = $1 and f2.entity_type = 'member' and f2.entity_id = f1.member_id
-       left join notification_preferences np on np.member_id = f1.member_id
-      where f1.entity_type = 'member' and f1.entity_id = $1
+     select m.id, 'friend_arrived', $1, $2
+       from members m
+       left join notification_preferences np on np.member_id = m.id
+      where m.id <> $1
+        and ${friendPairSql('$1', 'm.id')}
         and coalesce(np.friend_arrivals, true)
         and not exists (
           select 1 from notifications n
-           where n.member_id = f1.member_id and n.type = 'friend_arrived'
+           where n.member_id = m.id and n.type = 'friend_arrived'
              and n.actor_member_id = $1 and n.event_id = $2
              and n.created_at > now() - interval '12 hours')`,
     [memberId, eventId]
