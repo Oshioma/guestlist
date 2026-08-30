@@ -8,7 +8,8 @@ export type AuditAction =
   | 'source_trust_changed'
   | 'source_scanned' | 'team_member_added' | 'team_member_removed' | 'role_changed'
   | 'team_invited' | 'claim_submitted' | 'claim_approved' | 'claim_rejected'
-  | 'claim_info_requested' | 'promoter_suspended' | 'promoter_unsuspended';
+  | 'claim_info_requested' | 'promoter_suspended' | 'promoter_unsuspended'
+  | 'room_message_removed' | 'member_club_suspended' | 'member_club_unsuspended';
 
 export async function audit(
   action: AuditAction,

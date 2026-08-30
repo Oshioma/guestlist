@@ -13,6 +13,7 @@ export async function SiteHeader() {
         </Link>
         <nav className="mainNav">
           <Link href="/events">Events</Link>
+          <Link href="/clubmessenger">Tonight</Link>
           <Link href="/promoters">Promoters</Link>
           <Link href="/events/submit">+ Add Event</Link>
           {promoterships.length > 0 && <Link href="/promoter">Dashboard</Link>}

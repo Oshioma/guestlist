@@ -8,7 +8,70 @@ import { useRouter } from 'next/navigation';
 
 type Rsvp = 'interested' | 'going' | null;
 type Avatar = { display_name: string; avatar_url: string | null };
-type Attendee = { id: string; display_name: string; avatar_url: string | null; home_city: string | null };
+type Attendee = {
+  id: string;
+  display_name: string;
+  avatar_url: string | null;
+  home_city: string | null;
+  is_me?: boolean;
+  following?: boolean;
+  is_friend?: boolean;
+};
+
+// One attendee with a member-follow toggle. Following back makes you
+// friends (mutual follow) — the basis of Club Messenger visibility.
+function MemberRow({ member: m }: { member: Attendee }) {
+  const [following, setFollowing] = useState(!!m.following);
+  const [friend, setFriend] = useState(!!m.is_friend);
+  const [busy, setBusy] = useState(false);
+
+  async function toggle() {
+    if (busy) return;
+    setBusy(true);
+    const next = !following;
+    setFollowing(next);
+    if (!next) setFriend(false);
+    const res = await fetch('/api/follow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityType: 'member', entityId: m.id, follow: next }),
+    });
+    if (!res.ok) {
+      setFollowing(!next);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setFriend(!!data.mutual);
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="memberRow">
+      {m.avatar_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={m.avatar_url} alt="" />
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="name">
+          {m.display_name}
+          {friend && <span className="friendMark" title="Friends"> ✦</span>}
+        </div>
+        {m.home_city && <div className="loc">{m.home_city}</div>}
+      </div>
+      {!m.is_me && (
+        <button
+          className={`btnGhost${following ? ' isActive' : ''}`}
+          style={{ padding: '5px 10px', fontSize: 11 }}
+          onClick={toggle}
+          disabled={busy}
+          type="button"
+        >
+          {friend ? '✦ Friends' : following ? '✓ Following' : 'Follow'}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function SocialPanel({
   eventId,
@@ -177,16 +240,7 @@ export function SocialPanel({
                   <>
                     <div className="sectionLabel">Going</div>
                     {attendees.going.map((m) => (
-                      <div className="memberRow" key={m.id}>
-                        {m.avatar_url && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={m.avatar_url} alt="" />
-                        )}
-                        <div>
-                          <div className="name">{m.display_name}</div>
-                          {m.home_city && <div className="loc">{m.home_city}</div>}
-                        </div>
-                      </div>
+                      <MemberRow member={m} key={m.id} />
                     ))}
                   </>
                 )}
@@ -194,16 +248,7 @@ export function SocialPanel({
                   <>
                     <div className="sectionLabel">Interested</div>
                     {attendees.interested.map((m) => (
-                      <div className="memberRow" key={m.id}>
-                        {m.avatar_url && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={m.avatar_url} alt="" />
-                        )}
-                        <div>
-                          <div className="name">{m.display_name}</div>
-                          {m.home_city && <div className="loc">{m.home_city}</div>}
-                        </div>
-                      </div>
+                      <MemberRow member={m} key={m.id} />
                     ))}
                   </>
                 )}

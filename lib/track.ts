@@ -5,7 +5,15 @@ export type ClientTrackType =
   | 'event_shared'
   | 'promoter_viewed'
   | 'genre_selected'
-  | 'location_selected';
+  | 'location_selected'
+  // Club Messenger view/UI events (actions stay server-side, unspoofable)
+  | 'clubmessenger_open'
+  | 'clubmessenger_event_open'
+  | 'live_room_open'
+  | 'friend_arrival_seen'
+  | 'friend_arrival_clicked'
+  | 'event_click_from_clubmessenger'
+  | 'heat_card_click';
 
 // Stable anonymous id (per browser) so unique-viewer counts work without
 // accounts. Random UUID, no fingerprinting.
