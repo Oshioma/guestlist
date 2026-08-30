@@ -1,0 +1,411 @@
+// End-to-end verification of the Events platform against a running dev
+// server + the local database. Exercises the complete journey:
+// admin creates → publishes → discovery → filters → detail → interested →
+// going → who's going → ticket click recorded → saved persists →
+// submissions + dedupe → permissions.
+//
+// Usage: npm run db:reset && (dev server running) && npm run verify
+
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import pg from 'pg';
+
+const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+if (existsSync(path.join(root, '.env.local'))) {
+  for (const line of readFileSync(path.join(root, '.env.local'), 'utf8').split('\n')) {
+    const m = line.match(/^([A-Z_]+)=(.*)$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+  }
+}
+
+const BASE = process.env.VERIFY_BASE ?? 'http://localhost:3000';
+const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+await db.connect();
+const q = (text, params = []) => db.query(text, params).then((r) => r.rows);
+
+let passed = 0;
+let failed = 0;
+const failures = [];
+function check(name, cond, extra = '') {
+  if (cond) {
+    passed++;
+    console.log(`  ✓ ${name}`);
+  } else {
+    failed++;
+    failures.push(name);
+    console.log(`  ✗ ${name} ${extra}`);
+  }
+}
+
+function client() {
+  let cookie = '';
+  return {
+    async fetch(url, opts = {}) {
+      const res = await fetch(`${BASE}${url}`, {
+        ...opts,
+        redirect: 'manual',
+        headers: {
+          ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(cookie ? { Cookie: cookie } : {}),
+          ...(opts.headers ?? {}),
+        },
+      });
+      const setCookie = res.headers.get('set-cookie');
+      if (setCookie) cookie = setCookie.split(';')[0];
+      return res;
+    },
+    async login(email, password = 'guestlist') {
+      const res = await this.fetch('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      return res.status;
+    },
+  };
+}
+
+const anon = client();
+const nadia = client();
+const admin = client();
+
+// ---------------------------------------------------------------------------
+console.log('\n— Discovery (logged out) —');
+{
+  const res = await anon.fetch('/events');
+  const html = await res.text();
+  check('/events renders', res.status === 200);
+  check('seeded event visible', html.includes('Jungle Mania'));
+
+  const jungle = await (await anon.fetch('/events?genre=jungle')).text();
+  check('genre filter includes tagged event', jungle.includes('Jungle Mania'));
+  check('genre filter excludes untagged event', !jungle.includes('Night Bureau 012'));
+
+  // Multi-genre event appears under each of its genres.
+  for (const g of ['house', 'disco', 'balearic']) {
+    const html2 = await (await anon.fetch(`/events?genre=${g}`)).text();
+    check(`multi-genre event under ${g}`, html2.includes('Sunset at Casa Balearica'));
+  }
+  // Selecting a subgenre works; selecting the parent includes subgenre-tagged events.
+  const liquid = await (await anon.fetch('/events?genre=liquid')).text();
+  check('subgenre filter works', liquid.includes('Liquid Rollers'));
+  const ukg = await (await anon.fetch('/events?genre=garage')).text();
+  check('parent genre includes subgenre-tagged event', ukg.includes('Thames Pressure'));
+
+  const weekend = await (await anon.fetch('/events?tab=this-weekend')).text();
+  check('this weekend tab has content', weekend.includes('eventCard'));
+  const fest = await (await anon.fetch('/events?tab=festivals')).text();
+  check('festivals tab shows festival + weekender', fest.includes('Ten Cities Festival') && fest.includes('Deep North Weekender'));
+  check('festivals tab excludes club nights', !fest.includes('Night Bureau 012'));
+
+  const empty = await (await anon.fetch('/events?genre=jungle&city=Zanzibar')).text();
+  check('empty state with suggestions', empty.includes('Nothing matching that yet') && empty.includes('Add an event'));
+
+  const detail = await anon.fetch('/events/rewind-sessions-presents-jungle-mania');
+  const dHtml = await detail.text();
+  check('event detail renders', detail.status === 200);
+  check('detail shows lineup', dHtml.includes('Junglist Mo'));
+  check('detail shows promoter', dHtml.includes('Rewind Sessions'));
+  check('detail shows genres', dHtml.includes('Jungle'));
+  check('detail has tickets CTA', dHtml.includes('Get Tickets'));
+
+  // Edge-case events all render.
+  for (const slug of [
+    'the-garden-weekender', // multi-day, abroad
+    'night-bureau-012', // crosses midnight
+    'sunrise-over-kendwa-nye-preview', // no price, no lineup, no promoter
+    'trance-communion', // no promoter
+    'golden-hour-season-opener', // past event
+  ]) {
+    const r = await anon.fetch(`/events/${slug}`);
+    check(`edge case renders: ${slug}`, r.status === 200);
+  }
+  const pastHtml = await (await anon.fetch('/events/golden-hour-season-opener')).text();
+  check('past event marked and CTA hidden', pastHtml.includes('already happened') && !pastHtml.includes('Get Tickets'));
+  check('past event absent from browse', !(await (await anon.fetch('/events')).text()).includes('Season Opener'));
+
+  const draft = await anon.fetch('/events/jungle-mania-rewind-sessions-dupe');
+  check('non-live event 404s publicly', draft.status === 404);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n— Auth gating (logged out) —');
+{
+  const someEvent = (await q(`select id from events where slug = 'night-bureau-012'`))[0];
+  const act = await anon.fetch(`/api/events/${someEvent.id}/action`, {
+    method: 'POST',
+    body: JSON.stringify({ rsvp: 'going' }),
+  });
+  check('action requires auth (401)', act.status === 401);
+
+  const att = await anon.fetch(`/api/events/${someEvent.id}/attendees`);
+  const attData = await att.json();
+  check('attendees: counts public, list member-only', att.status === 200 && attData.memberOnly && !attData.going);
+
+  const adminApi = await anon.fetch('/api/admin/events', { method: 'POST', body: JSON.stringify({}) });
+  check('admin API requires auth', adminApi.status === 401);
+  const adminPage = await anon.fetch('/admin/events');
+  check('admin pages redirect anonymous', adminPage.status >= 300 && adminPage.status < 400);
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n— Member journey: interested → going → save → who's going —");
+{
+  check('member login', (await nadia.login('dev-nadia@example.com')) === 200);
+  const nadiaId = (await q(`select id from members where email = 'dev-nadia@example.com'`))[0].id;
+  const ev = (await q(`select id, slug from events where slug = 'analogue-love-disco-supper-club'`))[0];
+
+  const r1 = await nadia.fetch(`/api/events/${ev.id}/action`, {
+    method: 'POST', body: JSON.stringify({ rsvp: 'interested' }),
+  });
+  check('mark interested', r1.status === 200);
+  let row = (await q(`select rsvp, saved_at from member_event_actions where member_id=$1 and event_id=$2`, [nadiaId, ev.id]))[0];
+  check('DB row: interested', row?.rsvp === 'interested');
+
+  const r2 = await nadia.fetch(`/api/events/${ev.id}/action`, {
+    method: 'POST', body: JSON.stringify({ rsvp: 'going' }),
+  });
+  check('change to going', r2.status === 200);
+  row = (await q(`select rsvp, saved_at from member_event_actions where member_id=$1 and event_id=$2`, [nadiaId, ev.id]))[0];
+  check('DB row: going (single row, no duplicates)', row?.rsvp === 'going');
+  const rowCount = (await q(`select count(*)::int as n from member_event_actions where member_id=$1 and event_id=$2`, [nadiaId, ev.id]))[0].n;
+  check('exactly one action row per member+event', rowCount === 1);
+
+  const r3 = await nadia.fetch(`/api/events/${ev.id}/action`, {
+    method: 'POST', body: JSON.stringify({ saved: true }),
+  });
+  check('save alongside going', r3.status === 200);
+  row = (await q(`select rsvp, saved_at from member_event_actions where member_id=$1 and event_id=$2`, [nadiaId, ev.id]))[0];
+  check('DB row: saved + going coexist', row?.rsvp === 'going' && row?.saved_at != null);
+
+  const att = await (await nadia.fetch(`/api/events/${ev.id}/attendees`)).json();
+  check("who's going lists the member", att.going?.some((m) => m.id === nadiaId));
+
+  const detailHtml = await (await nadia.fetch(`/events/${ev.slug}`)).text();
+  check('attendance count on detail page', /\d+ Guestlist member/.test(detailHtml));
+
+  // Analytics rows written server-side for the actions.
+  const acts = await q(
+    `select event_type from analytics_events where member_id=$1 and event_id=$2 order by id`,
+    [nadiaId, ev.id]
+  );
+  const types = acts.map((a) => a.event_type);
+  check('analytics: interested/going/saved recorded',
+    types.includes('interested') && types.includes('going') && types.includes('event_saved'),
+    `got: ${types.join(',')}`);
+
+  // Clearing RSVP but keeping save leaves the row; clearing both removes it.
+  await nadia.fetch(`/api/events/${ev.id}/action`, { method: 'POST', body: JSON.stringify({ rsvp: null }) });
+  row = (await q(`select rsvp, saved_at from member_event_actions where member_id=$1 and event_id=$2`, [nadiaId, ev.id]))[0];
+  check('clear rsvp keeps saved row', row && row.rsvp === null && row.saved_at != null);
+  await nadia.fetch(`/api/events/${ev.id}/action`, { method: 'POST', body: JSON.stringify({ saved: false }) });
+  const gone = (await q(`select 1 from member_event_actions where member_id=$1 and event_id=$2`, [nadiaId, ev.id])).length;
+  check('clearing everything removes the row', gone === 0);
+
+  // Restore a saved state and confirm it persists across a fresh page load.
+  await nadia.fetch(`/api/events/${ev.id}/action`, { method: 'POST', body: JSON.stringify({ saved: true }) });
+  const browse = await (await nadia.fetch('/events')).text();
+  check('saved state persists into browse render', browse.includes('saveBtn saved') || browse.includes('saved'));
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n— Outbound ticket clicks —');
+{
+  const ev = (await q(`select id, ticket_url from events where slug = 'liquid-rollers'`))[0];
+  const before = (await q(`select count(*)::int as n from analytics_events where event_type='ticket_clicked' and event_id=$1`, [ev.id]))[0].n;
+  const res = await nadia.fetch(`/out/${ev.id}`);
+  check('outbound click redirects to official ticket URL',
+    res.status === 302 && res.headers.get('location') === ev.ticket_url);
+  const after = (await q(`select count(*)::int as n from analytics_events where event_type='ticket_clicked' and event_id=$1`, [ev.id]))[0].n;
+  check('ticket click recorded in DB', after === before + 1);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n— Client tracking API —');
+{
+  const ev = (await q(`select id from events where slug = 'liquid-rollers'`))[0];
+  const ok = await anon.fetch('/api/track', {
+    method: 'POST',
+    body: JSON.stringify({ type: 'event_viewed', eventId: ev.id, path: '/events/liquid-rollers' }),
+  });
+  check('event_viewed accepted', ok.status === 200);
+  const viewed = (await q(`select count(*)::int as n from analytics_events where event_type='event_viewed' and event_id=$1`, [ev.id]))[0].n;
+  check('event_viewed stored', viewed >= 1);
+  const spoof = await anon.fetch('/api/track', {
+    method: 'POST',
+    body: JSON.stringify({ type: 'ticket_clicked', eventId: ev.id }),
+  });
+  check('server-only types rejected from client', spoof.status === 400);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n— Paste-link submission + duplicate protection —');
+{
+  const url = 'https://example.com/some-brand-new-night';
+  const r1 = await (await nadia.fetch('/api/submissions', {
+    method: 'POST', body: JSON.stringify({ url }),
+  })).json();
+  check('submission creates draft', r1.ok && r1.outcome === 'created');
+  const draft = (await q(`select status, source_type, source_url, confidence_score from events where source_url=$1`, [url]))[0];
+  check('draft is new + member_submission + null confidence',
+    draft?.status === 'new' && draft?.source_type === 'member_submission' && draft?.confidence_score === null);
+  const sub = (await q(`select status, event_id from event_submissions where url=$1`, [url]))[0];
+  check('submission row processed + linked', sub?.status === 'processed' && !!sub?.event_id);
+
+  const r2 = await (await nadia.fetch('/api/submissions', {
+    method: 'POST', body: JSON.stringify({ url }),
+  })).json();
+  check('same URL flagged as duplicate, no second draft', r2.outcome === 'duplicate');
+  const n = (await q(`select count(*)::int as n from events where source_url=$1`, [url]))[0].n;
+  check('only one event for the URL', n === 1);
+
+  const bad = await nadia.fetch('/api/submissions', {
+    method: 'POST', body: JSON.stringify({ url: 'not a url' }),
+  });
+  check('invalid URL rejected', bad.status === 400);
+
+  const subAnalytics = (await q(`select count(*)::int as n from analytics_events where event_type='event_submitted'`))[0].n;
+  check('event_submitted tracked', subAnalytics >= 2);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n— Admin journey: create → publish → edit → unpublish —');
+{
+  check('admin login', (await admin.login('oshi@guestlist.net')) === 200);
+
+  // Member must NOT be able to use admin APIs.
+  const forbidden = await nadia.fetch('/api/admin/events', {
+    method: 'POST',
+    body: JSON.stringify({ title: 'x', startAt: new Date().toISOString(), eventType: 'other' }),
+  });
+  check('member blocked from admin API (403)', forbidden.status === 403);
+
+  const start = new Date(Date.now() + 21 * 86400 * 1000);
+  const end = new Date(start.getTime() + 8 * 3600 * 1000);
+  const createRes = await admin.fetch('/api/admin/events', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: 'Verification Test Night',
+      shortDescription: 'Created by the automated verification run.',
+      startAt: start.toISOString(),
+      endAt: end.toISOString(),
+      timezone: 'Europe/London',
+      city: 'London',
+      country: 'United Kingdom',
+      eventType: 'club_night',
+      ticketUrl: 'https://example.com/tickets/verification-test-night',
+      priceFrom: 10,
+      currency: 'GBP',
+      genreSlugs: ['techno', 'breaks'],
+      lineup: ['Test Artist One', 'Test Artist Two'],
+      status: 'new',
+    }),
+  });
+  const created = await createRes.json();
+  check('admin creates event (status new)', createRes.status === 201 && created.status === 'new');
+
+  // Not yet live → not in discovery.
+  let browse = await (await anon.fetch('/events?genre=techno')).text();
+  check('unpublished event hidden from discovery', !browse.includes('Verification Test Night'));
+
+  const pub = await admin.fetch(`/api/admin/events/${created.id}`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'live' }),
+  });
+  check('admin publishes', pub.status === 200);
+  browse = await (await anon.fetch('/events?genre=techno')).text();
+  check('published event appears in discovery under its genre', browse.includes('Verification Test Night'));
+  const detail = await anon.fetch(`/events/${created.slug}`);
+  const dHtml = await detail.text();
+  check('published detail page live with lineup', detail.status === 200 && dHtml.includes('Test Artist One'));
+
+  // Duplicate protection on admin/importer create: same title+date+city.
+  const dupRes = await admin.fetch('/api/admin/events', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: 'Verification Test Night',
+      startAt: start.toISOString(),
+      city: 'London',
+      eventType: 'club_night',
+      status: 'live', // requested live, must be downgraded
+    }),
+  });
+  const dup = await dupRes.json();
+  check('near-duplicate forced to needs_review', dup.status === 'needs_review' && !!dup.possibleDuplicateOf);
+
+  const edit = await admin.fetch(`/api/admin/events/${created.id}`, {
+    method: 'PATCH', body: JSON.stringify({ title: 'Verification Test Night (Edited)' }),
+  });
+  check('admin edits title', edit.status === 200);
+  const edited = (await q(`select title from events where id=$1`, [created.id]))[0];
+  check('edit persisted', edited.title === 'Verification Test Night (Edited)');
+
+  const unpub = await admin.fetch(`/api/admin/events/${created.id}`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'new' }),
+  });
+  check('admin unpublishes', unpub.status === 200);
+  const gone = await anon.fetch(`/events/${created.slug}`);
+  check('unpublished event 404s publicly again', gone.status === 404);
+  const adminPreview = await admin.fetch(`/events/${created.slug}`);
+  check('admin can still preview unpublished event', adminPreview.status === 200);
+
+  // Admin queue pages render with the possible-duplicate flag.
+  const queue = await (await admin.fetch('/admin/events?state=needs_review')).text();
+  check('needs-review queue shows possible duplicate', queue.includes('Possible duplicate'));
+  const pastQueue = await admin.fetch('/admin/events?state=past');
+  check('past queue renders', pastQueue.status === 200);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n— Sources admin —');
+{
+  const add = await admin.fetch('/api/admin/sources', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Verification Source',
+      url: 'https://example.com/verification-source',
+      sourceType: 'independent_calendar',
+    }),
+  });
+  check('admin adds source', add.status === 201);
+  const dup = await admin.fetch('/api/admin/sources', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'Verification Source again',
+      url: 'https://example.com/verification-source',
+      sourceType: 'blog_publication',
+    }),
+  });
+  check('duplicate source URL rejected (409)', dup.status === 409);
+  const memberAdd = await nadia.fetch('/api/admin/sources', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'x', url: 'https://example.com/x', sourceType: 'other' }),
+  });
+  check('member blocked from sources API', memberAdd.status === 403);
+  const page = await (await admin.fetch('/admin/sources')).text();
+  check('sources page lists source', page.includes('Verification Source'));
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n— Signup flow —');
+{
+  const fresh = client();
+  const su = await fresh.fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: `verify-${Date.now()}@example.com`,
+      password: 'password123',
+      displayName: 'Verify Bot',
+      homeCity: 'London',
+    }),
+  });
+  check('signup works', su.status === 200);
+  const events = await fresh.fetch('/events');
+  check('new member sees events signed in', events.status === 200);
+}
+
+console.log(`\n${passed} passed, ${failed} failed`);
+if (failures.length) {
+  console.log('Failures:', failures.join(' | '));
+  process.exit(1);
+}
+await db.end();
