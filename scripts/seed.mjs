@@ -483,11 +483,36 @@ for (const [email, titles] of Object.entries({
   }
 }
 
+// --- member friendships (Club Messenger; friend = MUTUAL follow) ---
+// Pairs are mutual; the one-way rows model "follows, not friends".
+const friendPairs = [
+  ['oshi@guestlist.net', 'dev-nadia@example.com'],
+  ['oshi@guestlist.net', 'dev-kwame@example.com'],
+  ['oshi@guestlist.net', 'dev-jules@example.com'],
+  ['dev-nadia@example.com', 'dev-dan@example.com'],
+  ['dev-nadia@example.com', 'dev-kwame@example.com'],
+  ['dev-jules@example.com', 'dev-sophie@example.com'],
+  ['dev-marcus@example.com', 'dev-carla@example.com'],
+];
+const oneWayFollows = [
+  ['dev-priya@example.com', 'oshi@guestlist.net'],
+  ['dev-steve@example.com', 'dev-nadia@example.com'],
+];
+const followMember = (a, b) =>
+  q(`insert into member_follows (member_id, entity_type, entity_id)
+     values ($1, 'member', $2) on conflict do nothing`, [memberId[a], memberId[b]]);
+for (const [a, b] of friendPairs) {
+  await followMember(a, b);
+  await followMember(b, a);
+}
+for (const [a, b] of oneWayFollows) await followMember(a, b);
+
 const counts = await q(`select
   (select count(*) from events) as events,
   (select count(*) from genres) as genres,
   (select count(*) from members) as members,
-  (select count(*) from member_event_actions) as actions`);
+  (select count(*) from member_event_actions) as actions,
+  (select count(*) from member_follows where entity_type = 'member') as member_follows`);
 console.log('Seeded:', counts[0]);
 console.log('Dev accounts all use password "guestlist". Admin: oshi@guestlist.net');
 await client.end();

@@ -11,6 +11,7 @@ import { ClaimEventPrompt } from '@/components/ClaimEventPrompt';
 import { isFollowing } from '@/lib/profiles';
 import { getMemberPromoters } from '@/lib/promoterAuth';
 import { queryOne } from '@/lib/db';
+import { CLUB_LIMITS, PRESENCE_ACTIVE_SQL, presenceVisibleSql } from '@/lib/clubmessenger';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +38,37 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
     member && !event.promoter
       ? (await getMemberPromoters(member.id)).filter((p) => p.claim_status === 'verified')
       : [];
+
+  // Club Messenger module: only around event time. Counts respect the same
+  // presence-visibility rules as everywhere else (viewer-scoped).
+  const nowMs = Date.now();
+  const startMs = new Date(event.start_at).getTime();
+  const endMs = event.end_at
+    ? new Date(event.end_at).getTime()
+    : startMs + 6 * 3600_000;
+  const tonight =
+    event.status === 'live' &&
+    event.listing_status !== 'cancelled' &&
+    startMs < nowMs + 24 * 3600_000 &&
+    endMs + CLUB_LIMITS.presenceGraceHours * 3600_000 > nowMs;
+  // Signed-out viewers see no presence numbers at all.
+  const liveStats =
+    tonight && member
+      ? await queryOne<{ visible_here: number; friends_here: number }>(
+          `select
+             count(*)::int as visible_here,
+             count(*) filter (where exists (
+               select 1 from member_follows f1
+                join member_follows f2 on f2.member_id = f1.entity_id
+                 and f2.entity_type = 'member' and f2.entity_id = f1.member_id
+               where f1.member_id = $1 and f1.entity_type = 'member' and f1.entity_id = p.member_id
+             ))::int as friends_here
+           from event_presence p
+          where p.event_id = $2 and ${PRESENCE_ACTIVE_SQL('p')}
+            and p.visibility <> 'invisible' and ${presenceVisibleSql('$1', 'p')}`,
+          [member.id, event.id]
+        )
+      : null;
 
   const cancelled = event.listing_status === 'cancelled';
   const listingBadge =
@@ -210,6 +242,20 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
             {cancelled && <div className="muted" style={{ marginTop: 10 }}>Tickets are no longer available.</div>}
             {past && <div className="muted" style={{ marginTop: 10 }}>This event has already happened.</div>}
           </div>
+
+          {tonight && (
+            <Link href={`/clubmessenger/events/${event.id}`} className="tonightModule">
+              <div className="tonightModuleTitle">⚡ Tonight on Guestlist</div>
+              <div className="tonightModuleBody">
+                {liveStats && liveStats.friends_here > 0
+                  ? `${liveStats.friends_here} friend${liveStats.friends_here === 1 ? '' : 's'} here now`
+                  : liveStats && liveStats.visible_here > 0
+                    ? `${liveStats.visible_here} here now`
+                    : 'Live room is open'}
+                {' · '}see who’s out, check in when you arrive →
+              </div>
+            </Link>
+          )}
 
           <SocialPanel
             eventId={event.id}

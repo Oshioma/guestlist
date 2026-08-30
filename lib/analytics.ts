@@ -12,7 +12,23 @@ export type AnalyticsEventType =
   | 'promoter_viewed'
   | 'genre_selected'
   | 'location_selected'
-  | 'event_submitted';
+  | 'event_submitted'
+  // Club Messenger
+  | 'clubmessenger_open'
+  | 'clubmessenger_event_open'
+  | 'presence_started'
+  | 'presence_ended'
+  | 'presence_visibility_changed'
+  | 'friend_arrival_seen'
+  | 'friend_arrival_clicked'
+  | 'ping_sent'
+  | 'ping_response'
+  | 'live_room_open'
+  | 'room_message_sent'
+  | 'going_from_clubmessenger'
+  | 'event_click_from_clubmessenger'
+  | 'ticket_click_from_clubmessenger'
+  | 'heat_card_click';
 
 export async function track(
   type: AnalyticsEventType,

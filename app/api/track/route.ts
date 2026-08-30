@@ -8,6 +8,9 @@ import { track, type AnalyticsEventType } from '@/lib/analytics';
 
 const CLIENT_TYPES: AnalyticsEventType[] = [
   'event_viewed', 'event_shared', 'promoter_viewed', 'genre_selected', 'location_selected',
+  'clubmessenger_open', 'clubmessenger_event_open', 'live_room_open',
+  'friend_arrival_seen', 'friend_arrival_clicked',
+  'event_click_from_clubmessenger', 'heat_card_click',
 ];
 
 export async function POST(req: NextRequest) {

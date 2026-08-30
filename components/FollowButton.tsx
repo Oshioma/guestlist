@@ -10,7 +10,7 @@ export function FollowButton({
   isSignedIn,
   compact = false,
 }: {
-  entityType: 'promoter' | 'venue' | 'artist';
+  entityType: 'promoter' | 'venue' | 'artist' | 'member';
   entityId: string;
   initialFollowing: boolean;
   isSignedIn: boolean;

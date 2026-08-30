@@ -1281,3 +1281,279 @@ button { font-family: inherit; }
   margin: 34px 0 20px;
 }
 .homeSubmitStrip h3 { font-size: 20px; letter-spacing: -0.4px; }
+
+/* ── Club Messenger ─────────────────────────────────────────────────────── */
+/* Mobile-first, one-handed: the primary action (I'M HERE) is a full-width
+   thumb-reach button that goes sticky on small screens. */
+
+.clubWrap { max-width: 760px; padding-bottom: 90px; }
+.clubHead { padding: 26px 0 6px; }
+.clubTitle { font-size: clamp(26px, 6vw, 34px); letter-spacing: -0.8px; margin: 0 0 4px; }
+.clubSummary { color: var(--text-muted); font-size: 14px; }
+.clubBack { display: inline-block; margin-top: 18px; color: var(--text-muted); font-size: 13px; }
+.clubBack:hover { color: var(--text); }
+
+.clubJoin {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  margin: 14px 0;
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+.clubJoin p { margin: 0; }
+
+.clubMyPresence {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: rgba(242, 201, 76, 0.08);
+  border: 1px solid rgba(242, 201, 76, 0.4);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 14px;
+}
+.clubMyPresenceGo { margin-left: auto; color: var(--accent); font-weight: 600; font-size: 13px; }
+
+.clubActivity { display: grid; gap: 2px; margin-bottom: 10px; }
+.clubActivityRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.clubActivityRow:hover { background: var(--surface-hover); }
+
+.clubEventList { display: grid; gap: 10px; }
+.clubEventCardLink { display: block; }
+.clubEventCard {
+  display: flex;
+  gap: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.clubEventCardLink:hover .clubEventCard { border-color: var(--border-strong); background: var(--surface-hover); }
+.clubEventImg { width: 92px; min-height: 92px; object-fit: cover; flex-shrink: 0; }
+.clubEventBody { padding: 12px 14px 12px 0; min-width: 0; flex: 1; }
+.clubEventCard .clubEventBody:first-child { padding-left: 14px; }
+.clubEventTitleRow { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.clubEventTitle { font-weight: 700; font-size: 16px; letter-spacing: -0.3px; }
+.clubEventMeta { color: var(--text-muted); font-size: 12.5px; margin-top: 3px; }
+.clubEventSocial { display: flex; gap: 10px; flex-wrap: wrap; font-size: 13px; margin-top: 8px; }
+.clubFriendLine { color: var(--accent); font-weight: 600; }
+.mutedLine { color: var(--text-muted); }
+.myRsvpMark { color: var(--text-muted); font-size: 12px; }
+.heatBadge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(242, 201, 76, 0.12);
+  border: 1px solid rgba(242, 201, 76, 0.35);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.friendMark { color: var(--accent); }
+.clubFootNote { color: var(--text-muted); font-size: 12px; margin-top: 26px; text-align: center; }
+
+/* Event room page */
+.clubEventHero {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin-top: 12px;
+}
+.clubEventHero .bg {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  opacity: 0.22;
+}
+.clubEventHeroInner { position: relative; padding: 22px 20px; }
+.clubEventStats { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 12px; font-size: 13px; }
+.clubDetailLink { color: var(--text-muted); text-decoration: underline; text-decoration-color: var(--border-strong); }
+.clubDetailLink:hover { color: var(--text); }
+.hereBadge { color: #7ed99a; font-weight: 600; font-size: 13px; }
+
+.clubRoomColumns { display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 760px) {
+  .clubRoomColumns { grid-template-columns: 3fr 2fr; gap: 26px; }
+}
+
+/* Presence */
+.btnHere {
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  background: var(--accent);
+  color: #141005;
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: 0.4px;
+  padding: 16px;
+  cursor: pointer;
+}
+.btnHere:hover { filter: brightness(1.06); }
+.btnHere:disabled { opacity: 0.6; cursor: default; }
+.presencePanel {
+  border: 1px solid rgba(242, 201, 76, 0.4);
+  background: rgba(242, 201, 76, 0.06);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 12px 0;
+}
+.presenceRow { display: flex; align-items: center; gap: 10px; }
+.presenceRow .hereBadge { margin-right: auto; }
+.presenceStatus { color: var(--text-muted); font-size: 13px; margin-top: 6px; }
+.presenceOptions { margin-top: 10px; }
+.presenceVisRow { display: grid; gap: 6px; }
+.presenceStatusForm { display: flex; gap: 8px; }
+.presenceStatusForm input,
+.roomChatForm input,
+.pingCustomForm input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 14px;
+  min-width: 0;
+}
+.presenceStatusForm input:focus,
+.roomChatForm input:focus,
+.pingCustomForm input:focus { outline: none; border-color: var(--accent); }
+@media (max-width: 759px) {
+  .presenceSticky {
+    position: fixed;
+    left: 12px; right: 12px; bottom: 12px;
+    z-index: 40;
+    margin: 0;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+  }
+  div.presenceSticky:not(.presencePanel) { background: transparent; box-shadow: none; }
+  .presenceSticky .btnHere { box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55); }
+  .presencePanel.presenceSticky { background: #171307; }
+}
+
+/* Room chat */
+.roomChat { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.roomChatList { max-height: 420px; min-height: 180px; overflow-y: auto; padding: 14px; display: grid; gap: 10px; align-content: start; }
+.roomChatEmpty, .peopleEmpty { color: var(--text-muted); font-size: 13.5px; padding: 10px 2px; }
+.roomMsg { max-width: 88%; }
+.roomMsg.mine { justify-self: end; text-align: right; }
+.roomMsgMeta { display: flex; gap: 8px; align-items: baseline; font-size: 11px; color: var(--text-muted); }
+.roomMsg.mine .roomMsgMeta { justify-content: flex-end; }
+.roomMsgName { font-weight: 700; color: var(--text); }
+.roomMsgReport { background: none; border: none; color: var(--text-muted); font-size: 10px; cursor: pointer; padding: 0; text-decoration: underline; }
+.roomMsgBody {
+  display: inline-block;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 14px;
+  margin-top: 3px;
+  text-align: left;
+  word-break: break-word;
+}
+.roomMsg.mine .roomMsgBody { background: rgba(242, 201, 76, 0.1); border-color: rgba(242, 201, 76, 0.35); }
+.roomChatForm { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border); }
+
+/* People */
+.peoplePanel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 10px 12px 12px; }
+.peopleTabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.peopleTab {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.peopleTab.isActive { color: var(--accent); border-color: rgba(242, 201, 76, 0.5); background: rgba(242, 201, 76, 0.08); }
+.personRow { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-top: 1px solid var(--border); }
+.personRow:first-of-type { border-top: none; }
+.personAvatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.personAvatarFallback {
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  font-weight: 750;
+  color: var(--text-muted);
+}
+.personInfo { flex: 1; min-width: 0; }
+.personName { font-weight: 600; font-size: 14px; }
+.personStatus { color: var(--text-muted); font-size: 12px; }
+.pingReply { color: var(--accent); }
+
+/* Pings */
+.pingInbox { display: grid; gap: 8px; margin: 12px 0; }
+.pingCard {
+  border: 1px solid rgba(242, 201, 76, 0.45);
+  background: rgba(242, 201, 76, 0.07);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.pingAsk { font-size: 14px; margin-bottom: 8px; }
+.pingReplies { display: flex; gap: 6px; flex-wrap: wrap; }
+.pingCustomForm { display: flex; gap: 8px; margin-top: 8px; }
+
+/* Notifications */
+.notifPanel { margin: 4px 0 10px; }
+.notifHead { display: flex; gap: 8px; }
+.notifHasUnread { color: var(--accent); border-color: rgba(242, 201, 76, 0.5); }
+.notifPrefs { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-top: 8px; display: grid; gap: 6px; }
+.notifPrefRow { display: flex; align-items: center; gap: 10px; font-size: 13.5px; cursor: pointer; }
+.notifList { border: 1px solid var(--border); border-radius: var(--radius); margin-top: 8px; padding: 6px 12px; }
+.notifRow { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 13.5px; }
+.notifRow:first-child { border-top: none; }
+.notifRow a:hover { color: var(--accent); }
+.notifTime { color: var(--text-muted); font-size: 11.5px; white-space: nowrap; }
+
+/* Event page module */
+.tonightModule {
+  display: block;
+  border: 1px solid rgba(242, 201, 76, 0.45);
+  background: rgba(242, 201, 76, 0.07);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.tonightModule:hover { background: rgba(242, 201, 76, 0.12); }
+.tonightModuleTitle { font-weight: 800; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--accent); }
+.tonightModuleBody { color: var(--text); font-size: 13.5px; margin-top: 5px; }
+
+/* Admin */
+.adminRow {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+/* Mobile header: scroll the nav instead of overflowing the page. */
+@media (max-width: 720px) {
+  .siteHeader .inner { gap: 14px; height: auto; min-height: 54px; flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
+  .mainNav { order: 3; flex-basis: 100%; overflow-x: auto; gap: 16px; white-space: nowrap; padding-bottom: 4px; scrollbar-width: none; }
+  .mainNav::-webkit-scrollbar { display: none; }
+  .headerRight { gap: 10px; }
+}

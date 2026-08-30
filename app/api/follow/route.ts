@@ -1,11 +1,16 @@
-// Follow / unfollow a promoter, venue, or artist. Uses the member_follows
-// relationship created in V1 — this signal feeds For You ranking.
+// Follow / unfollow a promoter, venue, artist — or, since Club Messenger,
+// another member. Member↔member follows are the basis of friendship: a
+// friend is a MUTUAL follow, and the response includes `mutual` so the UI
+// can show "Friends" only when both directions exist.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, requireMember } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
+import { areFriends } from '@/lib/clubmessenger';
 
-const TABLES: Record<string, string> = { promoter: 'promoters', venue: 'venues', artist: 'artists' };
+const TABLES: Record<string, string> = {
+  promoter: 'promoters', venue: 'venues', artist: 'artists', member: 'members',
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,6 +22,9 @@ export async function POST(req: NextRequest) {
 
     const table = TABLES[entityType];
     if (!table) return NextResponse.json({ error: 'Unknown entity type' }, { status: 400 });
+    if (entityType === 'member' && entityId === member.id) {
+      return NextResponse.json({ error: 'You cannot follow yourself' }, { status: 400 });
+    }
     const exists = await queryOne(`select 1 from ${table} where id = $1`, [entityId]);
     if (!exists) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -36,7 +44,10 @@ export async function POST(req: NextRequest) {
       `select count(*)::int as n from member_follows where entity_type = $1 and entity_id = $2`,
       [entityType, entityId]
     );
-    return NextResponse.json({ ok: true, following: follow, followers: count?.n ?? 0 });
+    const mutual = entityType === 'member' && follow
+      ? await areFriends(member.id, entityId)
+      : false;
+    return NextResponse.json({ ok: true, following: follow, followers: count?.n ?? 0, mutual });
   } catch (err) {
     if (err instanceof AuthError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

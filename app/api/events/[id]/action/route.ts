@@ -68,6 +68,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         nextRsvp === 'going' ? 'going' : nextRsvp === 'interested' ? 'interested' : 'rsvp_cleared',
         { memberId: member.id, eventId: id }
       );
+      // Attribution: Going set from a Club Messenger surface gets its own row.
+      if (nextRsvp === 'going' && body.source === 'clubmessenger') {
+        await track('going_from_clubmessenger', { memberId: member.id, eventId: id });
+      }
     }
 
     return NextResponse.json({ ok: true, saved: nextSaved, rsvp: nextRsvp });
