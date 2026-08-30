@@ -322,6 +322,34 @@ export function proposalToInput(
   };
 }
 
+// When extraction is unavailable (no API key, or it failed), the member's
+// three answers still describe a night — a pending event is built from them
+// so the contribution is never invisible-by-default. Publishing requires an
+// attached, published event on every public surface.
+export function hintsToInput(
+  hints: { what?: string | null; when?: string | null; where?: string | null },
+  base: { sourceAttribution?: string | null },
+  itemType: string
+): ArchiveEventInput {
+  let date: ArchiveDateInput = { precision: 'unknown' };
+  const when = hints.when?.trim() ?? '';
+  const yearMatch = when.match(/(19|20)\d{2}/);
+  if (yearMatch) {
+    const year = Number(yearMatch[0]);
+    date = when === yearMatch[0]
+      ? { precision: 'year', year }
+      : { precision: 'circa', year, displayDate: when.slice(0, 60) };
+  }
+  return {
+    title: hints.what?.trim() || `Archive ${itemType.replace(/_/g, ' ')}`,
+    date,
+    city: hints.where?.trim() || null,
+    provenance: { all: 'MEMBER_SUGGESTION' },
+    sourceAttribution: base.sourceAttribution ?? null,
+    status: 'pending',
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Who was there — ordered: connections → shared scene history → others.
 // ---------------------------------------------------------------------------

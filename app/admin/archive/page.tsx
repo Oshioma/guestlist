@@ -42,12 +42,15 @@ export default async function AdminArchivePage() {
         order by e.created_at limit 40`
     ),
     query<{
-      id: string; item_type: string; title: string | null; contributor: string | null;
+      id: string; item_type: string; title: string | null; status: string; contributor: string | null;
       contributor_note: string | null; event_title: string | null; event_status: string | null;
       media_id: string | null; thumb: string | null; rights: string | null; hidden: boolean | null;
       ocr: string | null;
     }>(
-      `select i.id, i.item_type, i.title, m2.display_name as contributor, i.contributor_note,
+      // Pending submissions, plus published items whose night is missing or
+      // unpublished — those are invisible on every public surface, so they
+      // stay in the queue until publishing attaches + publishes a night.
+      `select i.id, i.item_type, i.title, i.status, m2.display_name as contributor, i.contributor_note,
               e.title as event_title, e.status as event_status,
               m.id as media_id, coalesce(m.thumb_path, m.storage_path) as thumb,
               m.rights, m.hidden, left(m.ocr_text, 200) as ocr
@@ -56,6 +59,8 @@ export default async function AdminArchivePage() {
          left join archive_events e on e.id = i.archive_event_id
          left join archive_media m on m.item_id = i.id
         where i.status = 'pending'
+           or (i.status = 'published'
+               and (i.archive_event_id is null or e.status is distinct from 'published'))
         order by i.created_at limit 40`
     ),
     query<{ id: string; field: string; suggestion: string; member: string; event_title: string; created_at: string }>(
@@ -146,7 +151,14 @@ export default async function AdminArchivePage() {
               {i.contributor && ` · from ${i.contributor}`}
               {i.contributor_note && ` · “${i.contributor_note}”`}
               {i.event_title && ` · matched: ${i.event_title} (${i.event_status})`}
+              {!i.event_title && ' · no night attached yet — publishing creates one'}
             </span>
+            {i.status === 'published' && (
+              <div style={{ color: 'var(--accent)', fontSize: 12, marginTop: 3 }}>
+                Published but NOT visible — its night is {i.event_title ? 'not published' : 'missing'}.
+                Publish item again to fix.
+              </div>
+            )}
             {i.ocr && (
               <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>
                 Extracted: {i.ocr}…

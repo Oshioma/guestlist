@@ -17,7 +17,7 @@ import { track } from '@/lib/analytics';
 import { MediaError, storeArchiveImage } from '@/lib/archive/media';
 import { defaultVisionClient, type ArchiveVisionClient } from '@/lib/archive/vision';
 import {
-  assessArchiveDuplicate, createArchiveEvent, proposalToInput,
+  assessArchiveDuplicate, createArchiveEvent, hintsToInput, proposalToInput,
 } from '@/lib/archive/core';
 
 // Test hook: verify suites can inject a deterministic vision client via a
@@ -102,12 +102,17 @@ export async function POST(req: NextRequest) {
       hints,
     });
 
+    // A night is ALWAYS attached: from the extraction when available, and
+    // from the member's own answers when not — public surfaces only show
+    // items whose night is published, so an unattached item can never
+    // become visible.
     let archiveEventId: string | null = null;
     let attachedToExisting = false;
-    if (extraction.proposal) {
-      const input = proposalToInput(extraction.proposal, hints, {
-        sourceAttribution: credit ? `Contributed by ${member.display_name}` : 'Member contribution',
-      });
+    {
+      const attribution = credit ? `Contributed by ${member.display_name}` : 'Member contribution';
+      const input = extraction.proposal
+        ? proposalToInput(extraction.proposal, hints, { sourceAttribution: attribution })
+        : hintsToInput(hints, { sourceAttribution: attribution }, itemType);
       const dup = await assessArchiveDuplicate({
         title: input.title,
         year: input.date.year ?? (input.date.startDate ? Number(input.date.startDate.slice(0, 4)) : null),
