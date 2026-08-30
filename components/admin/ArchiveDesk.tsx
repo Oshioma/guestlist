@@ -60,6 +60,19 @@ export function ArchiveItemActions({ itemId }: { itemId: string }) {
   );
 }
 
+export function MixActions({ mixId }: { mixId: string }) {
+  const { run, busy, error } = useArchiveAction();
+  return (
+    <span style={{ display: 'flex', gap: 8 }}>
+      <button className="btnGhost" type="button" disabled={busy}
+              onClick={() => run({ action: 'publish_mix', mixId })}>Publish mix</button>
+      <button className="btnGhost" type="button" disabled={busy}
+              onClick={() => run({ action: 'reject_mix', mixId })}>Reject</button>
+      {error && <span className="formError">{error}</span>}
+    </span>
+  );
+}
+
 export function MediaRightsControl({ mediaId, rights, hidden }: { mediaId: string; rights: string; hidden: boolean }) {
   const { run, busy } = useArchiveAction();
   return (

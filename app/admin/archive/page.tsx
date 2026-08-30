@@ -5,13 +5,13 @@
 import { query } from '@/lib/db';
 import {
   ArchiveEventActions, ArchiveItemActions, BulkImportPanel,
-  CorrectionActions, MediaRightsControl, MemoryModAction,
+  CorrectionActions, MediaRightsControl, MemoryModAction, MixActions,
 } from '@/components/admin/ArchiveDesk';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminArchivePage() {
-  const [pendingEvents, pendingItems, corrections, reportedMemories, health] = await Promise.all([
+  const [pendingEvents, pendingItems, pendingMixes, corrections, reportedMemories, health] = await Promise.all([
     query<{
       id: string; title: string; display_date: string; date_precision: string;
       venue_name: string | null; promoter_name: string | null; city: string | null;
@@ -62,6 +62,18 @@ export default async function AdminArchivePage() {
            or (i.status = 'published'
                and (i.archive_event_id is null or e.status is distinct from 'published'))
         order by i.created_at limit 40`
+    ),
+    query<{
+      id: string; title: string; artist_name: string | null; platform: string; url: string;
+      contributor: string | null; event_title: string;
+    }>(
+      `select x.id, x.title, x.artist_name, x.platform, x.url,
+              m.display_name as contributor, e.title as event_title
+         from archive_mixes x
+         join archive_events e on e.id = x.archive_event_id
+         left join members m on m.id = x.contributed_by
+        where x.status = 'pending'
+        order by x.created_at limit 30`
     ),
     query<{ id: string; field: string; suggestion: string; member: string; event_title: string; created_at: string }>(
       `select c.id, c.field, c.suggestion, m.display_name as member, e.title as event_title, c.created_at::text
@@ -171,6 +183,26 @@ export default async function AdminArchivePage() {
             )}
           </div>
           <ArchiveItemActions itemId={i.id} />
+        </div>
+      ))}
+
+      <h2 className="sectionLabel" style={{ marginTop: 24 }}>{`Mixes waiting (${pendingMixes.length})`}</h2>
+      {pendingMixes.length === 0 && <p className="adminSub">No mixes waiting.</p>}
+      {pendingMixes.map((x) => (
+        <div className="adminRow" key={x.id} style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <strong>{x.title}</strong>{' '}
+            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+              {x.artist_name && `${x.artist_name} · `}{x.platform} · on {x.event_title}
+              {x.contributor && ` · from ${x.contributor}`}
+            </span>
+            <div style={{ fontSize: 12, marginTop: 3 }}>
+              <a href={x.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'underline' }}>
+                listen on {x.platform} ↗
+              </a>
+            </div>
+          </div>
+          <MixActions mixId={x.id} />
         </div>
       ))}
 

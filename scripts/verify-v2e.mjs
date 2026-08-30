@@ -761,6 +761,52 @@ try {
   }
 
   // -------------------------------------------------------------------------
+  console.log('\n— Mixes: paste a link, play on-site —');
+  {
+    const mz = ae['Metalheadz at Blue Note'].id;
+    check('anon cannot add a mix',
+      (await anon.post('/api/archive/mixes',
+        { archiveEventId: mz, url: 'https://youtu.be/dQw4w9WgXcQ0', title: 'x' })).status === 401);
+    check('non-embeddable platform rejected with guidance', await (async () => {
+      const r = await jules.post('/api/archive/mixes',
+        { archiveEventId: mz, url: 'https://open.spotify.com/track/abc', title: 'Some set' });
+      const d = await r.json();
+      return r.status === 400 && /Mixcloud, SoundCloud or YouTube/.test(d.error ?? '');
+    })());
+
+    const added = await jules.post('/api/archive/mixes', {
+      archiveEventId: mz, url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      title: 'Doc Scott — 3am set', artist: 'Doc Scott',
+    });
+    const addedData = await added.json();
+    check('member mix lands pending', added.status === 200
+      && (await q(`select status, platform, url from archive_mixes where id = $1`, [addedData.id]))[0].status === 'pending');
+    check('pending mix not on the night page', !(await anon.html(mzUrl)).includes('Doc Scott — 3am set'));
+    check('duplicate link on the same night blocked',
+      (await jules.post('/api/archive/mixes', {
+        archiveEventId: mz, url: 'https://youtu.be/dQw4w9WgXcQ', title: 'Same set again',
+      })).status === 409);
+
+    check('desk lists the waiting mix', (await oshi.html('/admin/archive')).includes('Mixes waiting (1)'));
+    await oshi.post('/api/admin/archive', { action: 'publish_mix', mixId: addedData.id });
+    const night = await anon.html(mzUrl);
+    check('published mix plays on the night page in our card',
+      night.includes('Doc Scott — 3am set') && night.includes('youtube-nocookie.com/embed/dQw4w9WgXcQ')
+      && night.includes('mixCard'));
+    check('published mix appears on the archive main page',
+      (await anon.html('/archive')).includes('Doc Scott — 3am set'));
+
+    // Admin additions publish immediately — they are the reviewers.
+    const scAdd = await oshi.post('/api/archive/mixes', {
+      archiveEventId: mz, url: 'https://soundcloud.com/metalheadz/goldie-live-blue-note',
+      title: 'Goldie — Blue Note live',
+    });
+    check('admin-added SoundCloud mix publishes immediately with our accent colour',
+      scAdd.status === 200
+      && (await anon.html(mzUrl)).includes('w.soundcloud.com/player') && (await anon.html(mzUrl)).includes('f2c94c'));
+  }
+
+  // -------------------------------------------------------------------------
   console.log('\n— Legacy suites untouched (spot checks) —');
   {
     check('live events browse still healthy', (await anon.fetch('/events')).status === 200);

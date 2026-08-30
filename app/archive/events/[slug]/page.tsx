@@ -11,6 +11,8 @@ import {
 } from '@/lib/archive/core';
 import { fmtEventDate } from '@/lib/util';
 import { IWasThere } from '@/components/archive/IWasThere';
+import { AddMixForm } from '@/components/archive/AddMixForm';
+import { MixCard, type MixRow } from '@/components/archive/MixCard';
 import { MemoryPanel } from '@/components/archive/MemoryPanel';
 import { KnowMore } from '@/components/archive/KnowMore';
 import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
@@ -36,7 +38,7 @@ export default async function ArchiveEventPage({ params }: { params: Promise<{ s
   );
   if (!event || (event.status !== 'published' && member?.role !== 'admin')) notFound();
 
-  const [media, lineup, genres, entities, attendance, attendees, memories, related, nowEvents, count] =
+  const [media, lineup, genres, entities, attendance, attendees, memories, related, nowEvents, count, mixes] =
     await Promise.all([
       query<{ id: string; display_path: string | null; storage_path: string; thumb_path: string | null; kind: string; rights_note: string | null; hidden: boolean }>(
         `select m.id, m.display_path, m.storage_path, m.thumb_path, m.kind, m.rights_note, m.hidden
@@ -89,6 +91,15 @@ export default async function ArchiveEventPage({ params }: { params: Promise<{ s
       ),
       currentEventsForArchive(event.id),
       visibleAttendanceCount(event.id, member?.id ?? null),
+      query<MixRow>(
+        `select x.id, x.title, x.artist_name, x.platform, x.url, x.credit_contributor,
+                m.display_name as contributor
+           from archive_mixes x
+           left join members m on m.id = x.contributed_by
+          where x.archive_event_id = $1 and x.status = 'published'
+          order by x.published_at limit 12`,
+        [event.id]
+      ),
     ]);
 
   const flyer = media.find((m) => m.kind === 'front') ?? media[0];
@@ -214,6 +225,23 @@ export default async function ArchiveEventPage({ params }: { params: Promise<{ s
           </div>
         </section>
       )}
+
+      <section style={{ marginTop: 24 }}>
+        <div className="sectionLabel">The mixes</div>
+        {mixes.length > 0 && (
+          <div className="mixGrid">
+            {mixes.map((x) => <MixCard key={x.id} mix={x} />)}
+          </div>
+        )}
+        {mixes.length === 0 && (
+          <p className="youPanelSub" style={{ marginTop: 0 }}>
+            No mixes from this night yet — got one?
+          </p>
+        )}
+        <div style={{ marginTop: 10 }}>
+          <AddMixForm archiveEventId={event.id} isSignedIn={!!member} />
+        </div>
+      </section>
 
       <MemoryPanel
         archiveEventId={event.id}
