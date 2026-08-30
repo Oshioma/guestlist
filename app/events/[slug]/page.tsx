@@ -11,7 +11,8 @@ import { ClaimEventPrompt } from '@/components/ClaimEventPrompt';
 import { isFollowing } from '@/lib/profiles';
 import { getMemberPromoters } from '@/lib/promoterAuth';
 import { queryOne } from '@/lib/db';
-import { CLUB_LIMITS, PRESENCE_ACTIVE_SQL, presenceVisibleSql } from '@/lib/clubmessenger';
+import { CLUB_LIMITS, PRESENCE_ACTIVE_SQL, friendPairSql, presenceVisibleSql } from '@/lib/clubmessenger';
+import { eventSocialContext } from '@/lib/scene';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,18 +58,25 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
       ? await queryOne<{ visible_here: number; friends_here: number }>(
           `select
              count(*)::int as visible_here,
-             count(*) filter (where exists (
-               select 1 from member_follows f1
-                join member_follows f2 on f2.member_id = f1.entity_id
-                 and f2.entity_type = 'member' and f2.entity_id = f1.member_id
-               where f1.member_id = $1 and f1.entity_type = 'member' and f1.entity_id = p.member_id
-             ))::int as friends_here
+             count(*) filter (where ${friendPairSql('$1', 'p.member_id')})::int as friends_here
            from event_presence p
           where p.event_id = $2 and ${PRESENCE_ACTIVE_SQL('p')}
             and p.visibility <> 'invisible' and ${presenceVisibleSql('$1', 'p')}`,
           [member.id, event.id]
         )
       : null;
+
+  const socialContext = member ? await eventSocialContext(member.id, event.id) : null;
+  const contextBits = socialContext
+    ? [
+        socialContext.connections_going > 0 &&
+          `${socialContext.connections_going} connection${socialContext.connections_going === 1 ? '' : 's'}`,
+        socialContext.scene_going > 0 &&
+          `${socialContext.scene_going} from your scene`,
+        socialContext.taste_going > 0 &&
+          `${socialContext.taste_going} share your music taste`,
+      ].filter(Boolean) as string[]
+    : [];
 
   const cancelled = event.listing_status === 'cancelled';
   const listingBadge =
@@ -255,6 +263,12 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
                 {' · '}see who’s out, check in when you arrive →
               </div>
             </Link>
+          )}
+
+          {contextBits.length > 0 && (
+            <div className="socialContextLine">
+              ✦ {contextBits.join(' · ')} going
+            </div>
           )}
 
           <SocialPanel

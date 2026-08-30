@@ -7,6 +7,9 @@ import {
 import { query } from '@/lib/db';
 import { EventCard } from '@/components/EventCard';
 import { FilterControls } from '@/components/FilterControls';
+import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
+import { toRecCards } from '@/lib/recCards';
+import { RecShelf } from '@/components/v2c/RecShelf';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,6 +92,17 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
       where g.active order by coalesce(pg.sort_order, g.sort_order), g.parent_genre_id nulls first, g.sort_order`
   );
 
+  // Personalised picks on the unfiltered For You / This Weekend tabs.
+  const noFilters = !genre && !eventType && !city && !datePreset && !price;
+  let picks: Awaited<ReturnType<typeof getRecommendedEvents>> = [];
+  if (member && noFilters && (tab === 'for-you' || tab === 'this-weekend')) {
+    const window = tab === 'this-weekend' ? weekendWindow() : { from: null, to: null };
+    picks = await getRecommendedEvents(member.id, {
+      limit: 6, from: window.from, to: window.to,
+    });
+    await trackRecommendationImpressions(member.id, picks, `events_${tab}`);
+  }
+
   const savedIds = new Set<string>(
     member
       ? (
@@ -167,6 +181,14 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
           nearMe: lat != null && lng != null,
         }}
       />
+
+      {picks.length > 0 && (
+        <RecShelf
+          title={tab === 'this-weekend' ? 'Your weekend, picked' : 'Picks for you'}
+          surface={`events_${tab}`}
+          events={toRecCards(picks)}
+        />
+      )}
 
       <div className="resultMeta">
         {events.length === 0

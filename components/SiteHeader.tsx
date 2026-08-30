@@ -14,7 +14,10 @@ export async function SiteHeader() {
         <nav className="mainNav">
           <Link href="/events">Events</Link>
           <Link href="/clubmessenger">Tonight</Link>
+          {member && <Link href="/people">People</Link>}
+          <Link href="/explore">Explore</Link>
           <Link href="/promoters">Promoters</Link>
+          {member && <Link href="/you">You</Link>}
           <Link href="/events/submit">+ Add Event</Link>
           {promoterships.length > 0 && <Link href="/promoter">Dashboard</Link>}
           {member?.role === 'admin' && <Link href="/admin/events">Admin</Link>}

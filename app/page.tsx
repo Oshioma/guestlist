@@ -9,8 +9,114 @@ import { browseEvents, getTopLevelGenres } from '@/lib/events';
 import { listPromoters } from '@/lib/profiles';
 import { query } from '@/lib/db';
 import { EventCard } from '@/components/EventCard';
+import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
+import { toRecCards } from '@/lib/recCards';
+import { peopleYouMayHaveDancedWith } from '@/lib/scene';
+import { memberPlaces } from '@/lib/locations';
+import { RecShelf } from '@/components/v2c/RecShelf';
 
 export const dynamic = 'force-dynamic';
+
+// MY GUESTLIST — the logged-in front door: a personalised cultural
+// magazine, not an admin dashboard.
+async function MemberHome({ member }: { member: { id: string; display_name: string } }) {
+  const weekend = weekendWindow();
+  const [weekendPicks, picks, danced, places, travel] = await Promise.all([
+    getRecommendedEvents(member.id, { limit: 4, from: weekend.from, to: weekend.to, exploration: false }),
+    getRecommendedEvents(member.id, { limit: 6 }),
+    peopleYouMayHaveDancedWith(member.id, 4),
+    memberPlaces(member.id),
+    query<{ id: string; name: string; slug: string; start_date: string; end_date: string; n: number }>(
+      `select tp.id, l.name, l.slug, tp.start_date::text, tp.end_date::text,
+              (select count(*)::int from events e
+                where e.location_id = tp.location_id and e.status = 'live'
+                  and e.listing_status <> 'cancelled'
+                  and e.start_at::date between tp.start_date and tp.end_date) as n
+         from travel_plans tp join locations l on l.id = tp.location_id
+        where tp.member_id = $1 and tp.end_date >= current_date
+        order by tp.start_date limit 3`,
+      [member.id]
+    ),
+  ]);
+  const hour = new Date().getUTCHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const firstName = member.display_name.split(' ')[0];
+  const weekendIds = new Set(weekendPicks.map((e) => e.id));
+  const laterPicks = picks.filter((e) => !weekendIds.has(e.id)).slice(0, 4);
+  await trackRecommendationImpressions(member.id, [...weekendPicks, ...laterPicks], 'home');
+
+  return (
+    <section className="wrap myGuestlist">
+      <div className="homeKicker">{greeting}</div>
+      <h1 className="myGuestlistTitle">{firstName}, here’s your Guestlist.</h1>
+
+      {travel.length > 0 && (
+        <div className="travelStrip">
+          {travel.map((t) => (
+            <Link key={t.id} href={`/${t.slug}`} className="travelCard">
+              <span className="travelWhere">{`While you’re in ${t.name}`}</span>
+              <span className="travelWhen">{`${t.start_date} → ${t.end_date}`}</span>
+              <span className="travelCount">
+                {t.n > 0 ? `${t.n} event${t.n === 1 ? '' : 's'} on` : 'We’re keeping an eye out'}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {weekendPicks.length > 0 && (
+        <RecShelf title="This weekend" surface="home_weekend" events={toRecCards(weekendPicks)} />
+      )}
+      {laterPicks.length > 0 && (
+        <RecShelf title="Picked for you" surface="home_picks" events={toRecCards(laterPicks)} />
+      )}
+      {weekendPicks.length === 0 && laterPicks.length === 0 && (
+        <div className="clubJoin">
+          <p>Nothing picked for you yet — tell us what you love and we’ll get to work.</p>
+          <Link href="/you" className="btnAccent">Set up your Guestlist →</Link>
+        </div>
+      )}
+
+      {danced.length > 0 && (
+        <>
+          <div className="homeSectionHead">
+            <h2 className="homeSectionTitle">People from your scene</h2>
+            <Link href="/people" className="btnGhost">See all</Link>
+          </div>
+          <div className="dancedGrid">
+            {danced.map((d) => (
+              <Link href={`/members/${d.slug}`} className="dancedCard" key={d.id}>
+                {d.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img className="dancedAvatar" src={d.avatar_url} alt="" />
+                ) : (
+                  <span className="dancedAvatar personAvatarFallback">{d.display_name[0]}</span>
+                )}
+                <span className="dancedName">{d.display_name}</span>
+                <span className="dancedWhere">
+                  {d.entity_name}
+                  {d.overlap_from != null && <> · {d.overlap_from}–{d.overlap_to}</>}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+
+      {places.length > 0 && (
+        <div className="chipRow" style={{ marginTop: 18 }}>
+          <span className="sectionLabel" style={{ margin: 0 }}>Your places</span>
+          {places.map((p) => (
+            <Link key={`${p.relation}-${p.id}`} href={`/${p.slug}`} className="chip">
+              {p.relation === 'home' ? `⌂ ${p.name}` : p.name}
+            </Link>
+          ))}
+          <Link href="/explore" className="chip">Explore the world →</Link>
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default async function HomePage() {
   const member = await getCurrentMember();
@@ -37,6 +143,8 @@ export default async function HomePage() {
 
   return (
     <main>
+      {member && <MemberHome member={member} />}
+      {!member && (
       <section className="homeHero">
         <div className="homeHeroMedia" aria-hidden="true">
           {/* eslint-disable @next/next/no-img-element */}
@@ -63,6 +171,7 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+      )}
 
       <div className="wrap">
         <div className="chipRow" style={{ padding: '26px 0 10px' }}>

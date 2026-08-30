@@ -54,3 +54,21 @@ on conflict (slug) do nothing;
 --   2. Then promote that account:
 --
 -- update members set role = 'admin' where lower(email) = lower('you@guestlist.net');
+
+-- ── V2C: global genre additions (editorial decision, idempotent) ────────────
+insert into genres (name, slug, sort_order) values
+  ('Amapiano', 'amapiano', 12),
+  ('Afrobeats', 'afrobeats', 13),
+  ('Dancehall', 'dancehall', 14),
+  ('Latin Electronic', 'latin-electronic', 15)
+on conflict (slug) do nothing;
+
+insert into genres (name, slug, parent_genre_id, sort_order)
+select v.name, v.slug, g.id, v.sort_order
+  from (values
+    ('Afro House', 'afro-house', 'house', 6),
+    ('Gqom', 'gqom', 'techno', 3),
+    ('Brazilian Bass', 'brazilian-bass', 'latin-electronic', 1)
+  ) as v(name, slug, parent_slug, sort_order)
+  join genres g on g.slug = v.parent_slug
+on conflict (slug) do nothing;

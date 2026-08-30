@@ -366,14 +366,14 @@ export async function getMemberAction(
 }
 
 export async function getGoingMembers(eventId: string): Promise<{
-  going: { id: string; display_name: string; avatar_url: string | null; home_city: string | null }[];
-  interested: { id: string; display_name: string; avatar_url: string | null; home_city: string | null }[];
+  going: { id: string; display_name: string; avatar_url: string | null; home_city: string | null; slug: string | null }[];
+  interested: { id: string; display_name: string; avatar_url: string | null; home_city: string | null; slug: string | null }[];
 }> {
   const rows = await query<{
     id: string; display_name: string; avatar_url: string | null;
-    home_city: string | null; rsvp: 'interested' | 'going';
+    home_city: string | null; slug: string | null; rsvp: 'interested' | 'going';
   }>(
-    `select m.id, m.display_name, m.avatar_url, m.home_city, mea.rsvp
+    `select m.id, m.display_name, m.avatar_url, m.home_city, m.slug, mea.rsvp
        from member_event_actions mea join members m on m.id = mea.member_id
       where mea.event_id = $1 and mea.rsvp is not null
       order by mea.rsvp_at asc`,

@@ -115,3 +115,58 @@
 --   delete from event_room_messages where created_at < now() - interval '30 days';
 --   delete from club_pings where created_at < now() - interval '30 days';
 --   delete from notifications where created_at < now() - interval '60 days';
+
+-- ── V2C Global network (migration 005) ──────────────────────────────────────
+-- Server-side enforcement lives in lib/privacy.ts, lib/connections.ts and
+-- lib/scene.ts; these are the equivalent policies for a Supabase Auth move.
+
+-- alter table member_privacy enable row level security;
+-- create policy "own privacy" on member_privacy
+--   for all using (member_id = auth.uid()) with check (member_id = auth.uid());
+
+-- alter table member_connections enable row level security;
+-- create policy "participants see their connections" on member_connections
+--   for select using (requester_id = auth.uid() or addressee_id = auth.uid());
+-- create policy "request as yourself" on member_connections
+--   for insert with check (requester_id = auth.uid());
+-- create policy "addressee responds" on member_connections
+--   for update using (addressee_id = auth.uid());
+
+-- alter table member_blocks enable row level security;
+-- create policy "own blocks" on member_blocks
+--   for all using (blocker_id = auth.uid()) with check (blocker_id = auth.uid());
+
+-- alter table member_scene_history enable row level security;
+-- create policy "own history writes" on member_scene_history
+--   for all using (member_id = auth.uid()) with check (member_id = auth.uid());
+-- create policy "visible history reads" on member_scene_history
+--   for select using (member_id = auth.uid() or coalesce((
+--     select mp.profile_public and mp.show_history
+--       from member_privacy mp where mp.member_id = member_scene_history.member_id), true));
+
+-- alter table travel_plans enable row level security;
+-- create policy "own travel" on travel_plans
+--   for all using (member_id = auth.uid()) with check (member_id = auth.uid());
+-- (public/connections travel visibility is served through the API layer;
+--  recommendation reads run under the service role.)
+
+-- alter table event_feedback enable row level security;
+-- create policy "own feedback" on event_feedback
+--   for all using (member_id = auth.uid()) with check (member_id = auth.uid());
+
+-- alter table member_locations enable row level security;
+-- create policy "own places" on member_locations
+--   for all using (member_id = auth.uid()) with check (member_id = auth.uid());
+
+-- alter table member_email_prefs enable row level security;
+-- create policy "own email prefs" on member_email_prefs
+--   for all using (member_id = auth.uid()) with check (member_id = auth.uid());
+
+-- locations + scene_entities (approved) are public reference data:
+-- alter table locations enable row level security;
+-- create policy "places are public" on locations for select using (true);
+-- alter table scene_entities enable row level security;
+-- create policy "approved entities public" on scene_entities
+--   for select using (status = 'approved' or created_by = auth.uid());
+-- (writes via API/service role only; email_outbox, member_reports and
+--  event_duplicate_requests are service-role/admin surfaces.)
