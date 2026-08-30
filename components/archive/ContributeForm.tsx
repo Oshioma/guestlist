@@ -5,6 +5,34 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+// Vercel rejects request bodies over ~4.5MB, so anything bigger is shrunk
+// in the browser first; images that still exceed the cap are refused with a
+// clear message instead of a connection that dies mid-upload.
+const UPLOAD_LIMIT = 4 * 1024 * 1024;
+
+async function shrinkImage(file: File): Promise<File> {
+  if (file.size <= UPLOAD_LIMIT) return file;
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return file; // gif: recompressing loses animation
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxDim = 2200; // plenty for flyer OCR + the 1280px display variant
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob: Blob | null = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
+    if (blob && blob.size < file.size) {
+      return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+    }
+  } catch {
+    /* fall through — the size check below still guards the upload */
+  }
+  return file;
+}
+
 export function ContributeForm() {
   const router = useRouter();
   const [mode, setMode] = useState<'flyer' | 'event'>('flyer');
@@ -25,19 +53,29 @@ export function ContributeForm() {
     if (!file || busy) return;
     setBusy(true);
     setError(null);
-    const form = new FormData();
-    form.set('file', file);
-    form.set('itemType', itemType);
-    form.set('what', what);
-    form.set('when', when);
-    form.set('where', where);
-    form.set('notes', notes);
-    form.set('credit', String(credit));
-    const res = await fetch('/api/archive/contribute', { method: 'POST', body: form });
-    const data = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (res.ok) { setResult(data.note); router.refresh(); }
-    else setError(data.error ?? 'Upload failed');
+    try {
+      const upload = await shrinkImage(file);
+      if (upload.size > UPLOAD_LIMIT) {
+        setError('That image is too large to upload (about 4MB max). Try a photo or screenshot of it instead.');
+        return;
+      }
+      const form = new FormData();
+      form.set('file', upload);
+      form.set('itemType', itemType);
+      form.set('what', what);
+      form.set('when', when);
+      form.set('where', where);
+      form.set('notes', notes);
+      form.set('credit', String(credit));
+      const res = await fetch('/api/archive/contribute', { method: 'POST', body: form });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) { setResult(data.note); router.refresh(); }
+      else setError(data.error ?? 'Upload failed');
+    } catch {
+      setError('Upload failed — check your connection and try again. Smaller images upload more reliably.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function submitEvent(e: React.FormEvent) {
@@ -45,15 +83,20 @@ export function ContributeForm() {
     if (busy) return;
     setBusy(true);
     setError(null);
-    const res = await fetch('/api/archive/contribute', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(manual),
-    });
-    const data = await res.json().catch(() => ({}));
-    setBusy(false);
-    if (res.ok) { setResult(data.note); router.refresh(); }
-    else setError(data.error ?? 'Something went wrong');
+    try {
+      const res = await fetch('/api/archive/contribute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(manual),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) { setResult(data.note); router.refresh(); }
+      else setError(data.error ?? 'Something went wrong');
+    } catch {
+      setError('Could not reach the server — check your connection and try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (result) {
