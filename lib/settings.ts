@@ -33,7 +33,7 @@ export async function getSafetySwitches(): Promise<SafetySwitches> {
   return out;
 }
 
-export async function setSetting(key: string, value: unknown, updatedBy: string): Promise<void> {
+export async function setSetting(key: string, value: unknown, updatedBy: string | null): Promise<void> {
   await query(
     `insert into system_settings (key, value, updated_by) values ($1, $2, $3)
      on conflict (key) do update set value = $2, updated_by = $3, updated_at = now()`,

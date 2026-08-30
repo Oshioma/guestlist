@@ -12,6 +12,7 @@ import { toRecCards } from '@/lib/recCards';
 import { RecShelf } from '@/components/v2c/RecShelf';
 import { EventCard } from '@/components/EventCard';
 import { FollowCityButton } from '@/components/v2c/FollowCityButton';
+import { GuestlistNow } from '@/components/GuestlistNow';
 import type { EventCard as EventCardType } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
@@ -105,6 +106,8 @@ export default async function PlacePage({ params }: { params: Promise<{ place: s
         </div>
         {member && <FollowCityButton locationId={location.id} following={memberFollowsCity} />}
       </div>
+
+      <GuestlistNow city={location.name} />
 
       {events.length === 0 ? (
         <div className="emptyState">
