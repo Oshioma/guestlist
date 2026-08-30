@@ -102,6 +102,10 @@ export default async function PeoplePage() {
   // CLOSE FRIENDS — private to this member. Nobody else ever sees who is
   // starred, and the starred person is never notified.
   const closeFriends = connections.connected.filter((c) => c.is_close);
+  // The rest of the connections — discovery sections below exclude people
+  // you're already connected with, so without this list a friend would
+  // disappear from /people the moment you connect.
+  const otherConnections = connections.connected.filter((c) => !c.is_close);
   const plansByMember = new Map<string, typeof peoplePlans>();
   for (const plan of peoplePlans) {
     const list = plansByMember.get(plan.member_id) ?? [];
@@ -176,6 +180,43 @@ export default async function PeoplePage() {
                   </Link>
                   <ConnectButton memberId={c.member_id} initialState="connected"
                                  isSignedIn compact initialClose />
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {otherConnections.length > 0 && (
+        <section className="youPanel">
+          <div className="sectionLabel">{`Your people (${connections.connected.length})`}</div>
+          <p className="youPanelSub" style={{ marginTop: 0 }}>
+            Everyone you’re connected with. Star the ones you never miss a
+            night with — only you can see the stars.
+          </p>
+          <div className="peopleGrid">
+            {otherConnections.map((c) => {
+              const plans = plansByMember.get(c.member_id) ?? [];
+              return (
+                <div className="personCard" key={c.member_id}>
+                  <Link href={`/members/${c.slug}`} className="personCardMain">
+                    {c.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img className="personAvatar" src={c.avatar_url} alt="" />
+                    ) : (
+                      <span className="personAvatar personAvatarFallback">{c.display_name[0]}</span>
+                    )}
+                    <span className="personCardBody">
+                      <span className="personName">{c.display_name}</span>
+                      {c.home_city && <span className="personStatus">{c.home_city}</span>}
+                      {plans.slice(0, 2).map((plan) => (
+                        <span className="personReason" key={plan.event_id}>
+                          {plan.i_am_going ? `Both going: ${plan.title}` : `Going: ${plan.title}`}
+                        </span>
+                      ))}
+                    </span>
+                  </Link>
+                  <ConnectButton memberId={c.member_id} initialState="connected" isSignedIn compact />
                 </div>
               );
             })}
