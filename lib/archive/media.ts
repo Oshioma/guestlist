@@ -60,11 +60,22 @@ async function sharpOrNull() {
   }
 }
 
+// Supabase has two key formats: legacy service_role keys are JWTs (eyJ…)
+// and go in an Authorization bearer; the newer secret keys (sb_secret_…)
+// are not JWTs — sending them as a bearer yields "Invalid Compact JWS".
+// Both formats are accepted via the apikey header, so send that always and
+// the bearer only for JWT-shaped keys.
+function supabaseAuthHeaders(key: string): Record<string, string> {
+  return key.startsWith('eyJ')
+    ? { apikey: key, Authorization: `Bearer ${key}` }
+    : { apikey: key };
+}
+
 async function supabaseUpload(base: string, key: string, relPath: string, buf: Buffer, mime: string) {
   return fetch(`${base}/storage/v1/object/archive/${relPath}`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${key}`,
+      ...supabaseAuthHeaders(key),
       'Content-Type': mime,
       'x-upsert': 'true',
     },
@@ -84,7 +95,7 @@ async function storeBuffer(relPath: string, buf: Buffer, mime: string): Promise<
       if (/bucket not found/i.test(detail)) {
         const made = await fetch(`${supabaseUrl}/storage/v1/bucket`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+          headers: { ...supabaseAuthHeaders(serviceKey), 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: 'archive', name: 'archive', public: true }),
         });
         if (made.ok || made.status === 409 /* already exists */) {
