@@ -230,6 +230,13 @@ try {
     const julesPeople = await jules.html('/people');
     check('the marked member’s /people has no close-friends panel',
       !julesPeople.includes('Close friends ('));
+
+    // Discovery sections exclude existing connections, so /people must list
+    // them explicitly — a friend never disappears after connecting. Carla's
+    // connection to Marcus is ordinary (she never starred him).
+    const carlaPeople = await carla.html('/people');
+    check('/people lists ordinary connections under Your people',
+      carlaPeople.includes('Your people (') && carlaPeople.includes(names.marcus));
   }
 
   // -------------------------------------------------------------------------
