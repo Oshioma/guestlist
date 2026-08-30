@@ -12,7 +12,7 @@
 import { query, queryOne } from './db';
 import { getPrivacy } from './privacy';
 import { discoverableSql } from './privacy';
-import { notBlockedSql, connectedSql } from './connections';
+import { notBlockedSql, connectedSql, closeFriendSql } from './connections';
 
 export const SCENE_WEIGHTS = {
   sharedExactEvent: 15, // I WAS THERE at the same historical event
@@ -405,6 +405,8 @@ export function sceneReasons(p: ScenePerson): string[] {
 // Social context for an event page: counts a viewer may see, computed from
 // mutually visible signals only.
 export type EventSocialContext = {
+  close_friends_going: number;
+  close_friend_names: string[];
   connections_going: number;
   scene_going: number;
   taste_going: number;
@@ -423,7 +425,11 @@ export async function eventSocialContext(viewerId: string, eventId: string): Pro
      )
      select
        (select count(*)::int from going g join members m on m.id = g.id
-         where ${connectedSql('$1', 'm')}) as connections_going,
+         where ${closeFriendSql('$1', 'm')}) as close_friends_going,
+       coalesce((select json_agg(m.display_name) from going g join members m on m.id = g.id
+         where ${closeFriendSql('$1', 'm')}), '[]'::json) as close_friend_names,
+       (select count(*)::int from going g join members m on m.id = g.id
+         where ${connectedSql('$1', 'm')} and not ${closeFriendSql('$1', 'm')}) as connections_going,
        (select count(*)::int from going g
          where $3 and exists (
            select 1 from member_scene_history ha
@@ -441,5 +447,59 @@ export async function eventSocialContext(viewerId: string, eventId: string): Pro
        ) as taste_going`,
     [viewerId, eventId, viewer.show_history, viewer.show_taste]
   );
-  return row ?? { connections_going: 0, scene_going: 0, taste_going: 0 };
+  return row ?? {
+    close_friends_going: 0, close_friend_names: [],
+    connections_going: 0, scene_going: 0, taste_going: 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// YOUR PEOPLE — close friends and connections with visible upcoming plans.
+// Close friends first, always. Only public/visible Going signals are used;
+// private members and hidden Going never appear.
+// ---------------------------------------------------------------------------
+
+export type PersonPlan = {
+  member_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  member_slug: string | null;
+  is_close: boolean;
+  event_id: string;
+  title: string;
+  slug: string;
+  start_at: string;
+  end_at: string | null;
+  timezone: string;
+  city: string | null;
+  i_am_going: boolean;
+};
+
+export async function yourPeopleUpcoming(
+  viewerId: string,
+  opts: { from?: Date; to?: Date; limit?: number } = {}
+): Promise<PersonPlan[]> {
+  const from = opts.from ?? new Date();
+  const to = opts.to ?? new Date(Date.now() + 14 * 86400_000);
+  return query<PersonPlan>(
+    `select m.id as member_id, m.display_name, m.avatar_url, m.slug as member_slug,
+            ${closeFriendSql('$1', 'm')} as is_close,
+            e.id as event_id, e.title, e.slug, e.start_at::text, e.end_at::text,
+            e.timezone, e.city,
+            exists (select 1 from member_event_actions mine
+                     where mine.member_id = $1 and mine.event_id = e.id and mine.rsvp = 'going') as i_am_going
+       from member_connections c
+       join members m on m.id = case when c.requester_id = $1 then c.addressee_id else c.requester_id end
+       join member_event_actions mea on mea.member_id = m.id and mea.rsvp = 'going'
+       join events e on e.id = mea.event_id
+      where c.status = 'connected' and (c.requester_id = $1 or c.addressee_id = $1)
+        and e.status = 'live' and e.listing_status <> 'cancelled'
+        and e.start_at between $2 and $3
+        and coalesce((select mp.show_going and mp.profile_public
+                        from member_privacy mp where mp.member_id = m.id), true)
+        and ${notBlockedSql('$1', 'm')}
+      order by ${closeFriendSql('$1', 'm')} desc, e.start_at
+      limit $4`,
+    [viewerId, from, to, Math.min(opts.limit ?? 12, 30)]
+  );
 }

@@ -26,6 +26,7 @@ export const ALERT_REASON_PRIORITY = [
   'TRAVEL_MATCH',
   'FOLLOWED_PROMOTER',
   'FOLLOWED_ARTIST',
+  'CLOSE_FRIEND_GOING', // stronger than an ordinary connection, by design
   'CONNECTION_GOING',
   'FOLLOWED_VENUE',
   'HOME_CITY',
@@ -36,7 +37,8 @@ export type AlertReasonCode = (typeof ALERT_REASON_PRIORITY)[number];
 
 // Strong = high-intent → eligible for instant email. Weak = digest/in-app.
 export const STRONG_REASONS: ReadonlySet<string> = new Set([
-  'TRAVEL_MATCH', 'FOLLOWED_PROMOTER', 'FOLLOWED_ARTIST', 'CONNECTION_GOING', 'FOLLOWED_VENUE',
+  'TRAVEL_MATCH', 'FOLLOWED_PROMOTER', 'FOLLOWED_ARTIST', 'CLOSE_FRIEND_GOING',
+  'CONNECTION_GOING', 'FOLLOWED_VENUE',
 ]);
 
 export type AlertReason = { code: AlertReasonCode; detail?: string };
@@ -49,6 +51,7 @@ export function sortReasons(reasons: AlertReason[]): AlertReason[] {
 
 export function alertReasonText(r: AlertReason): string {
   switch (r.code) {
+    case 'CLOSE_FRIEND_GOING': return r.detail ? `★ ${r.detail} is going` : '★ A close friend is going';
     case 'TRAVEL_MATCH': return r.detail ? `During your ${r.detail} trip` : 'During your trip';
     case 'FOLLOWED_PROMOTER': return r.detail ? `Because you follow ${r.detail}` : 'From a promoter you follow';
     case 'FOLLOWED_ARTIST': return r.detail ? `${r.detail} is playing` : 'An artist you follow is playing';
@@ -252,10 +255,19 @@ export async function onMemberGoing(actorId: string, eventId: string): Promise<n
     );
     if (!event) return 0;
 
-    const targets = await query<{ id: string; email: string; wants_email: boolean; alert_frequency: string }>(
+    // is_close is DIRECTIONAL: the TARGET privately marked the actor as a
+    // close friend. Close friends get wider relevance (a taste-genre match
+    // counts) and their own notification type + preference; ordinary
+    // connections keep the saved/RSVP'd/followed-promoter requirement.
+    const targets = await query<{
+      id: string; email: string; wants_email: boolean; alert_frequency: string;
+      is_close: boolean; cf_pref: string;
+    }>(
       `select m.id, m.email,
               coalesce(p.connection_going, false) as wants_email,
-              coalesce(p.alert_frequency, 'daily') as alert_frequency
+              coalesce(p.alert_frequency, 'daily') as alert_frequency,
+              case when c.requester_id = m.id then c.requester_close else c.addressee_close end as is_close,
+              coalesce(p.close_friend_activity, 'on') as cf_pref
          from member_connections c
          join members m on m.id = case when c.requester_id = $1 then c.addressee_id else c.requester_id end
          left join member_email_prefs p on p.member_id = m.id
@@ -267,37 +279,58 @@ export async function onMemberGoing(actorId: string, eventId: string): Promise<n
             or ($3::uuid is not null and exists (
                  select 1 from member_follows f where f.member_id = m.id
                    and f.entity_type = 'promoter' and f.entity_id = $3))
+            or (
+              -- close friends only: a taste match is enough relevance
+              (case when c.requester_id = m.id then c.requester_close else c.addressee_close end)
+              and exists (select 1 from member_genres mg
+                           join event_genres eg on eg.genre_id = mg.genre_id and eg.event_id = $2
+                          where mg.member_id = m.id)
+            )
           )`,
       [actorId, eventId, event.promoter_id]
     );
 
     let created = 0;
     for (const t of targets) {
+      const close = t.is_close && t.cf_pref !== 'off';
+      if (t.is_close && t.cf_pref === 'off') continue; // their choice is final
+      const type = close ? 'close_friend_going' : 'connection_going';
       const inserted = await queryOne<{ id: string }>(
         `insert into notifications (member_id, type, actor_member_id, event_id, payload)
-         values ($1, 'connection_going', $2, $3, $4)
+         values ($1, $5, $2, $3, $4)
          on conflict do nothing returning id`,
         [t.id, actorId, eventId,
-         JSON.stringify({ actor_name: actor.display_name, title: event.title, slug: event.slug })]
+         JSON.stringify({ actor_name: actor.display_name, title: event.title, slug: event.slug,
+                          ...(close ? { close_friend: true } : {}) }),
+         type]
       );
       if (!inserted) continue;
       created++;
       await track('alert_created', {
-        memberId: t.id, eventId, metadata: { reasons: ['CONNECTION_GOING'] },
+        memberId: t.id, eventId,
+        metadata: { reasons: [close ? 'CLOSE_FRIEND_GOING' : 'CONNECTION_GOING'] },
       });
-      if (t.wants_email && t.alert_frequency === 'instant') {
+      // Instant email: close friends need only their own pref ON + instant
+      // frequency; ordinary connections also need the connection_going
+      // email opt-in. 'digest' close friends never get instant email —
+      // their notification rides the daily digest instead.
+      const emailNow = close
+        ? t.cf_pref === 'on' && t.alert_frequency === 'instant'
+        : t.wants_email && t.alert_frequency === 'instant';
+      if (emailNow) {
+        const star = close ? '★ ' : '';
         const { outcome } = await queueEmail({
           recipientEmail: t.email,
           memberId: t.id,
-          emailType: 'alert:connection',
-          subject: `${actor.display_name} is going to ${event.title}`,
+          emailType: close ? 'alert:close_friend' : 'alert:connection',
+          subject: `${star}${actor.display_name} is going to ${event.title}`,
           bodyText: `${actor.display_name} is going to ${event.title}.\n\n${SITE}/events/${event.slug}?src=email-connection`,
           bodyHtml: renderEmailHtml({
-            heading: `${actor.display_name} is going`,
+            heading: `${star}${actor.display_name} is going`,
             intro: event.title,
             cta: { label: 'VIEW EVENT', url: `${SITE}/events/${event.slug}?src=email-connection` },
             memberId: t.id,
-            emailType: 'alert:connection',
+            emailType: close ? 'alert:close_friend' : 'alert:connection',
           }),
           dedupeKey: `conn:${t.id}:${actorId}:${eventId}`,
         });
@@ -356,7 +389,7 @@ export async function runDailyAlertDigests(now = new Date()): Promise<number> {
        join members m on m.id = n.member_id
        left join locations l on l.id = m.home_location_id
        left join member_email_prefs p on p.member_id = m.id
-      where n.type in ('event_alert', 'connection_going')
+      where n.type in ('event_alert', 'connection_going', 'close_friend_going')
         and n.emailed_at is null and n.read_at is null
         and n.created_at > now() - interval '48 hours'
         and coalesce(p.alert_frequency, 'daily') in ('daily', 'instant')`
@@ -376,7 +409,7 @@ export async function runDailyAlertDigests(now = new Date()): Promise<number> {
               e.start_at::text, e.end_at::text, e.timezone, e.city
          from notifications n
          left join events e on e.id = n.event_id
-        where n.member_id = $1 and n.type in ('event_alert', 'connection_going')
+        where n.member_id = $1 and n.type in ('event_alert', 'connection_going', 'close_friend_going')
           and n.emailed_at is null and n.read_at is null
           and n.created_at > now() - interval '48 hours'
         order by n.created_at limit 6`,
@@ -387,9 +420,11 @@ export async function runDailyAlertDigests(now = new Date()): Promise<number> {
     const blocks = items
       .filter((i) => i.event_title && i.event_slug)
       .map((i) => ({
-        title: i.type === 'connection_going' && i.payload.actor_name
-          ? `${i.payload.actor_name} is going: ${i.event_title}`
-          : i.event_title!,
+        title: i.type === 'close_friend_going' && i.payload.actor_name
+          ? `★ ${i.payload.actor_name} is going: ${i.event_title}`
+          : i.type === 'connection_going' && i.payload.actor_name
+            ? `${i.payload.actor_name} is going: ${i.event_title}`
+            : i.event_title!,
         meta: [i.start_at ? fmtEventDate(i.start_at, i.end_at, i.timezone ?? 'UTC') : null, i.city]
           .filter(Boolean).join(' · '),
         reason: i.payload.reasons?.[0] ? alertReasonText(i.payload.reasons[0]) : null,

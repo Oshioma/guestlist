@@ -79,6 +79,8 @@ export type MemberEmailPrefs = {
   weekly_digest: boolean;
   event_reminders: boolean;
   alert_frequency: 'instant' | 'daily' | 'weekly' | 'off';
+  close_friend_activity: 'on' | 'digest' | 'off';
+  promoter_announcements: 'email' | 'inapp' | 'off';
 };
 
 export const EMAIL_PREF_DEFAULTS: MemberEmailPrefs = {
@@ -93,13 +95,17 @@ export const EMAIL_PREF_DEFAULTS: MemberEmailPrefs = {
   // Conservative default: high-intent follows land in a daily digest, not
   // instant email; members opt IN to as-it-happens.
   alert_frequency: 'daily',
+  // Close friends default ON (that is the point of marking one); promoter
+  // announcements default to in-app only — email is an explicit opt-in.
+  close_friend_activity: 'on',
+  promoter_announcements: 'inapp',
 };
 
 export async function getEmailPrefs(memberId: string): Promise<MemberEmailPrefs> {
   const row = await queryOne<MemberEmailPrefs>(
     `select followed_promoter_events, followed_venue_events, followed_artist_events,
             genre_in_home_city, travel_events, connection_going, weekly_digest,
-            event_reminders, alert_frequency
+            event_reminders, alert_frequency, close_friend_activity, promoter_announcements
        from member_email_prefs where member_id = $1`,
     [memberId]
   );
@@ -110,25 +116,31 @@ export async function updateEmailPrefs(memberId: string, patch: Partial<MemberEm
   const current = await getEmailPrefs(memberId);
   const next: MemberEmailPrefs = { ...current };
   for (const key of Object.keys(EMAIL_PREF_DEFAULTS) as (keyof MemberEmailPrefs)[]) {
-    if (key === 'alert_frequency') continue;
+    if (key === 'alert_frequency' || key === 'close_friend_activity' || key === 'promoter_announcements') continue;
     if (typeof patch[key] === 'boolean') (next as Record<string, unknown>)[key] = patch[key];
   }
   if (patch.alert_frequency && ['instant', 'daily', 'weekly', 'off'].includes(patch.alert_frequency)) {
     next.alert_frequency = patch.alert_frequency;
   }
+  if (patch.close_friend_activity && ['on', 'digest', 'off'].includes(patch.close_friend_activity)) {
+    next.close_friend_activity = patch.close_friend_activity;
+  }
+  if (patch.promoter_announcements && ['email', 'inapp', 'off'].includes(patch.promoter_announcements)) {
+    next.promoter_announcements = patch.promoter_announcements;
+  }
   await query(
     `insert into member_email_prefs (member_id, followed_promoter_events, followed_venue_events,
        followed_artist_events, genre_in_home_city, travel_events, connection_going, weekly_digest,
-       event_reminders, alert_frequency)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       event_reminders, alert_frequency, close_friend_activity, promoter_announcements)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      on conflict (member_id) do update set
        followed_promoter_events=$2, followed_venue_events=$3, followed_artist_events=$4,
        genre_in_home_city=$5, travel_events=$6, connection_going=$7, weekly_digest=$8,
-       event_reminders=$9, alert_frequency=$10,
+       event_reminders=$9, alert_frequency=$10, close_friend_activity=$11, promoter_announcements=$12,
        updated_at=now()`,
     [memberId, next.followed_promoter_events, next.followed_venue_events, next.followed_artist_events,
      next.genre_in_home_city, next.travel_events, next.connection_going, next.weekly_digest,
-     next.event_reminders, next.alert_frequency]
+     next.event_reminders, next.alert_frequency, next.close_friend_activity, next.promoter_announcements]
   );
   return next;
 }

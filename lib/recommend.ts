@@ -19,6 +19,7 @@ export const REC_WEIGHTS = {
   homeCity: 20,
   followedCity: 15,
   travelDestination: 25,
+  closeFriendGoing: 30, // stronger than an ordinary connection, by design
   connectionGoing: 20,
   sceneGoing: 10,
   trendingPerGoing: 1,     // capped below
@@ -41,6 +42,7 @@ export type RecReason =
   | { code: 'HOME_CITY'; city: string }
   | { code: 'FOLLOWED_CITY'; city: string }
   | { code: 'TRAVEL_DESTINATION'; city: string }
+  | { code: 'CLOSE_FRIEND_GOING'; names: string[]; count: number }
   | { code: 'CONNECTION_GOING'; names: string[]; count: number }
   | { code: 'SCENE_GOING'; count: number }
   | { code: 'TRENDING'; city: string | null }
@@ -56,6 +58,10 @@ export function reasonText(r: RecReason): string {
     case 'HOME_CITY': return `Near you in ${r.city}`;
     case 'FOLLOWED_CITY': return `In ${r.city}`;
     case 'TRAVEL_DESTINATION': return `While you're in ${r.city}`;
+    case 'CLOSE_FRIEND_GOING':
+      return r.names.length
+        ? `★ ${r.names.slice(0, 2).join(' and ')}${r.count > 2 ? ` +${r.count - 2}` : ''} ${r.count === 1 ? 'is' : 'are'} going`
+        : `★ ${r.count} close friend${r.count === 1 ? ' is' : 's are'} going`;
     case 'CONNECTION_GOING':
       return r.names.length
         ? `${r.names.slice(0, 2).join(' and ')}${r.count > 2 ? ` +${r.count - 2}` : ''} ${r.count === 1 ? 'is' : 'are'} going`
@@ -126,6 +132,7 @@ export async function getRecommendedEvents(
       is_home_city: boolean;
       is_followed_city: boolean;
       is_travel_city: boolean;
+      close_friends_going: string[];
       connections_going: string[];
       scene_going: number;
       featured: boolean;
@@ -157,11 +164,27 @@ export async function getRecommendedEvents(
                      where tp.member_id = $1 and tp.location_id = e.location_id
                        and e.start_at::date between tp.start_date and tp.end_date) as is_travel_city,
             coalesce((
+              -- Close friends going (the viewer's PRIVATE marks), strongest
+              -- social signal. Privacy identical to connections below.
               select json_agg(m2.display_name)
                 from member_connections c
                 join members m2 on m2.id = case when c.requester_id = $1 then c.addressee_id else c.requester_id end
                 join member_event_actions mea2 on mea2.member_id = m2.id and mea2.event_id = e.id and mea2.rsvp = 'going'
                where c.status = 'connected' and (c.requester_id = $1 or c.addressee_id = $1)
+                 and case when c.requester_id = $1 then c.requester_close else c.addressee_close end
+                 and coalesce((select mp.show_going and mp.profile_public
+                                 from member_privacy mp where mp.member_id = m2.id), true)
+                 and not exists (select 1 from member_blocks b
+                       where (b.blocker_id = $1 and b.blocked_id = m2.id)
+                          or (b.blocker_id = m2.id and b.blocked_id = $1))
+            ), '[]'::json) as close_friends_going,
+            coalesce((
+              select json_agg(m2.display_name)
+                from member_connections c
+                join members m2 on m2.id = case when c.requester_id = $1 then c.addressee_id else c.requester_id end
+                join member_event_actions mea2 on mea2.member_id = m2.id and mea2.event_id = e.id and mea2.rsvp = 'going'
+               where c.status = 'connected' and (c.requester_id = $1 or c.addressee_id = $1)
+                 and not case when c.requester_id = $1 then c.requester_close else c.addressee_close end
                  and coalesce((select mp.show_going and mp.profile_public
                                  from member_privacy mp where mp.member_id = m2.id), true)
                  and not exists (select 1 from member_blocks b
@@ -252,6 +275,10 @@ export async function getRecommendedEvents(
       score += w.followedCity;
       reasons.push({ code: 'FOLLOWED_CITY', city: r.city });
     }
+    if (r.close_friends_going.length) {
+      score += w.closeFriendGoing;
+      reasons.push({ code: 'CLOSE_FRIEND_GOING', names: r.close_friends_going, count: r.close_friends_going.length });
+    }
     if (r.connections_going.length) {
       score += w.connectionGoing;
       reasons.push({ code: 'CONNECTION_GOING', names: r.connections_going, count: r.connections_going.length });
@@ -268,10 +295,10 @@ export async function getRecommendedEvents(
     }
     const { matched_explicit, matched_inferred, followed_promoter, followed_venue,
             followed_artists, is_home_city, is_followed_city, is_travel_city,
-            connections_going, scene_going, featured, ...event } = r;
+            close_friends_going, connections_going, scene_going, featured, ...event } = r;
     void matched_inferred; void followed_promoter; void followed_venue; void followed_artists;
     void is_home_city; void is_followed_city; void is_travel_city; void connections_going;
-    void scene_going; void featured; void matched_explicit;
+    void close_friends_going; void scene_going; void featured; void matched_explicit;
     return { ...event, score, reasons };
   });
 

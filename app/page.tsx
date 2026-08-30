@@ -11,7 +11,8 @@ import { query } from '@/lib/db';
 import { EventCard } from '@/components/EventCard';
 import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
 import { toRecCards } from '@/lib/recCards';
-import { peopleYouMayHaveDancedWith } from '@/lib/scene';
+import { peopleYouMayHaveDancedWith, yourPeopleUpcoming } from '@/lib/scene';
+import { fmtEventDate } from '@/lib/util';
 import { memberPlaces } from '@/lib/locations';
 import { RecShelf } from '@/components/v2c/RecShelf';
 
@@ -21,9 +22,10 @@ export const dynamic = 'force-dynamic';
 // magazine, not an admin dashboard.
 async function MemberHome({ member }: { member: { id: string; display_name: string } }) {
   const weekend = weekendWindow();
-  const [weekendPicks, picks, danced, places, travel] = await Promise.all([
+  const [weekendPicks, picks, yourPeople, danced, places, travel] = await Promise.all([
     getRecommendedEvents(member.id, { limit: 4, from: weekend.from, to: weekend.to, exploration: false }),
     getRecommendedEvents(member.id, { limit: 6 }),
+    yourPeopleUpcoming(member.id, { from: weekend.from, to: weekend.to, limit: 8 }),
     peopleYouMayHaveDancedWith(member.id, 4),
     memberPlaces(member.id),
     query<{ id: string; name: string; slug: string; start_date: string; end_date: string; n: number }>(
@@ -66,6 +68,28 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
 
       {weekendPicks.length > 0 && (
         <RecShelf title="This weekend" surface="home_weekend" events={toRecCards(weekendPicks)} />
+      )}
+
+      {yourPeople.length > 0 && (
+        <>
+          <div className="homeSectionHead">
+            <h2 className="homeSectionTitle">Your people this weekend</h2>
+            <Link href="/people" className="btnGhost">Your people</Link>
+          </div>
+          <div className="yourPeopleStrip">
+            {yourPeople.map((p) => (
+              <Link key={`${p.member_id}-${p.event_id}`} href={`/events/${p.slug}`} className="yourPeopleCard">
+                <span className="yourPeopleName">
+                  {p.is_close ? `★ ${p.display_name}` : p.display_name}
+                </span>
+                <span className="yourPeopleEvent">{p.title}</span>
+                <span className="yourPeopleMeta">
+                  {`${fmtEventDate(p.start_at, p.end_at, p.timezone)}${p.city ? ` · ${p.city}` : ''}${p.i_am_going ? ' · You’re going too' : ''}`}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </>
       )}
       {laterPicks.length > 0 && (
         <RecShelf title="Picked for you" surface="home_picks" events={toRecCards(laterPicks)} />

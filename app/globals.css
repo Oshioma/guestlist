@@ -1875,3 +1875,17 @@ button { font-family: inherit; }
   color: var(--text); padding: 9px 11px; font-size: 13.5px; font-family: inherit;
 }
 .knowMoreForm button { justify-self: start; }
+
+/* ── V2F: Close Friends + promoter follower tools ─────────────────────── */
+.yourPeopleStrip { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin: 6px 0 22px; }
+.yourPeopleCard { display: grid; gap: 3px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-raised); text-decoration: none; }
+.yourPeopleCard:hover { border-color: var(--border-strong); }
+.yourPeopleName { font-weight: 600; font-size: 14px; color: var(--text); }
+.yourPeopleEvent { font-size: 13px; color: var(--accent); }
+.yourPeopleMeta { font-size: 12px; color: var(--text-muted); }
+.announceSteps { display: grid; gap: 14px; max-width: 640px; }
+.announceTypeGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.announceStat { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-raised); }
+.announceStat strong { font-size: 20px; }
+.announceStat span { font-size: 12px; color: var(--text-muted); }
+.followerStatGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 10px 0 18px; }

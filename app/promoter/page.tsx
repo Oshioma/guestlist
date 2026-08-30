@@ -4,6 +4,7 @@
 import Link from 'next/link';
 import { dashContext } from '@/lib/promoterDash';
 import { DashShell } from '@/components/promoter/DashShell';
+import { followerStats } from '@/lib/announcements';
 import { eventPerformance, eventsNeedingAttention, promoterStats } from '@/lib/promoterAnalytics';
 import { query, queryOne } from '@/lib/db';
 import { fmtEventDate } from '@/lib/util';
@@ -23,8 +24,9 @@ export default async function PromoterOverviewPage({
   }
   const promoter = ctx.active;
 
-  const [stats, upcoming, attention, notifications, source, liveCount] = await Promise.all([
+  const [stats, followers, upcoming, attention, notifications, source, liveCount] = await Promise.all([
     promoterStats(promoter.id, 30),
+    followerStats(promoter.id),
     eventPerformance(promoter.id, { days: 30, upcomingOnly: true, limit: 5 }),
     eventsNeedingAttention(promoter.id),
     query<{ id: string; type: string; created_at: string; payload: Record<string, unknown> }>(
@@ -67,7 +69,7 @@ export default async function PromoterOverviewPage({
           [stats.ticketClicks, 'Ticket clicks · 30d'],
           [stats.interested, 'Interested · 30d'],
           [stats.going, 'Going · 30d'],
-          [stats.followers, 'Followers'],
+          [stats.followers, `Followers · +${followers.new_30d} this month`],
         ] as [number, string][]).map(([v, l]) => (
           <div className="statTile" key={l}>
             <div className="v">{v.toLocaleString()}</div>
@@ -75,6 +77,15 @@ export default async function PromoterOverviewPage({
           </div>
         ))}
       </div>
+
+      {(followers.top_cities.length > 0 || followers.top_genres.length > 0) && (
+        <p className="youHistoryMeta" style={{ marginTop: 2 }}>
+          {[
+            followers.top_cities.length > 0 && `Top cities: ${followers.top_cities.map((c) => c.city).join(', ')}`,
+            followers.top_genres.length > 0 && `Top genres: ${followers.top_genres.map((g) => g.genre).join(', ')}`,
+          ].filter(Boolean).join(' · ')}
+        </p>
+      )}
 
       {showOnboarding && (
         <div className="sideCard" style={{ maxWidth: 460 }}>

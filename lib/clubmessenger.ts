@@ -21,6 +21,7 @@
 // RSVP is never treated as physical presence.
 
 import { query, queryOne } from './db';
+import { closeFriendSql } from './connections';
 
 export const CLUB_LIMITS = {
   messagesPerMinute: 12,
@@ -199,8 +200,8 @@ export type TonightEvent = {
   primary_image_url: string | null;
   listing_status: string;
   my_rsvp: string | null;
-  friends_here: { id: string; display_name: string; avatar_url: string | null; status: string | null }[];
-  friends_going: { id: string; display_name: string; avatar_url: string | null }[];
+  friends_here: { id: string; display_name: string; avatar_url: string | null; status: string | null; is_close?: boolean }[];
+  friends_going: { id: string; display_name: string; avatar_url: string | null; is_close?: boolean }[];
   event_visible_here: number; // presence visible via 'event' scope (non-friends)
   going_count: number;
 };
@@ -227,8 +228,11 @@ export async function tonightEvents(viewerId: string): Promise<TonightEvent[]> {
        left join member_event_actions my
          on my.member_id = $1 and my.event_id = e.id
        left join lateral (
+         -- Close friends pin to the front of the list (private ★, viewer-only).
          select json_agg(json_build_object('id', m.id, 'display_name', m.display_name,
-                  'avatar_url', m.avatar_url, 'status', p.status) order by p.arrived_at) as friends
+                  'avatar_url', m.avatar_url, 'status', p.status,
+                  'is_close', ${closeFriendSql('$1', 'm')})
+                order by ${closeFriendSql('$1', 'm')} desc, p.arrived_at) as friends
            from event_presence p join members m on m.id = p.member_id
           where p.event_id = e.id and ${PRESENCE_ACTIVE_SQL('p')}
             and p.visibility <> 'invisible'
@@ -237,7 +241,8 @@ export async function tonightEvents(viewerId: string): Promise<TonightEvent[]> {
        ) fh on true
        left join lateral (
          select json_agg(json_build_object('id', m.id, 'display_name', m.display_name,
-                  'avatar_url', m.avatar_url)) as friends
+                  'avatar_url', m.avatar_url, 'is_close', ${closeFriendSql('$1', 'm')})
+                order by ${closeFriendSql('$1', 'm')} desc) as friends
            from member_event_actions mea join members m on m.id = mea.member_id
           where mea.event_id = e.id and mea.rsvp = 'going' and mea.member_id <> $1
             and ${friendPairSql('$1', 'mea.member_id')}

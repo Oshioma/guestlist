@@ -7,7 +7,7 @@ import { notFound } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
 import { getPrivacy } from '@/lib/privacy';
-import { connectionBetween, isBlockedEitherWay } from '@/lib/connections';
+import { connectionBetween, isBlockedEitherWay, isCloseFriend } from '@/lib/connections';
 import { sharedHistory } from '@/lib/scene';
 import { fmtEventDate } from '@/lib/util';
 import { ConnectButton } from '@/components/v2c/ConnectButton';
@@ -38,7 +38,7 @@ export default async function MemberProfilePage({ params }: { params: Promise<{ 
   if (!privacy.profile_public && !isSelf && viewer?.role !== 'admin') notFound();
   if (viewer && !isSelf && (await isBlockedEitherWay(viewer.id, member.id))) notFound();
 
-  const [taste, history, upcoming, following, connection, shared, viewerBlocks] = await Promise.all([
+  const [taste, history, upcoming, following, connection, viewerClose, shared, viewerBlocks] = await Promise.all([
     privacy.show_taste || isSelf
       ? query<{ name: string; slug: string }>(
           `select g.name, g.slug from member_genres mg join genres g on g.id = mg.genre_id
@@ -74,6 +74,7 @@ export default async function MemberProfilePage({ params }: { params: Promise<{ 
       [member.id]
     ),
     viewer && !isSelf ? connectionBetween(viewer.id, member.id) : Promise.resolve('none' as const),
+    viewer && !isSelf ? isCloseFriend(viewer.id, member.id) : Promise.resolve(false),
     viewer && !isSelf ? sharedHistory(viewer.id, member.id) : Promise.resolve([]),
     viewer
       ? queryOne(`select 1 from member_blocks where blocker_id = $1 and blocked_id = $2`, [viewer.id, member.id])
@@ -118,6 +119,7 @@ export default async function MemberProfilePage({ params }: { params: Promise<{ 
               initialState={connection === 'blocked' ? 'blocked' : connection}
               connectionId={pendingIn?.id}
               isSignedIn
+              initialClose={viewerClose}
             />
             <MemberActions memberId={member.id} blocked={!!viewerBlocks} />
           </div>
