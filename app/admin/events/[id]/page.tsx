@@ -52,9 +52,9 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
     query<{ id: string; name: string }>(`select id, name from promoters order by name`),
   ]);
 
-  // NOTE: datetime-local values are interpreted server-side as being in the
-  // event's timezone when saved (the form submits an ISO string built from
-  // the browser's locale) — acceptable for V1 admin tooling.
+  // datetime-local values render in the event's timezone here and are
+  // interpreted in that same timezone when saved — the admin's browser
+  // timezone is never involved.
   const initial: EventFormValues = {
     id: event.id,
     title: event.title,

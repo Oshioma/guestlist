@@ -10,19 +10,25 @@
     "db:migrate": "node scripts/migrate.mjs",
     "db:seed": "node scripts/seed.mjs",
     "db:reset": "node scripts/migrate.mjs --reset && node scripts/seed.mjs",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "test:supply": "tsx scripts/test-supply.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
     "next": "^15.5.0",
+    "node-html-parser": "^9.0.2",
     "pg": "^8.13.1",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/pg": "^8.11.10",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.7.0"
+    "tsx": "^4.23.13",
+    "typescript": "^5.7.0",
+    "undici": "^8.10.0"
   }
 }

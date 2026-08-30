@@ -21,6 +21,32 @@ around rave, club and electronic music culture.
     Past), publish/edit/reject, duplicate flags, manual event create/edit.
   - `/admin/sources` — the independent event-source graph foundation.
 
+- **Event Supply Engine V2A** (`lib/supply/`): finds and imports events from
+  independent websites with minimal human effort.
+  - SSRF-hardened server-side fetcher (`safeFetch.ts`): http/https only,
+    private/loopback/link-local/metadata ranges blocked at DNS-lookup time,
+    redirect re-validation, timeouts, size caps, honest GuestlistBot UA.
+  - Structured-data-first extraction (`structured.ts`): JSON-LD schema.org
+    Event, OpenGraph, meta, canonical, feeds — then Claude fills gaps
+    (`ai.ts`, requires `ANTHROPIC_API_KEY`; degrades to structured-only
+    without it). Page content is framed as untrusted data; AI output is
+    zod-validated and application code controls every write.
+  - Normalisation in the event's own timezone, controlled-taxonomy genre
+    mapping (unknowns → `genre_suggestions` for admins), conservative
+    venue/promoter/artist matching, multi-signal duplicate scoring, and
+    multi-source evidence links per canonical event.
+  - Deterministic per-field confidence + provenance shown in the admin
+    review UI; conservative auto-publish only for TRUSTED sources
+    (thresholds in `lib/supply/config.ts`, env-overridable).
+  - Source scanning (`scanner.ts`): known listing page or RSS/Atom feed →
+    candidate event links → seen-URL memory → capped extraction. SCAN NOW
+    per source in admin; scheduled polling via
+    `POST /api/jobs/scan-sources` with `Authorization: Bearer
+    $SUPPLY_CRON_SECRET` (wire to cron/Vercel Cron; e.g. every 30 min).
+  - `/admin/supply`: extraction log with failure states, retries and
+    cost/performance metrics (AI tokens, durations, structured-data hits).
+  - Rate-limited public submissions (member/IP per-hour caps).
+
 ## Stack
 
 - Next.js (App Router, TypeScript), hand-rolled CSS design system.
@@ -50,6 +76,13 @@ discovery → filters → RSVP → who's going → ticket click → submissions 
 dedupe → permissions) against a running server with DB assertions:
 
 ```bash
-npm run db:reset && npm run dev &
+npm run db:reset && npm run dev &   # requires SUPPLY_FETCH_ALLOW_HOSTS=127.0.0.1 in .env.local (dev/test only)
 npm run verify
 ```
+
+The Event Supply Engine has its own deterministic suite —
+`npm run test:supply` — 153 checks over fixtures with an injected fetcher
+and mock AI clients (SSRF hardening, structured extraction, AI merge paths,
+normalisation, genre mapping, dedupe, scanning, auto-publish rules). No
+live websites in CI; `scripts/manual-extract.ts` is a manual harness for
+respectful spot-checks against real pages.

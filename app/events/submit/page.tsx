@@ -9,12 +9,14 @@ import { useState } from 'react';
 export default function SubmitEventPage() {
   const [status, setStatus] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [found, setFound] = useState<string[]>([]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const url = new FormData(e.currentTarget).get('url');
     setStatus('busy');
     setMessage('');
+    setFound([]);
     const res = await fetch('/api/submissions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -23,6 +25,7 @@ export default function SubmitEventPage() {
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
       setStatus('done');
+      setFound(Array.isArray(data.found) ? data.found : []);
       setMessage(data.message ?? 'Got it — thank you.');
     } else {
       setStatus('error');
@@ -40,6 +43,18 @@ export default function SubmitEventPage() {
         </p>
         {status === 'done' ? (
           <div className="joinPrompt" style={{ fontSize: 15 }}>
+            {found.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 12, letterSpacing: 1.6, textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 8 }}>
+                  We found
+                </div>
+                {found.map((line, i) => (
+                  <div key={i} style={{ fontWeight: i === 0 ? 700 : 400, fontSize: i === 0 ? 18 : 14.5 }}>
+                    {line}
+                  </div>
+                ))}
+              </div>
+            )}
             {message}
             <div style={{ marginTop: 16 }}>
               <button className="btnGhost" onClick={() => { setStatus('idle'); setMessage(''); }} type="button">
