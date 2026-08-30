@@ -4,6 +4,20 @@
 import { query, queryOne } from './db';
 import { checkForDuplicate } from './dedupe';
 import { normalizeTitle, slugify } from './util';
+import { isValidTimezone, parseLocalInTimezone } from './supply/time';
+
+// Admin forms submit wall-clock "YYYY-MM-DDTHH:mm" values, interpreted in
+// the EVENT's timezone (never the admin's browser timezone — that was the
+// V1 caveat). ISO strings with an explicit offset are honoured as-is.
+export function parseEventDate(value: string | Date, timezone: string): Date | null {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/.test(value.trim())) {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const tz = isValidTimezone(timezone) ? timezone : 'Europe/London';
+  return parseLocalInTimezone(value, tz);
+}
 
 export type EventInput = {
   title: string;
@@ -33,11 +47,14 @@ export type EventInput = {
 };
 
 export function validateEventInput(input: Partial<EventInput>): string | null {
+  const tz = input.timezone ?? 'Europe/London';
   if (!input.title?.trim()) return 'Title is required';
-  if (!input.startAt || Number.isNaN(Date.parse(input.startAt))) return 'A valid start date is required';
-  if (input.endAt && Number.isNaN(Date.parse(input.endAt))) return 'End date is invalid';
-  if (input.endAt && Date.parse(input.endAt) <= Date.parse(input.startAt!)) {
-    return 'End must be after start';
+  if (!input.startAt || !parseEventDate(input.startAt, tz)) return 'A valid start date is required';
+  if (input.endAt && !parseEventDate(input.endAt, tz)) return 'End date is invalid';
+  if (input.endAt) {
+    const start = parseEventDate(input.startAt, tz)!;
+    const end = parseEventDate(input.endAt, tz)!;
+    if (end.getTime() <= start.getTime()) return 'End must be after start';
   }
   if (!input.eventType) return 'Event type is required';
   if (
@@ -124,7 +141,8 @@ export async function createEvent(
      returning id`,
     [
       input.title.trim(), slug, input.shortDescription ?? null, input.description ?? null,
-      new Date(input.startAt), input.endAt ? new Date(input.endAt) : null,
+      parseEventDate(input.startAt, input.timezone ?? 'Europe/London'),
+      input.endAt ? parseEventDate(input.endAt, input.timezone ?? 'Europe/London') : null,
       input.timezone ?? null, input.venueId ?? null, input.promoterId ?? null,
       input.city ?? null, input.country ?? null, input.latitude ?? null, input.longitude ?? null,
       input.eventType, input.ticketUrl ?? null, input.priceFrom ?? null, input.priceTo ?? null,
@@ -147,6 +165,16 @@ export async function updateEvent(
   id: string,
   input: Partial<EventInput> & { status?: EventInput['status']; clearDuplicateFlag?: boolean }
 ): Promise<{ ok: boolean }> {
+  // Wall-clock inputs are interpreted in the event's timezone: the one being
+  // set in this update, else the one already stored.
+  let tzForDates = input.timezone;
+  if ((input.startAt !== undefined || input.endAt) && !tzForDates) {
+    const existing = await queryOne<{ timezone: string }>(
+      'select timezone from events where id = $1', [id]
+    );
+    tzForDates = existing?.timezone ?? 'Europe/London';
+  }
+
   const sets: string[] = [];
   const args: unknown[] = [];
   const set = (col: string, val: unknown, cast = '') => {
@@ -160,8 +188,10 @@ export async function updateEvent(
   }
   if (input.shortDescription !== undefined) set('short_description', input.shortDescription);
   if (input.description !== undefined) set('description', input.description);
-  if (input.startAt !== undefined) set('start_at', new Date(input.startAt));
-  if (input.endAt !== undefined) set('end_at', input.endAt ? new Date(input.endAt) : null);
+  if (input.startAt !== undefined) set('start_at', parseEventDate(input.startAt, tzForDates ?? 'Europe/London'));
+  if (input.endAt !== undefined) {
+    set('end_at', input.endAt ? parseEventDate(input.endAt, tzForDates ?? 'Europe/London') : null);
+  }
   if (input.timezone !== undefined) set('timezone', input.timezone || 'Europe/London');
   if (input.venueId !== undefined) set('venue_id', input.venueId);
   if (input.promoterId !== undefined) set('promoter_id', input.promoterId);
@@ -180,9 +210,13 @@ export async function updateEvent(
   if (input.featured !== undefined) set('featured', input.featured);
   if (input.clearDuplicateFlag) sets.push('possible_duplicate_of = null');
   if (input.status !== undefined) {
+    if (!['new', 'needs_review', 'live', 'rejected'].includes(input.status)) {
+      return { ok: false };
+    }
     set('status', input.status, '::event_status');
     // Stamp first publish time; keep it across unpublish/republish.
-    sets.push(`published_at = case when '${input.status}' = 'live' then coalesce(published_at, now()) else published_at end`);
+    args.push(input.status);
+    sets.push(`published_at = case when $${args.length} = 'live' then coalesce(published_at, now()) else published_at end`);
   }
   sets.push('updated_at = now()');
 

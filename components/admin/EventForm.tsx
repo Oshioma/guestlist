@@ -82,8 +82,10 @@ export function EventForm({
       title: values.title,
       shortDescription: values.shortDescription || null,
       description: values.description || null,
-      startAt: values.startAt ? new Date(values.startAt).toISOString() : '',
-      endAt: values.endAt ? new Date(values.endAt).toISOString() : null,
+      // Raw wall-clock values; the server interprets them in the event's
+      // timezone (never this browser's timezone).
+      startAt: values.startAt,
+      endAt: values.endAt || null,
       timezone: values.timezone,
       venueId: values.venueId || null,
       promoterId: values.promoterId || null,

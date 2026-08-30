@@ -239,16 +239,49 @@ console.log('\n— Client tracking API —');
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n— Paste-link submission + duplicate protection —');
+// V2A: submissions run the real extraction pipeline. A local fixture server
+// (allowed via SUPPLY_FETCH_ALLOW_HOSTS=127.0.0.1 on the app server, dev/
+// test only) provides deterministic pages — no live websites in CI.
+console.log('\n— Paste-link submission (real extraction) + duplicate protection —');
 {
-  const url = 'https://example.com/some-brand-new-night';
+  const { createServer } = await import('node:http');
+  const futureDate = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
+  const fixturePage = (title) => `<!doctype html><html><head><title>${title}</title>
+<script type="application/ld+json">${JSON.stringify({
+    '@context': 'https://schema.org', '@type': 'MusicEvent', name: title,
+    startDate: `${futureDate}T21:00:00+01:00`,
+    location: { '@type': 'Place', name: 'The Boiler Yard', address: { '@type': 'PostalAddress', addressLocality: 'London', addressCountry: 'United Kingdom' } },
+    offers: { '@type': 'Offer', url: 'https://tickets.example/verify', price: '15', priceCurrency: 'GBP' },
+  })}</script></head><body><main>${title}</main></body></html>`;
+  const fixtures = createServer((req, res) => {
+    if (req.url?.startsWith('/events/')) {
+      const slug = req.url.split('/').pop().split('?')[0];
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(fixturePage(`Verify Fixture ${slug}`));
+    } else {
+      res.writeHead(404).end();
+    }
+  });
+  await new Promise((r) => fixtures.listen(4581, '127.0.0.1', r));
+
+  const url = 'http://127.0.0.1:4581/events/verify-night';
   const r1 = await (await nadia.fetch('/api/submissions', {
     method: 'POST', body: JSON.stringify({ url }),
   })).json();
-  check('submission creates draft', r1.ok && r1.outcome === 'created');
-  const draft = (await q(`select status, source_type, source_url, confidence_score from events where source_url=$1`, [url]))[0];
-  check('draft is new + member_submission + null confidence',
-    draft?.status === 'new' && draft?.source_type === 'member_submission' && draft?.confidence_score === null);
+  check('submission extracts and creates draft', r1.ok && r1.outcome === 'created');
+  check('friendly summary returned (no confidence/AI internals)',
+    Array.isArray(r1.found) && r1.found[0]?.includes('Verify Fixture') &&
+    !JSON.stringify(r1).match(/confidence|extraction|json-ld/i));
+  const draft = (await q(
+    `select status, source_type, source_url, ticket_url, city, confidence_score from events where source_url=$1`,
+    [url]))[0];
+  check('draft queued for review as member_submission',
+    ['new', 'needs_review'].includes(draft?.status) && draft?.source_type === 'member_submission');
+  check('real fields extracted (city + separated ticket URL)',
+    draft?.city === 'London' && draft?.ticket_url === 'https://tickets.example/verify');
+  const ex = (await q(`select status, field_sources from extractions where url=$1`, [url]))[0];
+  check('extraction recorded with JSON-LD provenance',
+    ex?.status === 'succeeded' && ex?.field_sources?.title === 'json-ld');
   const sub = (await q(`select status, event_id from event_submissions where url=$1`, [url]))[0];
   check('submission row processed + linked', sub?.status === 'processed' && !!sub?.event_id);
 
@@ -266,6 +299,19 @@ console.log('\n— Paste-link submission + duplicate protection —');
 
   const subAnalytics = (await q(`select count(*)::int as n from analytics_events where event_type='event_submitted'`))[0].n;
   check('event_submitted tracked', subAnalytics >= 2);
+
+  // Abuse protection: the member limit kicks in within a reasonable number
+  // of rapid submissions.
+  let got429 = false;
+  for (let i = 0; i < 12 && !got429; i++) {
+    const res = await nadia.fetch('/api/submissions', {
+      method: 'POST', body: JSON.stringify({ url: `http://127.0.0.1:4581/events/rl-${i}` }),
+    });
+    if (res.status === 429) got429 = true;
+  }
+  check('rate limit protects public submissions (429)', got429);
+
+  fixtures.close();
 }
 
 // ---------------------------------------------------------------------------
