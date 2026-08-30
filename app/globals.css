@@ -1802,3 +1802,76 @@ button { font-family: inherit; }
 .notifCentreRow:hover { border-color: var(--border-strong); background: var(--surface-hover); }
 .notifCentreRow.isUnread { border-color: rgba(242, 201, 76, 0.45); background: rgba(242, 201, 76, 0.06); }
 .notifCentreText { min-width: 0; }
+
+/* ── V2E: The Archive ───────────────────────────────────────────────────── */
+.archiveWrap { max-width: 900px; }
+.archiveTitle { font-size: clamp(28px, 6vw, 42px); letter-spacing: -1px; margin: 4px 0 6px; text-transform: uppercase; }
+.archiveDate { font-size: 18px; color: var(--accent); font-weight: 700; letter-spacing: 0.5px; }
+.archiveCirca { color: var(--text-muted); font-size: 13px; font-weight: 400; letter-spacing: 0; }
+.archiveMeta { color: var(--text-muted); margin-top: 6px; font-size: 14.5px; }
+.archiveEventGrid { display: grid; grid-template-columns: 1fr; gap: 26px; padding-top: 14px; }
+@media (min-width: 800px) { .archiveEventGrid { grid-template-columns: 3fr 2fr; } }
+.archiveFlyer {
+  width: 100%; border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.archiveRights { color: var(--text-muted); font-size: 11px; margin-top: 6px; }
+.archiveThumbRow { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.archiveThumbRow img { width: 72px; border-radius: 8px; border: 1px solid var(--border); }
+.archiveSource { color: var(--text-muted); font-size: 12px; margin-top: 12px; }
+.archiveSource a { text-decoration: underline; }
+.archiveNow {
+  border: 1px solid rgba(242, 201, 76, 0.4);
+  background: radial-gradient(120% 140% at 0% 0%, rgba(242, 201, 76, 0.08), transparent 55%), var(--surface);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  margin-top: 26px;
+}
+.archiveSearch { display: flex; gap: 8px; margin: 6px 0 4px; }
+.archiveSearch input {
+  flex: 1; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px;
+  color: var(--text); padding: 13px 16px; font-size: 15px; min-width: 0;
+}
+.archiveSearch input:focus { outline: none; border-color: var(--accent); }
+.archiveTwoCol { display: grid; gap: 22px; margin: 18px 0; }
+@media (min-width: 760px) { .archiveTwoCol { grid-template-columns: 1fr 1fr; } }
+.flyerGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+.flyerCard { display: grid; gap: 6px; }
+.flyerCard img {
+  width: 100%; aspect-ratio: 3 / 4; object-fit: cover;
+  border-radius: 10px; border: 1px solid var(--border);
+  transition: border-color 0.15s ease;
+}
+.flyerCard:hover img { border-color: var(--accent); }
+.flyerCaption { font-size: 11.5px; color: var(--text-muted); }
+
+/* I was there */
+.iwtWrap { margin-top: 18px; }
+.iwtRow { display: flex; gap: 10px; align-items: center; }
+.iwtBtn { font-size: 15px; padding: 13px 26px; letter-spacing: 1px; }
+.iwtBtn.isSet { background: transparent; color: var(--accent); border: 1px solid rgba(242,201,76,0.6); }
+.iwtCount { color: var(--text-muted); font-size: 13px; margin-top: 8px; }
+.iwtOptions { margin-top: 10px; }
+
+/* Memories */
+.memoryPanel { margin-top: 26px; }
+.memoryRow { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.memoryRow:last-of-type { border-bottom: none; }
+.memoryBody { font-size: 15px; font-style: italic; line-height: 1.5; }
+.memoryMeta { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+.memoryForm { display: grid; gap: 8px; margin-top: 12px; }
+.memoryForm textarea {
+  background: var(--bg); border: 1px solid var(--border-strong); border-radius: 10px;
+  color: var(--text); padding: 10px 12px; font-size: 14px; resize: vertical; font-family: inherit;
+}
+.memoryForm button { justify-self: start; }
+
+/* Know more */
+.knowMore { margin-top: 18px; }
+.knowMoreForm { display: grid; gap: 8px; margin-top: 10px; max-width: 480px; }
+.knowMoreForm select, .knowMoreForm textarea {
+  background: var(--bg); border: 1px solid var(--border-strong); border-radius: 8px;
+  color: var(--text); padding: 9px 11px; font-size: 13.5px; font-family: inherit;
+}
+.knowMoreForm button { justify-self: start; }

@@ -50,7 +50,17 @@ export type AnalyticsEventType =
   | 'email_sent'
   | 'email_failed'
   | 'email_unsubscribed'
-  | 'notification_clicked';
+  | 'notification_clicked'
+  // V2E
+  | 'archive_viewed'
+  | 'archive_item_viewed'
+  | 'i_was_there_added'
+  | 'i_was_there_removed'
+  | 'archive_contribution'
+  | 'archive_correction'
+  | 'memory_added'
+  | 'archive_to_event_click'
+  | 'archive_search';
 
 export async function track(
   type: AnalyticsEventType,

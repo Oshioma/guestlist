@@ -23,6 +23,7 @@ export async function SiteHeader() {
           <Link href="/clubmessenger">Tonight</Link>
           {member && <Link href="/people">People</Link>}
           <Link href="/explore">Explore</Link>
+          <Link href="/archive">Archive</Link>
           <Link href="/promoters">Promoters</Link>
           {member && <Link href="/you">You</Link>}
           <Link href="/events/submit">+ Add Event</Link>
