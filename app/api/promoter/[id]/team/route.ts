@@ -7,6 +7,7 @@ import { AuthError } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
 import { requirePromoterRole, roleAtLeast, type PromoterRole } from '@/lib/promoterAuth';
 import { audit } from '@/lib/audit';
+import { queueMemberTransactional } from '@/lib/email';
 
 const INVITABLE: PromoterRole[] = ['admin', 'editor', 'analyst'];
 
@@ -42,13 +43,27 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     );
     await audit('team_invited', { actorId: member.id, promoterId: id, detail: { email, role } });
 
-    // No email infrastructure exists in the project yet: return the invite
-    // link for the promoter to share directly. When email lands, send it
-    // there instead and stop returning it.
+    // Email the invite (transactional — delivered live with credentials,
+    // dev-logged without). The link is still returned as a fallback so
+    // the inviter can share it directly.
+    const invitee = await queryOne<{ id: string }>(
+      `select id from members where lower(email) = $1`, [email]);
+    const site = process.env.SITE_URL ?? 'https://www.clubguestlists.com';
+    await queueMemberTransactional({
+      memberId: invitee?.id ?? null,
+      email,
+      emailType: 'team_invite',
+      subject: `You've been invited to ${promoter.name} on Guestlist`,
+      body: `${member.display_name} invited you to help run ${promoter.name} as ${role}. The invite expires in 14 days.`,
+      ctaLabel: 'ACCEPT INVITE',
+      ctaUrl: `${site}/promoter/invite/${token}`,
+      dedupeKey: `invite:${tokenHash}`,
+    });
+
     return NextResponse.json({
       ok: true,
       inviteUrl: `/promoter/invite/${token}`,
-      note: `Share this link with ${email} — it grants ${role} access to ${promoter.name} and expires in 14 days.`,
+      note: `We've emailed ${email}. You can also share the link directly — it grants ${role} access to ${promoter.name} and expires in 14 days.`,
     }, { status: 201 });
   } catch (err) {
     if (err instanceof AuthError) {

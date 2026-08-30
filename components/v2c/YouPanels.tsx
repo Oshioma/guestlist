@@ -499,7 +499,7 @@ export function PlacesPanel({ initialPlaces, initialPlans }: { initialPlaces: Pl
 // ---------------------------------------------------------------------------
 
 type Privacy = Record<string, boolean>;
-type EmailPrefs = Record<string, boolean>;
+type EmailPrefs = Record<string, boolean | string>;
 type ProfileFields = { bio: string | null; raving_since: number | null; now_doing: string | null; looking_for: string | null };
 
 const PRIVACY_LABELS: [string, string][] = [
@@ -518,9 +518,17 @@ const EMAIL_LABELS: [string, string][] = [
   ['followed_promoter_events', 'New events from promoters I follow'],
   ['followed_venue_events', 'New events at venues I follow'],
   ['followed_artist_events', 'New events from artists I follow'],
-  ['genre_in_home_city', 'Favourite genres in my home city'],
+  ['genre_in_home_city', 'Events matching my music in my cities'],
   ['travel_events', 'Events during my travel dates'],
   ['connection_going', 'When a connection marks an event Going'],
+  ['event_reminders', 'Reminders the day before events I’m going to'],
+];
+
+const FREQUENCIES: [string, string][] = [
+  ['instant', 'As it happens'],
+  ['daily', 'Daily digest'],
+  ['weekly', 'Weekly only'],
+  ['off', 'Off'],
 ];
 
 export function SettingsPanel({
@@ -597,7 +605,21 @@ export function SettingsPanel({
         ))}
       </div>
 
-      <h2 className="youPanelTitle" style={{ marginTop: 26 }}>Email</h2>
+      <h2 className="youPanelTitle" style={{ marginTop: 26 }}>Email & alerts</h2>
+      <div className="youPlaceRow" style={{ marginBottom: 10 }}>
+        <span className="sectionLabel" style={{ margin: 0 }}>Alert email frequency</span>
+        <select
+          value={String(email.alert_frequency ?? 'daily')}
+          onChange={(e) => {
+            const next = { ...email, alert_frequency: e.target.value };
+            setEmail(next);
+            patch({ emailPrefs: { alert_frequency: e.target.value } });
+          }}
+          style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px' }}
+        >
+          {FREQUENCIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
       <div className="youToggleList">
         {EMAIL_LABELS.map(([key, label]) => (
           <label className="notifPrefRow" key={key}>

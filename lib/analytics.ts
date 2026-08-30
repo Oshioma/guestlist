@@ -44,7 +44,13 @@ export type AnalyticsEventType =
   | 'travel_plan_created'
   | 'city_followed'
   | 'email_queued'
-  | 'email_rec_clicked';
+  | 'email_rec_clicked'
+  // V2D
+  | 'alert_created'
+  | 'email_sent'
+  | 'email_failed'
+  | 'email_unsubscribed'
+  | 'notification_clicked';
 
 export async function track(
   type: AnalyticsEventType,

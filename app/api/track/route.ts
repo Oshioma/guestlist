@@ -12,7 +12,7 @@ const CLIENT_TYPES: AnalyticsEventType[] = [
   'friend_arrival_seen', 'friend_arrival_clicked',
   'event_click_from_clubmessenger', 'heat_card_click',
   'member_profile_viewed', 'scene_people_impression',
-  'recommendation_click', 'email_rec_clicked',
+  'recommendation_click', 'email_rec_clicked', 'notification_clicked',
 ];
 
 export async function POST(req: NextRequest) {

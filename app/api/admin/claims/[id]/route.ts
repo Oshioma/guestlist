@@ -5,6 +5,43 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, requireAdmin } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
 import { audit, notifyPromoter } from '@/lib/audit';
+import { queueMemberTransactional } from '@/lib/email';
+
+const SITE = process.env.SITE_URL ?? 'https://www.clubguestlists.com';
+
+// Claim decisions go straight to the claimant (there may be no promoter
+// team yet at this point).
+async function emailClaimant(
+  memberId: string, claimId: string, promoterId: string,
+  decision: 'approved' | 'rejected' | 'info_requested', note: string | null
+) {
+  const claimant = await queryOne<{ email: string }>(
+    `select email from members where id = $1`, [memberId]);
+  const promoter = await queryOne<{ name: string; slug: string }>(
+    `select name, slug from promoters where id = $1`, [promoterId]);
+  if (!claimant || !promoter) return;
+  const spec = decision === 'approved'
+    ? { subject: `Your claim for ${promoter.name} was approved`,
+        body: `You now manage ${promoter.name} on Guestlist. Connect your website and your events stay current automatically.`,
+        cta: 'OPEN YOUR DASHBOARD', url: `${SITE}/promoter` }
+    : decision === 'rejected'
+      ? { subject: `Your claim for ${promoter.name} wasn't approved`,
+          body: note ? `The Guestlist team reviewed your claim: ${note}` : 'The Guestlist team reviewed your claim and couldn’t verify it this time. You can submit a new claim with more evidence.',
+          cta: 'VIEW PROMOTER PAGE', url: `${SITE}/promoters/${promoter.slug}` }
+      : { subject: `More information needed for your ${promoter.name} claim`,
+          body: note ? `The Guestlist team needs a little more from you: ${note}` : 'The Guestlist team needs a little more information to verify your claim.',
+          cta: 'UPDATE YOUR CLAIM', url: `${SITE}/promoters/${promoter.slug}/claim` };
+  await queueMemberTransactional({
+    memberId,
+    email: claimant.email,
+    emailType: 'claim_decision',
+    subject: spec.subject,
+    body: spec.body,
+    ctaLabel: spec.cta,
+    ctaUrl: spec.url,
+    dedupeKey: `claim:${claimId}:${decision}`,
+  });
+}
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -44,6 +81,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       );
       await audit('claim_approved', { actorId: admin.id, promoterId: claim.promoter_id, detail: { claimId: id } });
       await notifyPromoter(claim.promoter_id, 'claim_approved', { payload: { claimId: id } });
+      await emailClaimant(claim.member_id, id, claim.promoter_id, 'approved', note);
       return NextResponse.json({ ok: true });
     }
 
@@ -66,6 +104,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       await audit(action === 'reject' ? 'claim_rejected' : 'claim_info_requested', {
         actorId: admin.id, promoterId: claim.promoter_id, detail: { claimId: id, note },
       });
+      await emailClaimant(claim.member_id, id, claim.promoter_id,
+        action === 'reject' ? 'rejected' : 'info_requested', note);
       return NextResponse.json({ ok: true });
     }
 
