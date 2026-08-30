@@ -64,7 +64,7 @@ export function ConnectButton({
         </button>
       ) : state === 'pending_out' ? (
         <button className="btnGhost isActive" style={style} type="button" disabled>
-          Requested
+          Pending
         </button>
       ) : state === 'pending_in' && connectionId ? (
         <>

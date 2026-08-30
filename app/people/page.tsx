@@ -25,7 +25,9 @@ type PersonRow = {
   reason: string;
 };
 
-function PersonCard({ p, reasons, isSignedIn }: { p: PersonRow | { id: string; display_name: string; slug: string | null; avatar_url: string | null; home_city: string | null }; reasons: string[]; isSignedIn: boolean }) {
+type CardRelation = { state: 'none' | 'pending_out' | 'pending_in'; connectionId?: string | null };
+
+function PersonCard({ p, reasons, isSignedIn, relation }: { p: PersonRow | { id: string; display_name: string; slug: string | null; avatar_url: string | null; home_city: string | null }; reasons: string[]; isSignedIn: boolean; relation?: CardRelation }) {
   return (
     <div className="personCard">
       <Link href={`/members/${p.slug}`} className="personCardMain">
@@ -43,7 +45,8 @@ function PersonCard({ p, reasons, isSignedIn }: { p: PersonRow | { id: string; d
           ))}
         </span>
       </Link>
-      <ConnectButton memberId={p.id} initialState="none" isSignedIn={isSignedIn} compact />
+      <ConnectButton memberId={p.id} initialState={relation?.state ?? 'none'}
+                     connectionId={relation?.connectionId} isSignedIn={isSignedIn} compact />
     </div>
   );
 }
@@ -89,6 +92,13 @@ export default async function PeoplePage() {
   ]);
 
   const sceneIds = new Set(scenePeople.map((p) => p.id));
+  // Real relationship state for every card — a sent request shows PENDING,
+  // an incoming one shows Accept/Decline, never a dead-end CONNECT button.
+  const relationFor = new Map<string, CardRelation>();
+  for (const c of connections.pendingOut) relationFor.set(c.member_id, { state: 'pending_out' });
+  for (const c of connections.pendingIn) {
+    relationFor.set(c.member_id, { state: 'pending_in', connectionId: c.connection_id });
+  }
   // CLOSE FRIENDS — private to this member. Nobody else ever sees who is
   // starred, and the starred person is never notified.
   const closeFriends = connections.connected.filter((c) => c.is_close);
@@ -206,7 +216,7 @@ export default async function PeoplePage() {
           <div className="sectionLabel">From your scene</div>
           <div className="peopleGrid">
             {scenePeople.map((p) => (
-              <PersonCard key={p.id} p={p} reasons={sceneReasons(p)} isSignedIn />
+              <PersonCard key={p.id} p={p} reasons={sceneReasons(p)} isSignedIn relation={relationFor.get(p.id)} />
             ))}
           </div>
         </section>
@@ -217,7 +227,7 @@ export default async function PeoplePage() {
           <div className="sectionLabel">Going to the same events</div>
           <div className="peopleGrid">
             {sameEvents.filter((p) => !sceneIds.has(p.id)).map((p) => (
-              <PersonCard key={p.id} p={p} reasons={[`Also going to ${p.event_title}`]} isSignedIn />
+              <PersonCard key={p.id} p={p} reasons={[`Also going to ${p.event_title}`]} isSignedIn relation={relationFor.get(p.id)} />
             ))}
           </div>
         </section>
@@ -228,7 +238,7 @@ export default async function PeoplePage() {
           <div className="sectionLabel">Recently joined</div>
           <div className="peopleGrid">
             {recent.filter((p) => !sceneIds.has(p.id)).map((p) => (
-              <PersonCard key={p.id} p={p} reasons={['New to Guestlist']} isSignedIn />
+              <PersonCard key={p.id} p={p} reasons={['New to Guestlist']} isSignedIn relation={relationFor.get(p.id)} />
             ))}
           </div>
         </section>

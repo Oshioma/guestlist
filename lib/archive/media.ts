@@ -76,10 +76,20 @@ async function storeBuffer(relPath: string, buf: Buffer, mime: string): Promise<
     if (!res.ok) throw new MediaError(502, `storage upload failed (${res.status})`);
     return `${supabaseUrl}/storage/v1/object/public/archive/${relPath}`;
   }
+  // Production without Supabase Storage configured: fail with a clear,
+  // actionable message instead of crashing on Vercel's read-only filesystem.
+  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    throw new MediaError(503,
+      'Image uploads are not configured yet — add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (and an "archive" storage bucket) to enable them');
+  }
   // Development: local public directory.
-  const dir = path.join(process.cwd(), 'public', 'uploads', 'archive', path.dirname(relPath));
-  await mkdir(dir, { recursive: true });
-  await writeFile(path.join(process.cwd(), 'public', 'uploads', 'archive', relPath), buf);
+  try {
+    const dir = path.join(process.cwd(), 'public', 'uploads', 'archive', path.dirname(relPath));
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(process.cwd(), 'public', 'uploads', 'archive', relPath), buf);
+  } catch (err) {
+    throw new MediaError(503, `Could not store the image: ${String(err).slice(0, 120)}`);
+  }
   return `/uploads/archive/${relPath}`;
 }
 
