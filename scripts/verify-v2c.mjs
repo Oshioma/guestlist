@@ -314,7 +314,9 @@ try {
     await nadia.patch('/api/you/settings', { privacy: { show_history: true, show_history_years: false } });
     const profile2 = await (await oshi.fetch(`/members/${nadiaSlug}`)).text();
     check('years hidden: place shown, era withheld',
-      profile2.includes('The End') && !profile2.includes('1999'));
+      // Match the rendered era format precisely — dev-mode RSC payloads
+      // contain arbitrary timing floats that can embed "1999" by chance.
+      profile2.includes('The End') && !/· 1999|1999–2003/.test(profile2));
 
     // Out of scene discovery entirely.
     await nadia.patch('/api/you/settings', { privacy: { show_history_years: true, scene_discovery: false } });

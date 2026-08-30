@@ -41,8 +41,15 @@ const normTitle = (t) =>
 await q(`truncate analytics_events, event_classifications, member_event_actions,
   event_submissions, event_images, event_artists, event_genres, events,
   event_sources, artists, promoters, venues, member_follows, member_genres,
-  auth_sessions, members, genres, locations, scene_entities, email_outbox
+  auth_sessions, members, genres, locations, scene_entities, email_outbox,
+  intelligence_opportunities, channel_drafts, x_usage_ledger, x_mentions,
+  content_fingerprints, guestlist_x_audit, x_billing_periods, social_accounts
   restart identity cascade`);
+// V2G desk state lives in system_settings — reset the volatile keys so
+// suites are deterministic (mock config, circuit breaker, switches).
+await q(`delete from system_settings where key in
+  ('x_mock', 'x_circuit', 'x_switches', 'x_oauth_pending', 'x_pricing',
+   'x_default_budget_usd', 'x_conservation_pct', 'x_job_guards')`);
 
 // --- genres ---
 // Global taxonomy — an explicit editorial decision, not AI expansion.

@@ -15,6 +15,7 @@ import { peopleYouMayHaveDancedWith, yourPeopleUpcoming } from '@/lib/scene';
 import { fmtEventDate } from '@/lib/util';
 import { memberPlaces } from '@/lib/locations';
 import { RecShelf } from '@/components/v2c/RecShelf';
+import { GuestlistNow } from '@/components/GuestlistNow';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +66,8 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
           ))}
         </div>
       )}
+
+      <GuestlistNow />
 
       {weekendPicks.length > 0 && (
         <RecShelf title="This weekend" surface="home_weekend" events={toRecCards(weekendPicks)} />
@@ -198,6 +201,7 @@ export default async function HomePage() {
       )}
 
       <div className="wrap">
+        {!member && <GuestlistNow />}
         <div className="chipRow" style={{ padding: '26px 0 10px' }}>
           {genres.map((g) => (
             <Link key={g.slug} href={`/events?genre=${g.slug}`} className="chip">
