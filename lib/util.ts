@@ -127,3 +127,17 @@ export function isPast(e: { end_at: string | Date | null; start_at: string | Dat
   const ref = e.end_at ? new Date(e.end_at) : new Date(new Date(e.start_at).getTime() + 6 * 3600 * 1000);
   return ref.getTime() < Date.now();
 }
+
+// Source organisation (admin sources desk): free-text place fields are
+// trimmed and capped; genre ids must look like uuids and are de-duplicated.
+export function cleanPlace(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim().slice(0, 80);
+  return s || null;
+}
+
+export function cleanGenreIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.filter((g): g is string =>
+    typeof g === 'string' && /^[0-9a-f-]{36}$/.test(g)))].slice(0, 20);
+}

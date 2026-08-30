@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, requireAdmin } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
 import { audit } from '@/lib/audit';
+import { cleanGenreIds, cleanPlace } from '@/lib/util';
 
 const TRUST_VALUES = ['new', 'trusted', 'restricted', 'blocked'];
 
@@ -47,7 +48,17 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       }
     }
 
-    if (!sets.length) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+    if (body.city !== undefined) set('city', cleanPlace(body.city));
+    if (body.country !== undefined) set('country', cleanPlace(body.country));
+
+    // Genres are replaced as a set (not appended) so the tag editor's state
+    // is the whole truth.
+    const replaceGenres = body.genreIds !== undefined;
+    const genreIds = replaceGenres ? cleanGenreIds(body.genreIds) : [];
+
+    if (!sets.length && !replaceGenres) {
+      return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+    }
 
     const before = body.trust !== undefined
       ? await queryOne<{ trust: string; promoter_id: string | null }>(
@@ -57,10 +68,23 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
     args.push(id);
     const rows = await query(
-      `update event_sources set ${sets.join(', ')}, updated_at = now() where id = $${args.length} returning id`,
+      `update event_sources set ${sets.length ? `${sets.join(', ')}, ` : ''}updated_at = now()
+        where id = $${args.length} returning id`,
       args
     );
     if (rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    if (replaceGenres) {
+      await query(`delete from event_source_genres where source_id = $1`, [id]);
+      if (genreIds.length) {
+        await query(
+          `insert into event_source_genres (source_id, genre_id)
+           select $1, g.id from genres g where g.id = any($2::uuid[])
+           on conflict do nothing`,
+          [id, genreIds]
+        );
+      }
+    }
 
     if (before && before.trust !== body.trust) {
       await audit('source_trust_changed', {

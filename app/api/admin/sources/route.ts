@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, requireAdmin } from '@/lib/auth';
-import { queryOne } from '@/lib/db';
-import { SOURCE_TYPES } from '@/lib/util';
+import { query, queryOne } from '@/lib/db';
+import { SOURCE_TYPES, cleanGenreIds, cleanPlace } from '@/lib/util';
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,10 +26,20 @@ export async function POST(req: NextRequest) {
     if (dup) return NextResponse.json({ error: 'That URL is already a source' }, { status: 409 });
 
     const row = await queryOne<{ id: string }>(
-      `insert into event_sources (source_type, name, url, promoter_id, venue_id, notes)
-       values ($1, $2, $3, $4, $5, $6) returning id`,
-      [sourceType, name, url, body.promoterId || null, body.venueId || null, body.notes || null]
+      `insert into event_sources (source_type, name, url, promoter_id, venue_id, notes, city, country)
+       values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+      [sourceType, name, url, body.promoterId || null, body.venueId || null, body.notes || null,
+       cleanPlace(body.city), cleanPlace(body.country)]
     );
+    const genreIds = cleanGenreIds(body.genreIds);
+    if (genreIds.length) {
+      await query(
+        `insert into event_source_genres (source_id, genre_id)
+         select $1, g.id from genres g where g.id = any($2::uuid[])
+         on conflict do nothing`,
+        [row!.id, genreIds]
+      );
+    }
     return NextResponse.json({ ok: true, id: row!.id }, { status: 201 });
   } catch (err) {
     if (err instanceof AuthError) {
