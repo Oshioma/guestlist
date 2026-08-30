@@ -47,6 +47,28 @@ around rave, club and electronic music culture.
     cost/performance metrics (AI tokens, durations, structured-data hits).
   - Rate-limited public submissions (member/IP per-hour caps).
 
+- **Promoter Network V2B**: the database starts feeding itself.
+  - Public profiles: `/promoters` directory, `/promoters/[slug]`,
+    `/venues/[slug]`, `/artists/[slug]`, with Follow (feeds For You ranking)
+    and the organiser block on event pages.
+  - Claiming: `/promoters/[slug]/claim` → admin review at `/admin/promoters`
+    (domain evidence recorded, never auto-approved; full claim audit
+    history; UNCLAIMED → CLAIM PENDING → VERIFIED / REJECTED / SUSPENDED).
+  - Promoter dashboard at `/promoter`: overview stats + onboarding, event
+    management (create/edit/confirm/ignore/cancel/sold out/reschedule),
+    website connection using the V2A source system (connect → scan →
+    "we found N events" → confirm), analytics (views, unique viewers,
+    ticket clicks + CTR, RSVPs, followers, top events, aggregate-only
+    audience insights), profile editing, team management.
+  - Teams: `promoter_members` roles OWNER / ADMIN / EDITOR / ANALYST with
+    token invites; permissions enforced server-side in every API.
+  - Event listing states: sold out / cancelled / postponed / rescheduled —
+    cancelled events stay visible, clearly marked, with ticket redirects
+    disabled.
+  - Event claiming ("Is this your event?") with domain auto-approval or
+    admin review; every important promoter action lands in `audit_log`;
+    notification rows stored for future delivery.
+
 ## Stack
 
 - Next.js (App Router, TypeScript), hand-rolled CSS design system.
@@ -79,6 +101,11 @@ dedupe → permissions) against a running server with DB assertions:
 npm run db:reset && npm run dev &   # requires SUPPLY_FETCH_ALLOW_HOSTS=127.0.0.1 in .env.local (dev/test only)
 npm run verify
 ```
+
+The promoter network has its own suite — `node scripts/verify-v2b.mjs`
+(108 checks: claims, teams, permission boundaries, source connection,
+import queue, lifecycle states, follows, analytics, event claiming,
+suspension — including the full promoter loop end to end).
 
 The Event Supply Engine has its own deterministic suite —
 `npm run test:supply` — 153 checks over fixtures with an injected fetcher

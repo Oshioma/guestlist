@@ -31,7 +31,14 @@ export function EventCard({
           <div className="d">{day}</div>
           <div className="m">{month}</div>
         </div>
-        {event.featured && <div className="featuredBadge">Featured</div>}
+        {event.featured && event.listing_status === 'confirmed' && (
+          <div className="featuredBadge">Featured</div>
+        )}
+        {event.listing_status !== 'confirmed' && (
+          <div className={`featuredBadge listingBadge ${event.listing_status}`} style={{ right: 52 }}>
+            {event.listing_status.replace('_', ' ')}
+          </div>
+        )}
       </div>
       <SaveButton eventId={event.id} initialSaved={saved} isSignedIn={isSignedIn} />
       <Link href={`/events/${event.slug}`} className="cardOverlayLink" aria-label={event.title} />

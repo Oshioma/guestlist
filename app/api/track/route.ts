@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
   const member = await getCurrentMember();
   await track(type, {
     memberId: member?.id ?? null,
+    anonId: typeof body.anonId === 'string' ? body.anonId.slice(0, 64) : null,
     eventId: typeof body.eventId === 'string' ? body.eventId : null,
     genreId: typeof body.genreId === 'string' ? body.genreId : null,
     promoterId: typeof body.promoterId === 'string' ? body.promoterId : null,

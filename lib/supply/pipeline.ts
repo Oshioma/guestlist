@@ -526,9 +526,13 @@ export async function runExtractionPipeline(
     );
     eventId = row!.id;
     if (ctx.sourceId) {
-      // Reflect the source's own type on the event.
+      // Reflect the source's own type on the event, and attribute the
+      // event to the source's promoter when extraction found none — a
+      // promoter's connected website feeds their own events.
       await query(
-        `update events set source_type = s.source_type from event_sources s
+        `update events set source_type = s.source_type,
+                promoter_id = coalesce(events.promoter_id, s.promoter_id)
+           from event_sources s
           where events.id = $1 and s.id = $2`,
         [eventId, ctx.sourceId]
       );
