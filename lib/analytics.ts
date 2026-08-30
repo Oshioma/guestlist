@@ -60,7 +60,14 @@ export type AnalyticsEventType =
   | 'archive_correction'
   | 'memory_added'
   | 'archive_to_event_click'
-  | 'archive_search';
+  | 'archive_search'
+  // V2F
+  | 'close_friend_marked'
+  | 'close_friend_unmarked'
+  | 'announcement_created'
+  | 'announcement_sent'
+  | 'announcement_clicked'
+  | 'promoter_followers_viewed';
 
 export async function track(
   type: AnalyticsEventType,

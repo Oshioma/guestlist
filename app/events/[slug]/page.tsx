@@ -16,8 +16,14 @@ import { eventSocialContext } from '@/lib/scene';
 
 export const dynamic = 'force-dynamic';
 
-export default async function EventDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function EventDetailPage({ params, searchParams }: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ src?: string }>;
+}) {
   const { slug } = await params;
+  // Attribution source (e.g. ann-xxxx from a promoter announcement) rides
+  // through view tracking and the outbound ticket link.
+  const src = (await searchParams).src?.slice(0, 40) ?? null;
   const member = await getCurrentMember();
   // Admins can preview unpublished events at their canonical URL.
   const event = await getEventBySlug(slug, member?.role === 'admin');
@@ -67,12 +73,17 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
       : null;
 
   const socialContext = member ? await eventSocialContext(member.id, event.id) : null;
+  // Ordering: close friends → connections → shared scene → shared music.
   const contextBits = socialContext
     ? [
+        socialContext.close_friends_going > 0 &&
+          (socialContext.close_friends_going === 1 && socialContext.close_friend_names[0]
+            ? `★ ${socialContext.close_friend_names[0]} is going`
+            : `★ ${socialContext.close_friends_going} close friends are going`),
         socialContext.connections_going > 0 &&
-          `${socialContext.connections_going} connection${socialContext.connections_going === 1 ? '' : 's'}`,
+          `${socialContext.connections_going} connection${socialContext.connections_going === 1 ? '' : 's'} going`,
         socialContext.scene_going > 0 &&
-          `${socialContext.scene_going} from your scene`,
+          `${socialContext.scene_going} from your scene going`,
         socialContext.taste_going > 0 &&
           `${socialContext.taste_going} share your music taste`,
       ].filter(Boolean) as string[]
@@ -92,7 +103,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
 
   return (
     <main className="wrap">
-      <TrackView eventId={event.id} />
+      <TrackView eventId={event.id} src={src} />
 
       <section className="detailHero">
         {event.primary_image_url && (
@@ -238,7 +249,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
             <hr />
             <div className="muted">{price ?? 'Price to be announced'}</div>
             {event.ticket_url && !past && !cancelled && event.listing_status !== 'sold_out' && (
-              <a className="ctaTickets" href={`/out/${event.id}`}>
+              <a className="ctaTickets" href={`/out/${event.id}${src ? `?src=${encodeURIComponent(src)}` : ''}`}>
                 Get Tickets →
               </a>
             )}
@@ -267,7 +278,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
 
           {contextBits.length > 0 && (
             <div className="socialContextLine">
-              ✦ {contextBits.join(' · ')} going
+              {`✦ ${contextBits.join(' · ')}`}
             </div>
           )}
 
@@ -278,6 +289,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
             goingCount={event.going_count}
             interestedCount={event.interested_count}
             avatars={event.going_avatars}
+            promoter={event.promoter
+              ? { id: event.promoter.id, name: event.promoter.name, following: followingPromoter }
+              : null}
           />
 
           <div style={{ display: 'flex', gap: 8 }}>

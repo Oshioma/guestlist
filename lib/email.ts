@@ -49,6 +49,7 @@ export function scopeFor(emailType: string): string {
   if (emailType.startsWith('travel')) return 'alerts';
   if (emailType.startsWith('city_digest')) return 'alerts';
   if (emailType.startsWith('promoter_weekly_digest')) return 'promoter_digest';
+  if (emailType.startsWith('promoter_announcement')) return 'promoter_announcements';
   return 'recommendations';
 }
 

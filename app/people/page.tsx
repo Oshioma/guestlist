@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { peopleFromScene, peopleYouMayHaveDancedWith, sceneReasons } from '@/lib/scene';
+import { peopleFromScene, peopleYouMayHaveDancedWith, sceneReasons, yourPeopleUpcoming } from '@/lib/scene';
 import { listConnections } from '@/lib/connections';
 import { discoverableSql } from '@/lib/privacy';
 import { notBlockedSql, connectedSql } from '@/lib/connections';
@@ -52,10 +52,11 @@ export default async function PeoplePage() {
   const member = await getCurrentMember();
   if (!member) redirect('/login?next=/people');
 
-  const [danced, scenePeople, connections, sameEvents, recent] = await Promise.all([
+  const [danced, scenePeople, connections, peoplePlans, sameEvents, recent] = await Promise.all([
     peopleYouMayHaveDancedWith(member.id, 6),
     peopleFromScene(member.id, { limit: 12 }),
     listConnections(member.id),
+    yourPeopleUpcoming(member.id, { to: new Date(Date.now() + 30 * 86400_000), limit: 30 }),
     query<PersonRow & { event_title: string }>(
       `select distinct on (m.id) m.id, m.display_name, m.slug, m.avatar_url,
               case when coalesce(mp.show_home_city, true) then m.home_city end as home_city,
@@ -88,6 +89,15 @@ export default async function PeoplePage() {
   ]);
 
   const sceneIds = new Set(scenePeople.map((p) => p.id));
+  // CLOSE FRIENDS — private to this member. Nobody else ever sees who is
+  // starred, and the starred person is never notified.
+  const closeFriends = connections.connected.filter((c) => c.is_close);
+  const plansByMember = new Map<string, typeof peoplePlans>();
+  for (const plan of peoplePlans) {
+    const list = plansByMember.get(plan.member_id) ?? [];
+    list.push(plan);
+    plansByMember.set(plan.member_id, list);
+  }
 
   return (
     <main className="wrap peopleWrap">
@@ -121,6 +131,45 @@ export default async function PeoplePage() {
               />
             </div>
           ))}
+        </section>
+      )}
+
+      {closeFriends.length > 0 && (
+        <section className="youPanel">
+          <div className="sectionLabel">{`★ Close friends (${closeFriends.length})`}</div>
+          <p className="youPanelSub" style={{ marginTop: 0 }}>
+            Only you can see this list. Close friends rank first in your
+            recommendations, Who’s Going and alerts.
+          </p>
+          <div className="peopleGrid">
+            {closeFriends.map((c) => {
+              const plans = plansByMember.get(c.member_id) ?? [];
+              return (
+                <div className="personCard" key={c.member_id}>
+                  <Link href={`/members/${c.slug}`} className="personCardMain">
+                    {c.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img className="personAvatar" src={c.avatar_url} alt="" />
+                    ) : (
+                      <span className="personAvatar personAvatarFallback">{c.display_name[0]}</span>
+                    )}
+                    <span className="personCardBody">
+                      <span className="personName">{`★ ${c.display_name}`}</span>
+                      {c.home_city && <span className="personStatus">{c.home_city}</span>}
+                      {plans.slice(0, 2).map((plan) => (
+                        <span className="personReason" key={plan.event_id}>
+                          {plan.i_am_going ? `Both going: ${plan.title}` : `Going: ${plan.title}`}
+                        </span>
+                      ))}
+                      {plans.length === 0 && <span className="personReason">No visible plans yet</span>}
+                    </span>
+                  </Link>
+                  <ConnectButton memberId={c.member_id} initialState="connected"
+                                 isSignedIn compact initialClose />
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
 

@@ -137,7 +137,7 @@ export default async function ClubMessengerPage() {
           const hl = h ? heatLabel(h.heat) : null;
           const friendBits = [
             e.friends_here.length &&
-              `${e.friends_here.map((f) => f.display_name).slice(0, 3).join(', ')}${
+              `${e.friends_here.map((f) => `${f.is_close ? '★ ' : ''}${f.display_name}`).slice(0, 3).join(', ')}${
                 e.friends_here.length > 3 ? ` +${e.friends_here.length - 3}` : ''
               } here now`,
             e.friends_going.length && `${e.friends_going.length} friend${e.friends_going.length === 1 ? '' : 's'} going`,

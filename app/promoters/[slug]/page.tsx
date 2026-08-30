@@ -88,6 +88,12 @@ export default async function PromoterPage({ params }: { params: Promise<{ slug:
               </a>
             ))}
           </div>
+          {!following && (
+            <p className="youHistoryMeta" style={{ marginTop: 8 }}>
+              Get important event updates from this promoter — your
+              notification settings decide how they reach you.
+            </p>
+          )}
         </div>
       </section>
 

@@ -3,9 +3,9 @@
 import { useEffect } from 'react';
 import { track } from '@/lib/track';
 
-export function TrackView({ eventId }: { eventId: string }) {
+export function TrackView({ eventId, src }: { eventId: string; src?: string | null }) {
   useEffect(() => {
-    track('event_viewed', { eventId });
-  }, [eventId]);
+    track('event_viewed', { eventId, ...(src ? { src } : {}) });
+  }, [eventId, src]);
   return null;
 }

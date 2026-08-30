@@ -52,6 +52,18 @@ export default async function NotificationsPage() {
         text = `${n.actor_name ?? p.actor_name ?? 'A connection'} is going to ${n.event_title ?? p.title}`;
         href = `/events/${n.event_slug ?? p.slug}?src=notif`;
         break;
+      case 'close_friend_going':
+        text = `★ ${n.actor_name ?? p.actor_name ?? 'A close friend'} is going to ${n.event_title ?? p.title}`;
+        href = `/events/${n.event_slug ?? p.slug}?src=notif`;
+        break;
+      case 'promoter_announcement':
+        text = String(p.message ?? `${p.promoter_name ?? 'A promoter you follow'}: ${n.event_title ?? p.title}`);
+        href = `/events/${n.event_slug ?? p.slug}?src=${p.src ?? 'notif'}`;
+        break;
+      case 'archive_activity':
+        text = String((p as { message?: string }).message ?? 'New material in the archive');
+        href = '/archive';
+        break;
       case 'travel_digest':
         text = `We found ${p.count} events for your ${p.city} trip`;
         href = `/${String(p.city ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;

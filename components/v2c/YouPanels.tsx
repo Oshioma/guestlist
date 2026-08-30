@@ -620,6 +620,36 @@ export function SettingsPanel({
           {FREQUENCIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </div>
+      <div className="youPlaceRow" style={{ marginBottom: 10 }}>
+        <span className="sectionLabel" style={{ margin: 0 }}>Close friend event activity</span>
+        <select
+          value={String(email.close_friend_activity ?? 'on')}
+          onChange={(e) => {
+            setEmail({ ...email, close_friend_activity: e.target.value });
+            patch({ emailPrefs: { close_friend_activity: e.target.value } });
+          }}
+          style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px' }}
+        >
+          <option value="on">On</option>
+          <option value="digest">Digest only</option>
+          <option value="off">Off</option>
+        </select>
+      </div>
+      <div className="youPlaceRow" style={{ marginBottom: 10 }}>
+        <span className="sectionLabel" style={{ margin: 0 }}>Promoter announcements</span>
+        <select
+          value={String(email.promoter_announcements ?? 'inapp')}
+          onChange={(e) => {
+            setEmail({ ...email, promoter_announcements: e.target.value });
+            patch({ emailPrefs: { promoter_announcements: e.target.value } });
+          }}
+          style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)', borderRadius: 8, color: 'var(--text)', padding: '8px 10px' }}
+        >
+          <option value="email">Email + in-app</option>
+          <option value="inapp">In-app only</option>
+          <option value="off">Off</option>
+        </select>
+      </div>
       <div className="youToggleList">
         {EMAIL_LABELS.map(([key, label]) => (
           <label className="notifPrefRow" key={key}>

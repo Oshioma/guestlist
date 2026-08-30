@@ -6,8 +6,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, requireMember } from '@/lib/auth';
 import { query } from '@/lib/db';
 import {
-  ConnectionError, blockMember, listConnections, requestConnection,
-  respondToConnection, unblockMember,
+  ConnectionError, blockMember, listConnections, removeConnection,
+  requestConnection, respondToConnection, setCloseFriend, unblockMember,
 } from '@/lib/connections';
 import { track } from '@/lib/analytics';
 
@@ -46,6 +46,15 @@ export async function POST(req: NextRequest) {
       if (action === 'accept') {
         await track('connection_accepted', { memberId: member.id, metadata: { connection_id: connectionId } });
       }
+    } else if (action === 'close_friend') {
+      // PRIVATE, one-way. The other member is never notified or shown it.
+      const close = body.close !== false;
+      await setCloseFriend(member.id, memberId, close);
+      await track(close ? 'close_friend_marked' : 'close_friend_unmarked', {
+        memberId: member.id, metadata: { other: memberId },
+      });
+    } else if (action === 'remove') {
+      await removeConnection(member.id, memberId);
     } else if (action === 'block') {
       await blockMember(member.id, memberId);
     } else if (action === 'unblock') {

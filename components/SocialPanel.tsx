@@ -18,6 +18,7 @@ type Attendee = {
   following?: boolean;
   is_friend?: boolean;
   is_connected?: boolean;
+  is_close?: boolean; // MY private close-friend mark — only I see the star
 };
 
 // One attendee with a member-follow toggle. Following back makes you
@@ -60,7 +61,9 @@ function MemberRow({ member: m }: { member: Attendee }) {
           ) : (
             m.display_name
           )}
-          {m.is_connected ? (
+          {m.is_close ? (
+            <span className="friendMark" title="Close friend" style={{ color: 'var(--accent)' }}> ★</span>
+          ) : m.is_connected ? (
             <span className="friendMark" title="Connected"> ✦</span>
           ) : friend ? (
             <span className="friendMark" title="Friends"> ✦</span>
@@ -90,6 +93,7 @@ export function SocialPanel({
   goingCount,
   interestedCount,
   avatars,
+  promoter,
 }: {
   eventId: string;
   isSignedIn: boolean;
@@ -97,12 +101,16 @@ export function SocialPanel({
   goingCount: number;
   interestedCount: number;
   avatars: Avatar[];
+  promoter?: { id: string; name: string; following: boolean } | null;
 }) {
   const router = useRouter();
   const [rsvp, setRsvp] = useState<Rsvp>(initial.rsvp);
   const [saved, setSaved] = useState(initial.saved);
   const [counts, setCounts] = useState({ going: goingCount, interested: interestedCount });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Subtle follow-the-promoter nudge, shown only after a positive action.
+  const [showFollowNudge, setShowFollowNudge] = useState(false);
+  const [followedPromoter, setFollowedPromoter] = useState(!!promoter?.following);
   const [attendees, setAttendees] = useState<{ going: Attendee[]; interested: Attendee[] } | null>(null);
 
   const requireAuth = useCallback(() => {
@@ -138,7 +146,20 @@ export function SocialPanel({
     if (!ok) {
       setRsvp(prev);
       adjust(target, prev);
+    } else if (target && promoter && !followedPromoter) {
+      setShowFollowNudge(true);
     }
+  }
+
+  async function followPromoterNow() {
+    if (!promoter) return;
+    setFollowedPromoter(true);
+    const res = await fetch('/api/follow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityType: 'promoter', entityId: promoter.id, follow: true }),
+    });
+    if (!res.ok) setFollowedPromoter(false);
   }
 
   async function toggleSave() {
@@ -184,6 +205,18 @@ export function SocialPanel({
           {saved ? '♥ Saved' : '♡ Save'}
         </button>
       </div>
+      {showFollowNudge && promoter && !followedPromoter && (
+        <div className="muted" style={{ fontSize: 12, marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ flex: 1 }}>{`Follow ${promoter.name} for future events`}</span>
+          <button className="btnGhost" style={{ padding: '4px 10px', fontSize: 11 }}
+                  type="button" onClick={followPromoterNow}>Follow</button>
+        </div>
+      )}
+      {showFollowNudge && promoter && followedPromoter && (
+        <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+          {`Following ${promoter.name} — important event updates, when you want them.`}
+        </div>
+      )}
 
       <div className="goingSummary">
         {avatars.length > 0 && (

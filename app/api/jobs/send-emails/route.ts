@@ -21,6 +21,7 @@ import {
   queuePromoterReviewNotifications,
 } from '@/lib/alerts';
 import { getSafetySwitches } from '@/lib/settings';
+import { processAnnouncements } from '@/lib/announcements';
 
 export const maxDuration = 300;
 
@@ -89,10 +90,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Promoter → follower announcements: due queued/scheduled runs, batched
+  // and idempotent (per-announcement notification dedupe + email keys).
+  const announcements = await processAnnouncements();
+
   const delivery = await processEmailQueue();
   return NextResponse.json({
     ok: true,
     isoWeek: isoWeek(now),
+    announcements,
     notificationEmails, promoterReview, reminders, travelDigests,
     dailyDigests, weeklyDigests, memberDigests, promoterDigests,
     ...delivery,
