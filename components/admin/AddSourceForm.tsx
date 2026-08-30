@@ -3,38 +3,56 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SOURCE_TYPES } from '@/lib/util';
+import { GenrePicker, type GenreOpt } from '@/components/admin/GenrePicker';
 
 type Opt = { id: string; name: string };
 
-export function AddSourceForm({ promoters, venues }: { promoters: Opt[]; venues: Opt[] }) {
+export function AddSourceForm({
+  promoters, venues, genres, countries,
+}: {
+  promoters: Opt[];
+  venues: Opt[];
+  genres: GenreOpt[];
+  countries: string[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [genreIds, setGenreIds] = useState<string[]>([]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     setError('');
     const form = new FormData(e.currentTarget);
-    const res = await fetch('/api/admin/sources', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: form.get('name'),
-        url: form.get('url'),
-        sourceType: form.get('sourceType'),
-        promoterId: form.get('promoterId') || null,
-        venueId: form.get('venueId') || null,
-        notes: form.get('notes') || null,
-      }),
-    });
-    setBusy(false);
-    if (res.ok) {
-      setOpen(false);
-      router.refresh();
-    } else {
-      setError((await res.json().catch(() => ({})))?.error ?? 'Failed to add source');
+    try {
+      const res = await fetch('/api/admin/sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.get('name'),
+          url: form.get('url'),
+          sourceType: form.get('sourceType'),
+          promoterId: form.get('promoterId') || null,
+          venueId: form.get('venueId') || null,
+          city: form.get('city') || null,
+          country: form.get('country') || null,
+          genreIds,
+          notes: form.get('notes') || null,
+        }),
+      });
+      if (res.ok) {
+        setOpen(false);
+        setGenreIds([]);
+        router.refresh();
+      } else {
+        setError((await res.json().catch(() => ({})))?.error ?? 'Failed to add source');
+      }
+    } catch {
+      setError('Could not reach the server — try again');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -54,6 +72,21 @@ export function AddSourceForm({ promoters, venues }: { promoters: Opt[]; venues:
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div>
+              <label htmlFor="s-city">City</label>
+              <input id="s-city" name="city" placeholder="e.g. London" maxLength={80} />
+            </div>
+            <div>
+              <label htmlFor="s-country">Country</label>
+              <input id="s-country" name="country" placeholder="e.g. United Kingdom" maxLength={80} list="s-countries" />
+              <datalist id="s-countries">
+                {countries.map((c) => <option key={c} value={c} />)}
+              </datalist>
+            </div>
+          </div>
+          <label>Genres</label>
+          <GenrePicker genres={genres} selected={genreIds} onChange={setGenreIds} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <div>
               <label htmlFor="s-promoter">Linked promoter</label>

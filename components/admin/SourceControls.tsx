@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { GenrePicker, type GenreOpt } from '@/components/admin/GenrePicker';
 
 type ScanSummary = {
   status: string; method: string | null; candidatesFound: number;
@@ -13,18 +14,28 @@ type ScanSummary = {
 
 export function SourceControls({
   id, active, trust, pollingEnabled, pollFrequencyHours,
+  city, country, genreIds, genres, countries,
 }: {
   id: string;
   active: boolean;
   trust: string;
   pollingEnabled: boolean;
   pollFrequencyHours: number;
+  city: string | null;
+  country: string | null;
+  genreIds: string[];
+  genres: GenreOpt[];
+  countries: string[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanSummary | null>(null);
   const [error, setError] = useState('');
+  const [tagOpen, setTagOpen] = useState(false);
+  const [tagCity, setTagCity] = useState(city ?? '');
+  const [tagCountry, setTagCountry] = useState(country ?? '');
+  const [tagGenres, setTagGenres] = useState<string[]>(genreIds);
 
   async function patch(body: Record<string, unknown>) {
     setBusy(true);
@@ -114,7 +125,45 @@ export function SourceControls({
         >
           {scanning ? 'Scanning…' : 'Scan now'}
         </button>
+        <button
+          className="btnGhost"
+          style={{ padding: '4px 10px', fontSize: 10.5 }}
+          onClick={() => setTagOpen((o) => !o)}
+          disabled={busy}
+          type="button"
+        >
+          {tagOpen ? 'Close tags' : 'Tag place/genres'}
+        </button>
       </div>
+      {tagOpen && (
+        <div style={{ display: 'grid', gap: 6, padding: 8, border: '1px solid var(--border)',
+                      borderRadius: 10, minWidth: 230 }}>
+          <input value={tagCity} onChange={(e) => setTagCity(e.target.value)}
+                 placeholder="City (London)" maxLength={80}
+                 style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)',
+                          borderRadius: 8, color: 'var(--text)', padding: '6px 8px', fontSize: 12 }} />
+          <input value={tagCountry} onChange={(e) => setTagCountry(e.target.value)}
+                 placeholder="Country (United Kingdom)" maxLength={80} list={`countries-${id}`}
+                 style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)',
+                          borderRadius: 8, color: 'var(--text)', padding: '6px 8px', fontSize: 12 }} />
+          <datalist id={`countries-${id}`}>
+            {countries.map((c) => <option key={c} value={c} />)}
+          </datalist>
+          <GenrePicker genres={genres} selected={tagGenres} onChange={setTagGenres} />
+          <button
+            className="btnAccent"
+            style={{ padding: '5px 12px', fontSize: 11 }}
+            disabled={busy}
+            type="button"
+            onClick={async () => {
+              await patch({ city: tagCity, country: tagCountry, genreIds: tagGenres });
+              setTagOpen(false);
+            }}
+          >
+            Save tags
+          </button>
+        </div>
+      )}
       {scanResult && (
         <div style={{ fontSize: 11.5, color: 'var(--text-soft)', lineHeight: 1.5 }}>
           {scanResult.status === 'succeeded' ? (
