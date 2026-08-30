@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { track } from '@/lib/track';
+import { GenreArt } from '@/components/GenreArt';
 
 export type RecCardData = {
   id: string;
@@ -15,6 +16,7 @@ export type RecCardData = {
   city: string | null;
   venue_name: string | null;
   primary_image_url: string | null;
+  genres: string[]; // fallback artwork picks the best-fitting one when no image
   price: string | null; // original currency, preformatted
   reasons: string[];
   explore: boolean;
@@ -56,10 +58,12 @@ export function RecShelf({ events, title, surface }: { events: RecCardData[]; ti
               className="recCardLink"
               onClick={() => track('recommendation_click', { eventId: e.id, surface })}
             >
-              {e.primary_image_url && (
+              {e.primary_image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img className="recCardImg" src={e.primary_image_url} alt="" />
-              )}
+              ) : e.genres.length > 0 ? (
+                <div className="recCardImg recCardArt"><GenreArt genres={e.genres} compact /></div>
+              ) : null}
               <div className="recCardBody">
                 <div className="recCardTitle">{e.title}</div>
                 <div className="recCardMeta">
