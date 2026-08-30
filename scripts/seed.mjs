@@ -603,11 +603,12 @@ const sceneData = [
 const sceneId = {};
 for (const [name, type, city, cc, country, from, to] of sceneData) {
   const normalized = name.toLowerCase().replace(/^the\s+/, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const entSlug = (name + (city ? '-' + city : '')).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const [row] = await q(
     `insert into scene_entities (name, normalized_name, entity_type, city, country_code, country_name,
-       active_from_year, active_to_year, status, created_by)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,'approved',$9) returning id`,
-    [name, normalized, type, city, cc, country, from, to, memberId['oshi@guestlist.net']]
+       active_from_year, active_to_year, status, created_by, slug)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,'approved',$9,$10) returning id`,
+    [name, normalized, type, city, cc, country, from, to, memberId['oshi@guestlist.net'], entSlug]
   );
   sceneId[name] = row.id;
 }
@@ -669,6 +670,79 @@ if (ibizaLoc) {
     [memberId['oshi@guestlist.net'], ibizaLoc, tFrom.toISOString().slice(0, 10), tTo.toISOString().slice(0, 10)]
   );
 }
+
+// --- V2E: archive fixtures (fictional-adjacent, clearly dev data) ---
+const archiveEvents = [
+  // [title, precision, start, year, display, venue, promoter, city, cc, country, lang, lineup, genres, entity, desc]
+  ['Metalheadz at Blue Note', 'year', null, 1996, '1996', 'Blue Note', 'Metalheadz',
+    'London', 'GB', 'United Kingdom', null,
+    ['Goldie', 'Doc Scott', 'Dillinja'], ['Jungle', 'Drum & Bass'], 'Metalheadz Sunday Sessions',
+    'Sunday sessions that rewired what a small room could sound like. Dubplates first, everything else second.'],
+  ['Cream: October Session', 'exact', '1995-10-14', 1995, null, 'Nation', 'Cream',
+    'Liverpool', 'GB', 'United Kingdom', null,
+    ['Paul Oakenfold', 'Sasha'], ['House', 'Trance'], null,
+    'Queue round the block by nine. The main room at full tilt.'],
+  ['The End: Closing Weekend', 'exact', '2009-01-24', 2009, null, 'The End', null,
+    'London', 'GB', 'United Kingdom', null,
+    ['Layo & Bushwacka'], ['House', 'Techno'], 'The End',
+    'The last records in the building the scene built.'],
+  ['Baile do Espaço', 'circa', null, 1997, 'Verão de 1997', 'Espaço Aberto', null,
+    'São Paulo', 'BR', 'Brazil', 'pt',
+    ['DJ Marky'], ['Jungle'], null,
+    'Uma noite que virou lenda no cenário paulistano.'],
+];
+const archiveId = {};
+for (const [title, precision, start, year, display, venue, promoter, city, cc, country, lang, lineup, genres, entity, desc] of archiveEvents) {
+  const displayDate = display ?? (precision === 'exact'
+    ? new Date(start + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+    : String(year));
+  const slugBase = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + year;
+  const [row] = await q(
+    `insert into archive_events (title, slug, description, original_language, date_precision,
+        start_date, year, display_date, venue_name, promoter_name, city, country_code, country_name,
+        status, published_at, provenance, source_attribution)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'published',now(),
+             '{"all":"EXISTING_DATABASE"}','Guestlist development seed') returning id`,
+    [title, slugBase, desc, lang, precision, start, year, displayDate, venue, promoter, city, cc, country]
+  );
+  archiveId[title] = row.id;
+  for (const [i, name] of lineup.entries()) {
+    await q(`insert into archive_event_artists (archive_event_id, artist_name, position) values ($1,$2,$3)`,
+      [row.id, name, i]);
+  }
+  for (const g of genres) {
+    await q(`insert into archive_event_genres (archive_event_id, genre_id)
+             select $1, id from genres where name = $2 on conflict do nothing`, [row.id, g]);
+  }
+  if (entity && sceneId[entity]) {
+    await q(`insert into archive_event_entities (archive_event_id, entity_id, role) values ($1,$2,'venue')
+             on conflict do nothing`, [row.id, sceneId[entity]]);
+  }
+}
+// A published flyer item (stock image standing in for a scanned flyer).
+{
+  const [item] = await q(
+    `insert into archive_items (item_type, title, archive_event_id, status, published_at, provenance)
+     values ('flyer', 'Metalheadz at Blue Note — flyer', $1, 'published', now(), '{"media":"EXISTING_DATABASE"}')
+     returning id`, [archiveId['Metalheadz at Blue Note']]);
+  await q(
+    `insert into archive_media (item_id, kind, storage_path, mime, rights, rights_note)
+     values ($1, 'front', '/images/secret-party.jpg', 'image/jpeg', 'external_reference',
+             'Development placeholder image')`, [item.id]);
+}
+// I WAS THERE marks across visibilities + a memory.
+const att = (email, title, vis = 'public', certainty = 'sure') =>
+  q(`insert into archive_attendance (member_id, archive_event_id, visibility, certainty)
+     values ($1,$2,$3,$4) on conflict do nothing`,
+    [memberId[email], archiveId[title], vis, certainty]);
+await att('oshi@guestlist.net', 'Metalheadz at Blue Note');
+await att('dev-nadia@example.com', 'Metalheadz at Blue Note');
+await att('dev-kwame@example.com', 'Metalheadz at Blue Note', 'connections');
+await att('dev-marcus@example.com', 'Cream: October Session', 'private');
+await att('dev-jules@example.com', 'The End: Closing Weekend', 'public', 'unsure');
+await q(`insert into archive_memories (member_id, archive_event_id, body) values ($1,$2,$3)`,
+  [memberId['dev-nadia@example.com'], archiveId['Metalheadz at Blue Note'],
+   'First time I heard Inner City Life on that system. Nothing was the same after.']);
 
 const counts = await q(`select
   (select count(*) from events) as events,

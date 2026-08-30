@@ -15,6 +15,7 @@ import { discoverableSql } from './privacy';
 import { notBlockedSql, connectedSql } from './connections';
 
 export const SCENE_WEIGHTS = {
+  sharedExactEvent: 15, // I WAS THERE at the same historical event
   sharedEntity: 10,   // same club / party / festival / promoter era
   yearOverlap: 5,     // bonus when the years actually overlap
   sharedGenre: 2,     // explicit taste in common (both visible)
@@ -89,16 +90,23 @@ export async function findOrCreateSceneEntity(
     [normalized, input.entityType, input.city ?? null, code]
   );
   if (existing) return { entity: existing, created: false };
+  // Public slug (/archive/clubs/the-end-london): name + city, suffixed on clash.
+  const slugBase = `${input.name.trim()}${input.city ? ` ${input.city}` : ''}`
+    .toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  let slug = slugBase || 'scene';
+  for (let i = 2; await queryOne(`select 1 from scene_entities where slug = $1`, [slug]); i++) {
+    slug = `${slugBase}-${i}`;
+  }
   const entity = await queryOne<SceneEntity>(
     `insert into scene_entities
        (name, normalized_name, entity_type, city, country_code, country_name,
-        active_from_year, active_to_year, status, created_by)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        active_from_year, active_to_year, status, created_by, slug)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      returning id, name, entity_type, city, country_code, country_name,
                active_from_year, active_to_year, status`,
     [input.name.trim(), normalized, input.entityType, input.city?.trim() ?? null, code,
      input.countryName?.trim() ?? null, input.activeFromYear ?? null, input.activeToYear ?? null,
-     autoApprove ? 'approved' : 'pending', createdBy]
+     autoApprove ? 'approved' : 'pending', createdBy, slug]
   );
   return { entity: entity!, created: true };
 }
@@ -215,6 +223,7 @@ export type ScenePerson = {
   home_city: string | null; // null when hidden
   score: number;
   shared_entities: { name: string; overlap_from: number | null; overlap_to: number | null }[];
+  shared_archive: { title: string; slug: string }[];
   shared_genres: string[];
   same_home_city: boolean;
   is_connected: boolean;
@@ -256,6 +265,12 @@ export async function peopleFromScene(
          from members ma join members mb
            on mb.home_location_id = ma.home_location_id and mb.id <> ma.id
         where ma.id = $1 and ma.home_location_id is not null` : ''}
+       ${useHistory ? `
+       union
+       select ab.member_id
+         from archive_attendance aa
+         join archive_attendance ab on ab.archive_event_id = aa.archive_event_id and ab.member_id <> $1
+        where aa.member_id = $1` : ''}
      )
      select m.id, m.display_name, m.slug, m.avatar_url,
             case when coalesce(mp.show_home_city, true) then m.home_city else null end as home_city,
@@ -285,6 +300,17 @@ export async function peopleFromScene(
                 join genres g on g.id = mga.genre_id
                where mga.member_id = $1 and coalesce(mp.show_taste, true)
             ), '[]'::json)` : `'[]'::json`} as shared_genres,
+            ${useHistory ? `coalesce((
+              -- "You were both at" needs BOTH members' history visible AND
+              -- the other member's per-mark I WAS THERE visibility to pass.
+              select json_agg(json_build_object('title', ae.title, 'slug', ae.slug))
+                from archive_attendance aa
+                join archive_attendance ab on ab.archive_event_id = aa.archive_event_id and ab.member_id = m.id
+                join archive_events ae on ae.id = aa.archive_event_id and ae.status = 'published'
+               where aa.member_id = $1 and coalesce(mp.show_history, true)
+                 and (ab.visibility = 'public'
+                      or (ab.visibility = 'connections' and ${connectedSql('$1', 'm')}))
+            ), '[]'::json)` : `'[]'::json`} as shared_archive,
             ${useCity ? `(m.home_location_id is not null and m.home_location_id =
               (select home_location_id from members where id = $1)
               and coalesce(mp.show_home_city, true))` : 'false'} as same_home_city
@@ -305,6 +331,7 @@ export async function peopleFromScene(
       );
       const score =
         entityScore +
+        r.shared_archive.length * w.sharedExactEvent +
         r.shared_genres.length * w.sharedGenre +
         (r.same_home_city ? w.sameHomeCity : 0);
       return { ...r, score };
@@ -330,7 +357,16 @@ export async function peopleYouMayHaveDancedWith(viewerId: string, limit = 6): P
   const people = await peopleFromScene(viewerId, { limit: 30, includeConnected: false });
   const out: DancedWith[] = [];
   for (const p of people) {
-    // Strongest = an entity with a real year overlap, else any shared one.
+    // Strongest = the same actual night, then an entity with a real year
+    // overlap, then any shared entity.
+    if (p.shared_archive.length) {
+      out.push({
+        id: p.id, display_name: p.display_name, slug: p.slug, avatar_url: p.avatar_url,
+        entity_name: p.shared_archive[0].title, overlap_from: null, overlap_to: null,
+      });
+      if (out.length >= limit) break;
+      continue;
+    }
     const best =
       p.shared_entities.find((e) => e.overlap_from != null) ?? p.shared_entities[0];
     if (!best) continue;
@@ -346,6 +382,9 @@ export async function peopleYouMayHaveDancedWith(viewerId: string, limit = 6): P
 // Human explanations from a ScenePerson — reasons, never scores.
 export function sceneReasons(p: ScenePerson): string[] {
   const reasons: string[] = [];
+  for (const ev of p.shared_archive.slice(0, 2)) {
+    reasons.push(`You were both at ${ev.title}`);
+  }
   for (const e of p.shared_entities.slice(0, 2)) {
     reasons.push(
       e.overlap_from != null

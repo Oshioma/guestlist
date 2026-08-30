@@ -86,11 +86,20 @@ export async function tasteProfile(memberId: string, inferredLimit = 8): Promise
         where h.member_id = $1
         group by hg.genre_id
      ),
+     -- I WAS THERE: archive attendance is an inferred signal — it never
+     -- overwrites explicit preferences (explicit always outranks it).
+     archive_att as (
+       select aeg.genre_id, count(*) * ${w.follow} as score
+         from archive_attendance aa
+         join archive_event_genres aeg on aeg.archive_event_id = aa.archive_event_id
+        where aa.member_id = $1
+        group by aeg.genre_id
+     ),
      combined as (
        select genre_id, sum(score) as score from (
          select * from behaviour union all select * from activity
          union all select * from follows union all select * from artist_follows
-         union all select * from history
+         union all select * from history union all select * from archive_att
        ) s group by genre_id
      )
      select g.id as genre_id, g.name, g.slug, g.parent_genre_id,
