@@ -58,7 +58,10 @@ export type AutoPublishInput = {
 };
 
 // Warnings that always block auto-publish (others are informational).
-const BLOCKING_WARNING_PATTERNS = [/timezone/i, /past/i, /date/i, /unknown genre/i, /venue matched by name only/i];
+const BLOCKING_WARNING_PATTERNS = [
+  /timezone/i, /past/i, /date/i, /unknown genre/i, /venue matched by name only/i,
+  /eventStatus/i, // page itself marks the event cancelled/postponed
+];
 
 export function canAutoPublish(input: AutoPublishInput): { ok: boolean; reasons: string[] } {
   const cfg = supplyConfig.autoPublish;

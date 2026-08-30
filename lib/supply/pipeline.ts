@@ -198,7 +198,14 @@ export async function runExtractionPipeline(
     setProv(prov, 'event_type', 'json-ld', 85);
   }
 
-  const genreProposals: { name: string; confidence: number }[] = [];
+  // schema.org Event.genre values are strong signals — seed them ahead of
+  // any AI proposals so structured data wins in the mapping.
+  const genreProposals: { name: string; confidence: number }[] = page.genres.map((name) => ({
+    name,
+    confidence: 90,
+  }));
+  const listingHint = page.eventStatusHint;
+  if (listingHint) warnings.push(`page marks event as ${listingHint} (schema.org eventStatus)`);
 
   // ---- AI gap-filling ----------------------------------------------------
   let aiUsed = false;
@@ -291,7 +298,13 @@ export async function runExtractionPipeline(
       warnings.push(...p.notes.map((n) => `AI note: ${n}`.slice(0, 300)));
     }
   }
-  if (!aiUsed) warnings.push('AI unavailable — structured data only, genres not classified');
+  if (!aiUsed) {
+    warnings.push(
+      page.genres.length
+        ? 'AI unavailable — structured data only'
+        : 'AI unavailable — structured data only, genres not classified'
+    );
+  }
 
   // ---- is it an event at all? -------------------------------------------
   if (aiSaidNotEvent && !page.structuredDataFound) {
@@ -371,7 +384,7 @@ export async function runExtractionPipeline(
   const taxonomy = await loadGenres();
   const mapping = mapGenreProposals(genreProposals, taxonomy);
   if (mapping.matched.length) {
-    setProv(prov, 'genres', 'ai',
+    setProv(prov, 'genres', page.genres.length ? 'json-ld' : 'ai',
       Math.round(mapping.matched.reduce((s, m) => s + m.confidence, 0) / mapping.matched.length));
   }
   for (const u of mapping.unknown) {
@@ -492,7 +505,8 @@ export async function runExtractionPipeline(
               timezone=$7, venue_id=$8, promoter_id=$9, city=$10, country=$11, event_type=$12,
               ticket_url=$13, price_from=$14, price_to=$15, currency=$16, primary_image_url=$17,
               canonical_url=$18, confidence_score=$19,
-              possible_duplicate_of=$20, title_normalized=$21, status=$22::event_status, updated_at=now()
+              possible_duplicate_of=$20, title_normalized=$21, status=$22::event_status,
+              listing_status=$23, updated_at=now()
         where id=$1`,
       [
         eventId, title, shortDescription, description, startAt, endAt, tz.timezone,
@@ -500,6 +514,7 @@ export async function runExtractionPipeline(
         priceFrom, priceTo, currency, imageUrl, page.canonicalUrl, overall,
         dup.state !== 'none' ? dup.eventId : null, normalizeTitle(title),
         eventStatus === 'live' ? 'needs_review' : eventStatus, // reprocess never auto-publishes
+        listingHint ?? 'confirmed',
       ]
     );
     await query(`delete from event_genres where event_id = $1 and source in ('ai','import')`, [eventId]);
@@ -511,9 +526,9 @@ export async function runExtractionPipeline(
           timezone, venue_id, promoter_id, city, country, event_type, ticket_url,
           price_from, price_to, currency, primary_image_url, source_url, canonical_url,
           source_type, source_id, status, confidence_score, possible_duplicate_of,
-          title_normalized, published_at)
+          title_normalized, listing_status, published_at)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-          $20::source_type,$21,$22::event_status,$23,$24,$25,
+          $20::source_type,$21,$22::event_status,$23,$24,$25,$26,
           case when $22::event_status = 'live' then now() end)
        returning id`,
       [
@@ -522,13 +537,18 @@ export async function runExtractionPipeline(
         priceFrom, priceTo, currency, imageUrl, fetched.finalUrl, page.canonicalUrl,
         ctx.sourceId ? 'other' : 'member_submission', ctx.sourceId ?? null,
         eventStatus, overall, dup.state !== 'none' ? dup.eventId : null, normalizeTitle(title),
+        listingHint ?? 'confirmed',
       ]
     );
     eventId = row!.id;
     if (ctx.sourceId) {
-      // Reflect the source's own type on the event.
+      // Reflect the source's own type on the event, and attribute the
+      // event to the source's promoter when extraction found none — a
+      // promoter's connected website feeds their own events.
       await query(
-        `update events set source_type = s.source_type from event_sources s
+        `update events set source_type = s.source_type,
+                promoter_id = coalesce(events.promoter_id, s.promoter_id)
+           from event_sources s
           where events.id = $1 and s.id = $2`,
         [eventId, ctx.sourceId]
       );

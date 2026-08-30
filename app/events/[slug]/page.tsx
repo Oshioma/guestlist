@@ -6,6 +6,11 @@ import { eventTypeLabel, fmtEventDate, fmtEventTime, formatPrice, isPast } from 
 import { SocialPanel } from '@/components/SocialPanel';
 import { TrackView } from '@/components/TrackView';
 import { ShareButton } from '@/components/ShareButton';
+import { FollowButton } from '@/components/FollowButton';
+import { ClaimEventPrompt } from '@/components/ClaimEventPrompt';
+import { isFollowing } from '@/lib/profiles';
+import { getMemberPromoters } from '@/lib/promoterAuth';
+import { queryOne } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +24,23 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
   const action = member
     ? await getMemberAction(member.id, event.id)
     : { saved: false, rsvp: null as null };
+
+  const followingPromoter = event.promoter
+    ? await isFollowing(member?.id, 'promoter', event.promoter.id)
+    : false;
+  const promoterSlug = event.promoter
+    ? (await queryOne<{ slug: string }>(`select slug from promoters where id = $1`, [event.promoter.id]))?.slug
+    : null;
+  // "Is this your event?" — offered to verified promoter team members on
+  // events with no promoter attached.
+  const claimablePromoters =
+    member && !event.promoter
+      ? (await getMemberPromoters(member.id)).filter((p) => p.claim_status === 'verified')
+      : [];
+
+  const cancelled = event.listing_status === 'cancelled';
+  const listingBadge =
+    event.listing_status !== 'confirmed' ? event.listing_status : null;
 
   const price = formatPrice(event.price_from, event.price_to, event.currency);
   const past = isPast(event);
@@ -44,6 +66,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
             {event.status !== 'live' && ` · ${event.status.replace('_', ' ')} (admin preview)`}
           </div>
           <h1 className="detailTitle">{event.title}</h1>
+          {listingBadge && (
+            <div style={{ marginBottom: 12 }}>
+              <span className={`listingBadge ${listingBadge}`}>{listingBadge.replace('_', ' ')}</span>
+            </div>
+          )}
           <div className="detailMetaRow">
             <span><strong>{fmtEventDate(event.start_at, event.end_at, event.timezone)}</strong></span>
             <span>{fmtEventTime(event.start_at, event.end_at, event.timezone)}</span>
@@ -61,6 +88,12 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
           )}
         </div>
       </section>
+
+      {cancelled && (
+        <div className="cancelBanner">
+          CANCELLED — this event is no longer going ahead.
+        </div>
+      )}
 
       <div className="detailColumns">
         <div>
@@ -82,7 +115,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
               <div className="lineupList">
                 {event.lineup.map((a) => (
                   <div className="act" key={a.slug}>
-                    <span>{a.name}</span>
+                    <Link href={`/artists/${a.slug}`}>{a.name}</Link>
                     {a.billing && <span className="billing">{a.billing.replace('_', ' ')}</span>}
                   </div>
                 ))}
@@ -92,25 +125,48 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
 
           {event.promoter && (
             <>
-              <div className="sectionLabel">Presented by</div>
-              <div className="sideCard promoCard">
+              <div className="sectionLabel">Organiser</div>
+              <div className="organiserCard">
                 {event.promoter.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img className="logo" src={event.promoter.image_url} alt="" />
+                  <img className="logo" src={event.promoter.image_url} alt=""
+                       style={{ width: 52, height: 52, borderRadius: 14, objectFit: 'cover' }} />
                 ) : (
-                  <div className="logo">{event.promoter.name[0]}</div>
+                  <div className="logo" style={{
+                    width: 52, height: 52, borderRadius: 14, background: 'var(--surface-hover)',
+                    border: '1px solid var(--border)', display: 'grid', placeItems: 'center',
+                    fontWeight: 750, fontSize: 19, color: 'var(--text-muted)', flexShrink: 0,
+                  }}>{event.promoter.name[0]}</div>
                 )}
-                <div>
-                  <div className="big">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="big" style={{ fontSize: 17, fontWeight: 700 }}>
                     {event.promoter.name}{' '}
                     {event.promoter.verified && <span className="verifiedMark" title="Verified promoter">✓</span>}
                   </div>
-                  {event.promoter.description && (
-                    <div className="muted">{event.promoter.description}</div>
+                  {event.promoter.verified && (
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Verified promoter</div>
                   )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {promoterSlug && (
+                    <Link className="btnGhost" style={{ padding: '7px 13px', fontSize: 11 }} href={`/promoters/${promoterSlug}`}>
+                      View promoter
+                    </Link>
+                  )}
+                  <FollowButton
+                    entityType="promoter"
+                    entityId={event.promoter.id}
+                    initialFollowing={followingPromoter}
+                    isSignedIn={!!member}
+                    compact
+                  />
                 </div>
               </div>
             </>
+          )}
+
+          {claimablePromoters.length > 0 && !past && (
+            <ClaimEventPrompt eventId={event.id} promoters={claimablePromoters} />
           )}
         </div>
 
@@ -121,7 +177,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
             {event.venue && (
               <>
                 <hr />
-                <div className="big">{event.venue.name}</div>
+                <div className="big">
+                  <Link href={`/venues/${event.venue.slug}`} style={{ textDecoration: 'underline', textDecorationColor: 'var(--border-strong)' }}>
+                    {event.venue.name}
+                  </Link>
+                </div>
                 <div className="muted">
                   {[event.venue.address, event.venue.city, event.venue.country].filter(Boolean).join(', ')}
                 </div>
@@ -137,11 +197,17 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
             )}
             <hr />
             <div className="muted">{price ?? 'Price to be announced'}</div>
-            {event.ticket_url && !past && (
+            {event.ticket_url && !past && !cancelled && event.listing_status !== 'sold_out' && (
               <a className="ctaTickets" href={`/out/${event.id}`}>
                 Get Tickets →
               </a>
             )}
+            {event.listing_status === 'sold_out' && !past && (
+              <div className="listingBadge sold_out" style={{ marginTop: 12, textAlign: 'center', display: 'block' }}>
+                Sold out
+              </div>
+            )}
+            {cancelled && <div className="muted" style={{ marginTop: 10 }}>Tickets are no longer available.</div>}
             {past && <div className="muted" style={{ marginTop: 10 }}>This event has already happened.</div>}
           </div>
 

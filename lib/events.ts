@@ -20,6 +20,7 @@ export type EventCard = {
   currency: string | null;
   primary_image_url: string | null;
   featured: boolean;
+  listing_status: string;
   venue_name: string | null;
   going_count: number;
   interested_count: number;
@@ -54,6 +55,9 @@ export type BrowseParams = {
 
 // Upcoming = not yet finished (events with no end time get a 6h grace window).
 const UPCOMING_SQL = `coalesce(e.end_at, e.start_at + interval '6 hours') > now()`;
+// Cancelled events stay on their own pages (clearly marked) but leave the
+// browse grid; sold out / postponed remain listed with badges.
+const LISTABLE_SQL = `e.listing_status <> 'cancelled'`;
 
 function weekendWindow(): { from: Date; to: Date } {
   // Friday 00:00 → Monday 06:00 of the current/next weekend, local server time.
@@ -70,7 +74,7 @@ function weekendWindow(): { from: Date; to: Date } {
 }
 
 export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
-  const where: string[] = [`e.status = 'live'`, UPCOMING_SQL];
+  const where: string[] = [`e.status = 'live'`, UPCOMING_SQL, LISTABLE_SQL];
   const args: unknown[] = [];
   const arg = (v: unknown) => {
     args.push(v);
@@ -142,15 +146,25 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
     }
   }
 
-  // Recommended ranking: featured first, then explicit genre-preference
-  // matches for signed-in members, then soonest. Deliberately simple — the
-  // schema (actions, follows, member_genres, analytics) carries the signals
-  // a real recommender will use later.
+  // Recommended ranking: featured first, then follow + explicit-genre
+  // affinity for signed-in members (a followed promoter/venue/artist counts
+  // double), then soonest. Deliberately simple — the schema carries the
+  // signals a real recommender will use later.
   let genreAffinity = '(select 0)';
   if (params.member?.id) {
-    genreAffinity = `(select count(*) from event_genres eg2
-        join member_genres mg on mg.genre_id = eg2.genre_id
-       where eg2.event_id = e.id and mg.member_id = ${arg(params.member.id)})`;
+    const memberParam = arg(params.member.id);
+    genreAffinity = `(
+      (select count(*) from event_genres eg2
+         join member_genres mg on mg.genre_id = eg2.genre_id
+        where eg2.event_id = e.id and mg.member_id = ${memberParam})
+      + 2 * (select count(*) from member_follows mf
+        where mf.member_id = ${memberParam} and (
+          (mf.entity_type = 'promoter' and mf.entity_id = e.promoter_id) or
+          (mf.entity_type = 'venue' and mf.entity_id = e.venue_id) or
+          (mf.entity_type = 'artist' and mf.entity_id in
+            (select ea3.artist_id from event_artists ea3 where ea3.event_id = e.id))
+        ))
+    )`;
   }
 
   const orderBy = {
@@ -163,7 +177,7 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
   const rows = await query<EventCard & { distance_km: number | null }>(
     `select e.id, e.title, e.slug, e.short_description, e.start_at, e.end_at, e.timezone,
             e.city, e.country, e.event_type, e.price_from, e.price_to, e.currency,
-            e.primary_image_url, e.featured,
+            e.primary_image_url, e.featured, e.listing_status,
             v.name as venue_name,
             pop.going_count, pop.interested_count,
             coalesce(gj.genres, '[]'::json) as genres,
@@ -196,6 +210,63 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
     args
   );
   return rows;
+}
+
+// Event cards for an entity page (promoter / venue / artist).
+export async function eventsForEntity(
+  entity: { promoterId?: string; venueId?: string; artistId?: string },
+  when: 'upcoming' | 'past',
+  limit = 24
+): Promise<EventCard[]> {
+  const where: string[] = [`e.status = 'live'`];
+  const args: unknown[] = [];
+  const arg = (v: unknown) => {
+    args.push(v);
+    return `$${args.length}`;
+  };
+  if (entity.promoterId) where.push(`e.promoter_id = ${arg(entity.promoterId)}`);
+  if (entity.venueId) where.push(`e.venue_id = ${arg(entity.venueId)}`);
+  if (entity.artistId) {
+    where.push(`exists (select 1 from event_artists ea where ea.event_id = e.id and ea.artist_id = ${arg(entity.artistId)})`);
+  }
+  if (when === 'upcoming') {
+    where.push(UPCOMING_SQL, LISTABLE_SQL);
+  } else {
+    where.push(`coalesce(e.end_at, e.start_at + interval '6 hours') <= now()`);
+  }
+  return query<EventCard>(
+    `select e.id, e.title, e.slug, e.short_description, e.start_at, e.end_at, e.timezone,
+            e.city, e.country, e.event_type, e.price_from, e.price_to, e.currency,
+            e.primary_image_url, e.featured, e.listing_status,
+            v.name as venue_name,
+            pop.going_count, pop.interested_count,
+            coalesce(gj.genres, '[]'::json) as genres,
+            coalesce(av.going_avatars, '[]'::json) as going_avatars
+       from events e
+       left join venues v on v.id = e.venue_id
+       cross join lateral (
+         select count(*) filter (where mea.rsvp = 'going')::int as going_count,
+                count(*) filter (where mea.rsvp = 'interested')::int as interested_count
+           from member_event_actions mea where mea.event_id = e.id
+       ) pop
+       left join lateral (
+         select json_agg(json_build_object('name', g.name, 'slug', g.slug) order by g.sort_order) as genres
+           from event_genres eg join genres g on g.id = eg.genre_id where eg.event_id = e.id
+       ) gj on true
+       left join lateral (
+         select json_agg(json_build_object('display_name', m.display_name, 'avatar_url', m.avatar_url)) as going_avatars
+           from (
+             select m2.display_name, m2.avatar_url
+               from member_event_actions mea join members m2 on m2.id = mea.member_id
+              where mea.event_id = e.id and mea.rsvp = 'going'
+              order by mea.rsvp_at asc limit 4
+           ) m
+       ) av on true
+      where ${where.join(' and ')}
+      order by e.start_at ${when === 'upcoming' ? 'asc' : 'desc'}
+      limit ${Math.min(limit, 60)}`,
+    args
+  );
 }
 
 export type EventDetail = EventCard & {
