@@ -9,6 +9,7 @@ export type GenreRow = { id: string; name: string; slug: string; parent_genre_id
 const GENRE_ALIASES: Record<string, string> = {
   'dnb': 'drum-and-bass', 'd n b': 'drum-and-bass', 'drum n bass': 'drum-and-bass',
   'drum and bass': 'drum-and-bass', 'drumandbass': 'drum-and-bass', 'dandb': 'drum-and-bass',
+  'd and b': 'drum-and-bass', 'd-n-b': 'drum-and-bass', 'drum bass': 'drum-and-bass',
   'jungle dnb': 'jungle', 'junglist': 'jungle',
   'liquid funk': 'liquid', 'liquid dnb': 'liquid', 'liquid drum and bass': 'liquid',
   'jump up dnb': 'jump-up', 'jumpup': 'jump-up',

@@ -5,6 +5,7 @@ export type AuditAction =
   | 'event_rescheduled' | 'event_sold_out' | 'event_restored' | 'event_confirmed'
   | 'event_ignored' | 'event_reported' | 'event_claimed' | 'event_claim_decided'
   | 'source_connected' | 'source_paused' | 'source_resumed' | 'source_url_changed'
+  | 'source_trust_changed'
   | 'source_scanned' | 'team_member_added' | 'team_member_removed' | 'role_changed'
   | 'team_invited' | 'claim_submitted' | 'claim_approved' | 'claim_rejected'
   | 'claim_info_requested' | 'promoter_suspended' | 'promoter_unsuspended';

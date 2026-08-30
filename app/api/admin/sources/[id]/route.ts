@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, requireAdmin } from '@/lib/auth';
-import { query } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
+import { audit } from '@/lib/audit';
 
 const TRUST_VALUES = ['new', 'trusted', 'restricted', 'blocked'];
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     const { id } = await ctx.params;
     const body = await req.json().catch(() => ({}));
 
@@ -48,12 +49,25 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
     if (!sets.length) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
 
+    const before = body.trust !== undefined
+      ? await queryOne<{ trust: string; promoter_id: string | null }>(
+          `select trust, promoter_id from event_sources where id = $1`, [id]
+        )
+      : null;
+
     args.push(id);
     const rows = await query(
       `update event_sources set ${sets.join(', ')}, updated_at = now() where id = $${args.length} returning id`,
       args
     );
     if (rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    if (before && before.trust !== body.trust) {
+      await audit('source_trust_changed', {
+        actorId: admin.id, sourceId: id, promoterId: before.promoter_id,
+        detail: { from: before.trust, to: body.trust },
+      });
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof AuthError) {

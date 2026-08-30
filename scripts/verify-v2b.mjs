@@ -362,6 +362,84 @@ try {
       (await q(`select count(*)::int as n from audit_log where promoter_id = $1 and action in ('source_connected','source_scanned','source_paused','source_resumed')`, [nb]))[0].n >= 4);
     check('scan notification stored',
       (await q(`select 1 from promoter_notifications where promoter_id = $1 and type = 'events_found'`, [nb])).length >= 1);
+
+    // Source trust ≠ promoter verification: a verified promoter's source
+    // starts at NEW, and only admin can change trust (audited).
+    check('verified promoter source starts at trust NEW',
+      (await q(`select trust from event_sources where id = $1`, [src.id]))[0].trust === 'new');
+    check('promoter cannot change own trust level',
+      (await alex.fetch(`/api/admin/sources/${src.id}`, { method: 'PATCH', body: JSON.stringify({ trust: 'trusted' }) })).status === 403);
+    check('admin trust change works',
+      (await admin.fetch(`/api/admin/sources/${src.id}`, { method: 'PATCH', body: JSON.stringify({ trust: 'restricted' }) })).status === 200);
+    check('trust change audited',
+      (await q(`select 1 from audit_log where action = 'source_trust_changed' and source_id = $1`, [src.id])).length === 1);
+    await admin.fetch(`/api/admin/sources/${src.id}`, { method: 'PATCH', body: JSON.stringify({ trust: 'new' }) });
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— Genre suggestions admin workflow —');
+  {
+    const someEvent = (await q(`select id from events where promoter_id = $1 limit 1`, [nb]))[0];
+    await q(
+      `insert into genre_suggestions (event_id, suggested_name, confidence)
+       values ($1, 'moombahcore', 72), ($1, 'Moombahcore', 65), ($1, 'polka', 40), ($1, 'uk funky', 81)`,
+      [someEvent.id]
+    );
+    check('non-admin blocked from genre suggestions',
+      (await alex.fetch('/api/admin/genre-suggestions', { method: 'POST', body: JSON.stringify({ term: 'moombahcore', action: 'dismiss' }) })).status === 403);
+
+    const page = await admin.fetch('/admin/genre-suggestions');
+    check('suggestions page groups pending terms', page.status === 200 && (await page.text()).includes('moombahcore'));
+
+    check('MAP applies existing genre to source events',
+      (await admin.fetch('/api/admin/genre-suggestions', {
+        method: 'POST', body: JSON.stringify({ term: 'moombahcore', action: 'map', genreSlug: 'bass' }),
+      })).status === 200);
+    check('mapped genre lands on the event',
+      (await q(`select 1 from event_genres eg join genres g on g.id = eg.genre_id
+                 where eg.event_id = $1 and g.slug = 'bass'`, [someEvent.id])).length === 1);
+    check('both case variants resolved together',
+      (await q(`select count(*)::int as n from genre_suggestions
+                 where lower(suggested_name) = 'moombahcore' and status = 'mapped'`))[0].n === 2);
+
+    check('DISMISS drops a term',
+      (await admin.fetch('/api/admin/genre-suggestions', {
+        method: 'POST', body: JSON.stringify({ term: 'polka', action: 'dismiss' }),
+      })).status === 200 &&
+      (await q(`select status from genre_suggestions where suggested_name = 'polka'`))[0].status === 'dismissed');
+
+    const before = (await q(`select count(*)::int as n from genres`))[0].n;
+    check('CREATE GENRE is an explicit admin decision',
+      (await admin.fetch('/api/admin/genre-suggestions', {
+        method: 'POST', body: JSON.stringify({ term: 'uk funky', action: 'create', name: 'UK Funky', parentSlug: 'house' }),
+      })).status === 201);
+    const created = (await q(`select g.slug, p.slug as parent from genres g join genres p on p.id = g.parent_genre_id where g.slug = 'uk-funky'`))[0];
+    check('created genre is a House subgenre', created?.parent === 'house');
+    check('exactly one genre added', (await q(`select count(*)::int as n from genres`))[0].n === before + 1);
+    check('creating a duplicate slug is refused',
+      (await q(`insert into genre_suggestions (event_id, suggested_name, confidence) values ($1, 'techno', 90)`, [someEvent.id]),
+       await admin.fetch('/api/admin/genre-suggestions', {
+         method: 'POST', body: JSON.stringify({ term: 'techno', action: 'create' }),
+       })).status === 409);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— Postpone lifecycle —');
+  {
+    const ev = (await q(
+      `select id from events where promoter_id = $1 and status = 'live' and listing_status = 'confirmed' limit 1`,
+      [nb]))[0];
+    check('promoter postpones event',
+      (await alex.fetch(`/api/promoter/${nb}/events/${ev.id}/moderate`, { method: 'POST', body: JSON.stringify({ action: 'postpone' }) })).status === 200 &&
+      (await q(`select listing_status from events where id = $1`, [ev.id]))[0].listing_status === 'postponed');
+    // Rescheduling a postponed event flips it to RESCHEDULED.
+    const fd = new Date(Date.now() + 32 * 86400_000).toISOString().slice(0, 10);
+    await alex.fetch(`/api/promoter/${nb}/events/${ev.id}`, {
+      method: 'PATCH', body: JSON.stringify({ startAt: `${fd}T21:00`, endAt: null }),
+    });
+    check('postponed + new date → rescheduled',
+      (await q(`select listing_status from events where id = $1`, [ev.id]))[0].listing_status === 'rescheduled');
+    await alex.fetch(`/api/promoter/${nb}/events/${ev.id}/moderate`, { method: 'POST', body: JSON.stringify({ action: 'restore' }) });
   }
 
   // -------------------------------------------------------------------------

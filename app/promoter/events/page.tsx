@@ -6,6 +6,7 @@ import { dashContext } from '@/lib/promoterDash';
 import { DashShell } from '@/components/promoter/DashShell';
 import { eventPerformance } from '@/lib/promoterAnalytics';
 import { PerfCard } from '@/components/promoter/PerfCard';
+import { ConfirmAll } from '@/components/promoter/ConfirmAll';
 import { roleAtLeast } from '@/lib/promoterAuth';
 
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,15 @@ export default async function PromoterEventsPage({
 
       {queue.length > 0 && (
         <>
-          <div className="sectionLabel">New events found — review</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+            <div className="sectionLabel">New events found — review</div>
+            {canEdit && (
+              <ConfirmAll
+                promoterId={promoter.id}
+                eventIds={queue.filter((e) => !e.possible_duplicate_of).map((e) => e.id)}
+              />
+            )}
+          </div>
           {queue.map((e) => (
             <PerfCard key={e.id} event={e} promoterId={promoter.id} showModeration={canEdit} />
           ))}

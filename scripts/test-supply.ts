@@ -301,6 +301,20 @@ async function main() {
     check('organizer captured', page.organizerName?.value === 'Fixture Promotions');
     check('structured data flag set', page.structuredDataFound);
 
+    // schema.org genre + eventStatus (common on real event pages).
+    const gPage = inspectPage(
+      `<html><head><script type="application/ld+json">${JSON.stringify({
+        '@context': 'https://schema.org', '@type': 'MusicEvent', name: 'Tagged Night',
+        startDate: `${futureDate}T21:00:00+01:00`,
+        genre: ['Drum & Bass / Jungle', 'Liquid Funk'],
+        eventStatus: 'https://schema.org/EventCancelled',
+        location: { '@type': 'Place', name: 'Tag Hall', address: { addressLocality: 'Leeds', addressCountry: 'United Kingdom' } },
+      })}</script></head><body><main>x</main></body></html>`,
+      'https://promoter-g.example/events/tagged'
+    );
+    check('JSON-LD genre parsed and split', gPage.genres.includes('Drum & Bass') && gPage.genres.includes('Jungle') && gPage.genres.includes('Liquid Funk'));
+    check('schema.org eventStatus → cancelled hint', gPage.eventStatusHint === 'cancelled');
+
     const og = inspectPage(OG_ONLY_PAGE, 'https://promoter-b.example/events/sundown');
     check('OpenGraph fallback title', og.title?.value === 'Sundown Sessions' && og.title.source === 'opengraph');
     check('no structured Event flagged', !og.structuredDataFound);
@@ -353,6 +367,43 @@ async function main() {
     check('unknown genre goes to suggestions, not created', m.unknown.length === 1 && m.unknown[0].name === 'zydeco');
     check('generic "electronic" ignored silently', !m.unknown.some((u) => u.name === 'electronic'));
     check('exact name match works', mapGenreProposals([{ name: 'Techno', confidence: 90 }], taxonomy).matched.some((x) => x.genre.slug === 'techno'));
+    const dab = mapGenreProposals([{ name: 'D&B', confidence: 90 }], taxonomy);
+    check('"D&B" alias maps to Drum & Bass', dab.matched.some((x) => x.genre.slug === 'drum-and-bass'));
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— pipeline: structured genres + eventStatus without AI —');
+  {
+    const urlT = 'https://promoter-g.example/events/tagged-no-ai';
+    const body = `<html><head><script type="application/ld+json">${JSON.stringify({
+      '@context': 'https://schema.org', '@type': 'MusicEvent', name: 'Tagged No-AI Night',
+      startDate: `${futureDate}T21:00:00+01:00`,
+      genre: 'Drum & Bass / Jungle',
+      location: { '@type': 'Place', name: 'Tag Hall', address: { '@type': 'PostalAddress', addressLocality: 'Leeds', addressCountry: 'United Kingdom' } },
+      offers: { '@type': 'Offer', url: 'https://tickets.example/tagged' },
+    })}</script></head><body><main>Tagged</main></body></html>`;
+    const out = await runExtractionPipeline(urlT, { fetcher: mockFetcher({ [urlT]: { body } }), ai: noAI });
+    check('LD genres classify the event without AI', out.status === 'succeeded');
+    const gn = await q(
+      `select g.slug from event_genres eg join genres g on g.id = eg.genre_id where eg.event_id = $1`,
+      [out.eventId]
+    );
+    const slugs = (gn as { slug: string }[]).map((x) => x.slug);
+    check('LD genre split maps to taxonomy', slugs.includes('drum-and-bass') && slugs.includes('jungle'));
+    const ex1 = (await q(`select field_sources, relevance from extractions where event_id = $1`, [out.eventId]))[0] as {
+      field_sources: Record<string, string>; relevance: string;
+    };
+    check('genre provenance = json-ld', ex1.field_sources.genres === 'json-ld');
+    check('relevance decided from structured genres', ex1.relevance === 'relevant');
+
+    const urlC = 'https://promoter-g.example/events/cancelled-on-page';
+    const bodyC = body
+      .replace('Tagged No-AI Night', 'Cancelled On Page')
+      .replace('"genre":"Drum & Bass / Jungle"', '"genre":"Techno","eventStatus":"https://schema.org/EventCancelled"')
+      .replace('tickets.example/tagged', 'tickets.example/cancelled-x');
+    const outC = await runExtractionPipeline(urlC, { fetcher: mockFetcher({ [urlC]: { body: bodyC } }), ai: noAI });
+    const evC = (await q(`select listing_status from events where id = $1`, [outC.eventId]))[0] as { listing_status: string };
+    check('page-declared cancellation carried onto draft', evC.listing_status === 'cancelled');
   }
 
   // -------------------------------------------------------------------------

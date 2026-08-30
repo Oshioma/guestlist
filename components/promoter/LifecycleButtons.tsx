@@ -61,6 +61,9 @@ export function LifecycleButtons({
           <button className="btnGhost" style={small} onClick={() => act('sold_out')} disabled={!!busy} type="button">
             {busy === 'sold_out' ? '…' : 'Sold out'}
           </button>
+          <button className="btnGhost" style={small} onClick={() => act('postpone')} disabled={!!busy} type="button">
+            {busy === 'postpone' ? '…' : 'Postpone'}
+          </button>
           <button className="btnGhost" style={small} onClick={() => act('cancel')} disabled={!!busy} type="button">
             {busy === 'cancel' ? '…' : 'Cancel event'}
           </button>

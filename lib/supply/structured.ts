@@ -27,6 +27,9 @@ export type PageInspection = {
   organizerName: StructuredField<string> | null;
   organizerUrl: string | null;
   eventTypeHint: string | null; // schema.org subtype, e.g. Festival
+  genres: string[]; // schema.org Event.genre values, when present
+  // schema.org eventStatus mapped to Guestlist listing states.
+  eventStatusHint: 'cancelled' | 'postponed' | 'rescheduled' | null;
   feedUrls: string[]; // RSS/Atom alternates advertised by the page
   structuredDataFound: boolean; // a schema.org Event was present
   cleanedText: string; // stripped page content for AI use
@@ -233,6 +236,26 @@ export function inspectPage(html: string, pageUrl: string, maxTextChars = 14000)
   const ldTypes = ld ? asArray(ld['@type']).map(String) : [];
   const eventTypeHint = ldTypes.find((t) => t !== 'Event') ?? null;
 
+  // schema.org Event.genre: string, array, or slash/comma-separated list.
+  const genres = ld
+    ? asArray(ld.genre)
+        .map((g) => str(g))
+        .filter((g): g is string => !!g)
+        .flatMap((g) => g.split(/[,/|]/))
+        .map((g) => g.trim())
+        .filter(Boolean)
+        .slice(0, 12)
+    : [];
+
+  const statusRaw = ld ? str(ld.eventStatus)?.toLowerCase() ?? '' : '';
+  const eventStatusHint = statusRaw.includes('cancelled') || statusRaw.includes('canceled')
+    ? ('cancelled' as const)
+    : statusRaw.includes('postponed')
+      ? ('postponed' as const)
+      : statusRaw.includes('rescheduled')
+        ? ('rescheduled' as const)
+        : null;
+
   return {
     canonicalUrl: canonical,
     title,
@@ -252,6 +275,8 @@ export function inspectPage(html: string, pageUrl: string, maxTextChars = 14000)
     organizerName,
     organizerUrl,
     eventTypeHint,
+    genres,
+    eventStatusHint,
     feedUrls,
     structuredDataFound: !!ld,
     cleanedText: cleanPageText(root, maxTextChars),
