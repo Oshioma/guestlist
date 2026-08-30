@@ -60,20 +60,42 @@ async function sharpOrNull() {
   }
 }
 
+async function supabaseUpload(base: string, key: string, relPath: string, buf: Buffer, mime: string) {
+  return fetch(`${base}/storage/v1/object/archive/${relPath}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${key}`,
+      'Content-Type': mime,
+      'x-upsert': 'true',
+    },
+    body: new Uint8Array(buf),
+  });
+}
+
 async function storeBuffer(relPath: string, buf: Buffer, mime: string): Promise<string> {
-  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/+$/, '');
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (supabaseUrl && serviceKey) {
-    const res = await fetch(`${supabaseUrl}/storage/v1/object/archive/${relPath}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${serviceKey}`,
-        'Content-Type': mime,
-        'x-upsert': 'true',
-      },
-      body: new Uint8Array(buf),
-    });
-    if (!res.ok) throw new MediaError(502, `storage upload failed (${res.status})`);
+    let res = await supabaseUpload(supabaseUrl, serviceKey, relPath, buf, mime);
+    if (!res.ok) {
+      let detail = (await res.text().catch(() => '')).slice(0, 200);
+      // Self-heal a missing bucket: the service role may create it, so a
+      // "Bucket not found" is fixed in place rather than surfaced as config.
+      if (/bucket not found/i.test(detail)) {
+        const made = await fetch(`${supabaseUrl}/storage/v1/bucket`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: 'archive', name: 'archive', public: true }),
+        });
+        if (made.ok || made.status === 409 /* already exists */) {
+          res = await supabaseUpload(supabaseUrl, serviceKey, relPath, buf, mime);
+          if (!res.ok) detail = (await res.text().catch(() => '')).slice(0, 200);
+        }
+      }
+      if (!res.ok) {
+        throw new MediaError(502, `storage upload failed (${res.status}${detail ? `: ${detail}` : ''})`);
+      }
+    }
     return `${supabaseUrl}/storage/v1/object/public/archive/${relPath}`;
   }
   // Production without Supabase Storage configured: fail with a clear,
