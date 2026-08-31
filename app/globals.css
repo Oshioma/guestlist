@@ -242,12 +242,16 @@ button { font-family: inherit; }
   cursor: pointer;
 }
 .chip:hover { border-color: var(--border-strong); color: var(--text); }
+/* A selected chip is brand purple with white type. (It used to invert to
+   var(--text), which was fine on the night palette but became black-on-
+   black once the light theme landed.) */
 .chip.active {
-  background: var(--text);
-  border-color: var(--text);
-  color: #0a0a0a;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
   font-weight: 650;
 }
+.chip.active:hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); filter: brightness(1.08); }
 
 .filterRow {
   display: flex;
@@ -802,7 +806,7 @@ button { font-family: inherit; }
   text-transform: uppercase;
   color: var(--text-muted);
 }
-.statePill.active { background: var(--text); color: #0a0a0a; border-color: var(--text); font-weight: 650; }
+.statePill.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 650; }
 .statePill .n { opacity: 0.6; margin-left: 6px; }
 
 .reviewCard {
