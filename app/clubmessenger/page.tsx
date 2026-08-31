@@ -10,6 +10,7 @@ import {
   friendActivity,
   myActivePresence,
   tonightEvents,
+  tonightEventsPublic,
   type TonightEvent,
 } from '@/lib/clubmessenger';
 import { heatForEvents, heatLabel } from '@/lib/heat';
@@ -25,10 +26,18 @@ export default async function ClubMessengerPage() {
   const member = await getCurrentMember();
 
   if (!member) {
+    // Signed out: tonight's listings are public, the people are not —
+    // no presence, no names, no here-now counts until you're in.
+    const publicEvents = await tonightEventsPublic();
     return (
       <main className="wrap clubWrap">
         <div className="clubHead">
           <h1 className="clubTitle">Who’s out tonight?</h1>
+          {publicEvents.length > 0 && (
+            <div className="clubSummary">
+              {publicEvents.length} event{publicEvents.length === 1 ? '' : 's'} on tonight
+            </div>
+          )}
         </div>
         <div className="clubJoin">
           <p>
@@ -43,6 +52,45 @@ export default async function ClubMessengerPage() {
           <Link href="/signup?next=%2Fclubmessenger" className="btnAccent">
             Join Guestlist →
           </Link>
+        </div>
+
+        <div className="sectionLabel">Tonight</div>
+        {publicEvents.length === 0 && (
+          <div className="clubJoin">
+            <p>Nothing on tonight in the next 24 hours.</p>
+            <Link href="/events" className="btnGhost">Browse events →</Link>
+          </div>
+        )}
+        <div className="clubEventList">
+          {publicEvents.map((e) => (
+            <Link href={`/events/${e.slug}`} className="clubEventCardLink" key={e.id}>
+              <div className="clubEventCard">
+                {e.primary_image_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img className="clubEventImg" src={e.primary_image_url} alt="" />
+                )}
+                <div className="clubEventBody">
+                  <div className="clubEventTitleRow">
+                    <span className="clubEventTitle">{e.title}</span>
+                  </div>
+                  <div className="clubEventMeta">
+                    {fmtEventTime(e.start_at, e.end_at, e.timezone)}
+                    {e.venue_name && ` · ${e.venue_name}`}
+                    {e.city && ` · ${e.city}`}
+                    {e.listing_status !== 'confirmed' && ` · ${e.listing_status.replace('_', ' ')}`}
+                  </div>
+                  <div className="clubEventSocial">
+                    {e.going_count > 0 ? (
+                      <span>{e.going_count} going</span>
+                    ) : (
+                      <span className="mutedLine">Be the first one there</span>
+                    )}
+                    <span className="mutedLine">Sign in to see who’s out</span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          ))}
         </div>
       </main>
     );

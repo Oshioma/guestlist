@@ -263,6 +263,41 @@ export async function tonightEvents(viewerId: string): Promise<TonightEvent[]> {
   );
 }
 
+// The signed-out view of tonight: the listings themselves are public
+// (they're on /events already), but nothing about people — no presence,
+// no names, no here-now counts. Deliberately a separate query so the
+// presence predicates can never leak into the anonymous path.
+export type TonightPublicEvent = {
+  id: string;
+  title: string;
+  slug: string;
+  start_at: string;
+  end_at: string | null;
+  timezone: string;
+  city: string | null;
+  venue_name: string | null;
+  primary_image_url: string | null;
+  listing_status: string;
+  going_count: number;
+};
+
+export async function tonightEventsPublic(): Promise<TonightPublicEvent[]> {
+  return query<TonightPublicEvent>(
+    `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
+            e.city, v.name as venue_name, e.primary_image_url, e.listing_status,
+            coalesce(gc.n, 0) as going_count
+       from events e
+       left join venues v on v.id = e.venue_id
+       left join lateral (
+         select count(*)::int as n from member_event_actions mea
+          where mea.event_id = e.id and mea.rsvp = 'going'
+       ) gc on true
+      where ${TONIGHT_WINDOW}
+      order by e.start_at
+      limit 40`
+  );
+}
+
 export type ActivityItem = {
   kind: 'arrived' | 'going';
   member_id: string;

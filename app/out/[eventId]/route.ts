@@ -42,6 +42,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ eventId: st
       destination: event.ticket_url ? 'ticket_url' : 'source_url',
     },
   });
+  if (src === 'clubmessenger') {
+    // Club Messenger's conversion attribution — proves the surface sells.
+    await track('ticket_click_from_clubmessenger', {
+      memberId: member?.id ?? null,
+      eventId: event.id,
+      path: `/out/${event.id}`,
+    });
+  }
 
   return NextResponse.redirect(destination, 302);
 }
