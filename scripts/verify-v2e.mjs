@@ -853,6 +853,18 @@ try {
     check('member sees the add-a-night shortcut on the scene page',
       (await jules.html(clubUrl)).includes(`+ Add a night at ${theEnd.name}`)
       && !(await anon.html(clubUrl)).includes('+ Add a night at'));
+
+    // Admin can delete any mix outright; members and anon cannot.
+    check('admin sees the delete control on the club page, others never',
+      (await oshi.html(clubUrl)).includes('✕ Delete')
+      && !(await jules.html(clubUrl)).includes('✕ Delete')
+      && !(await anon.html(clubUrl)).includes('✕ Delete'));
+    check('non-admin cannot delete a mix',
+      (await jules.post('/api/admin/archive', { action: 'delete_mix', mixId: sceneMix.id })).status === 403);
+    check('admin deletes the mix — gone from the page and the table',
+      (await oshi.post('/api/admin/archive', { action: 'delete_mix', mixId: sceneMix.id })).status === 200
+      && (await q(`select count(*)::int as n from archive_mixes where id = $1`, [sceneMix.id]))[0].n === 0
+      && !(await anon.html(clubUrl)).includes('Mr C — closing room one'));
     check('add-a-night shortcut prefills the event name',
       (await jules.html('/archive/add?scene=The%20End')).includes('value="The End"'));
   }

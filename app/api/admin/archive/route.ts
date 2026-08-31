@@ -99,6 +99,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    if (action === 'delete_mix') {
+      // Hard removal — for mixes that shouldn't exist at all (wrong link,
+      // rights problem). Rejection keeps the row; delete does not.
+      const row = await queryOne<{ id: string }>(
+        `delete from archive_mixes where id = $1 returning id`,
+        [String(body.mixId ?? '')]);
+      if (!row) return NextResponse.json({ error: 'Mix not found' }, { status: 404 });
+      return NextResponse.json({ ok: true });
+    }
+
     if (action === 'merge_events') {
       const keep = String(body.keepId ?? '');
       const dup = String(body.dupId ?? '');

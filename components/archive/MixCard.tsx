@@ -4,6 +4,7 @@
 
 import Link from 'next/link';
 import { MIX_PLATFORM_LABEL, parseMixUrl } from '@/lib/archive/mixes';
+import { AdminMixDelete } from '@/components/archive/AdminMixDelete';
 
 export type MixRow = {
   id: string;
@@ -20,7 +21,7 @@ export type MixRow = {
   scene_slug?: string;
 };
 
-export function MixCard({ mix }: { mix: MixRow }) {
+export function MixCard({ mix, canDelete = false }: { mix: MixRow; canDelete?: boolean }) {
   const parsed = parseMixUrl(mix.url);
   if (!parsed) return null; // a bad row never breaks the page
   return (
@@ -29,6 +30,7 @@ export function MixCard({ mix }: { mix: MixRow }) {
         <span className="mixTitle">{mix.title}</span>
         {mix.artist_name && <span className="mixArtist">{mix.artist_name}</span>}
         <span className="mixPlatform">{MIX_PLATFORM_LABEL[parsed.platform]}</span>
+        {canDelete && <AdminMixDelete mixId={mix.id} />}
       </div>
       <iframe
         className="mixFrame"

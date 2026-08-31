@@ -68,6 +68,8 @@ export function MixActions({ mixId }: { mixId: string }) {
               onClick={() => run({ action: 'publish_mix', mixId })}>Publish mix</button>
       <button className="btnGhost" type="button" disabled={busy}
               onClick={() => run({ action: 'reject_mix', mixId })}>Reject</button>
+      <button className="btnGhost" type="button" disabled={busy} style={{ color: 'var(--danger)' }}
+              onClick={() => run({ action: 'delete_mix', mixId })}>Delete</button>
       {error && <span className="formError">{error}</span>}
     </span>
   );
