@@ -31,10 +31,10 @@ function page(title: string, body: string, ok: boolean): NextResponse {
      <title>${title}</title></head>
      <body style="margin:0;background:#0d0d0c;color:#f5f1e6;font-family:-apple-system,Segoe UI,sans-serif;">
        <div style="max-width:480px;margin:0 auto;padding:60px 24px;">
-         <div style="font-weight:800;letter-spacing:4px;font-size:15px;">GUEST<span style="color:#f2c94c;">LIST</span></div>
+         <div style="font-weight:800;letter-spacing:4px;font-size:15px;">GUEST<span style="color:#7c4a9e;">LIST</span></div>
          <h1 style="font-size:26px;letter-spacing:-0.5px;margin:26px 0 10px;">${title}</h1>
          <p style="color:#b9b3a2;line-height:1.6;">${body}</p>
-         <p style="margin-top:26px;"><a href="/you" style="color:#f2c94c;">Manage all email settings →</a></p>
+         <p style="margin-top:26px;"><a href="/you" style="color:#7c4a9e;">Manage all email settings →</a></p>
        </div>
      </body></html>`,
     { status: ok ? 200 : 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } }

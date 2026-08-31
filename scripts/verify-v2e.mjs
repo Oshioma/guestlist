@@ -803,7 +803,7 @@ try {
     });
     check('admin-added SoundCloud mix publishes immediately with our accent colour',
       scAdd.status === 200
-      && (await anon.html(mzUrl)).includes('w.soundcloud.com/player') && (await anon.html(mzUrl)).includes('f2c94c'));
+      && (await anon.html(mzUrl)).includes('w.soundcloud.com/player') && (await anon.html(mzUrl)).includes('7c4a9e'));
   }
 
   // -------------------------------------------------------------------------

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Guestlist G roundel — recreated from the brand mark; swap this file
+       for the original asset any time, same filename. -->
+  <circle cx="50" cy="50" r="48" fill="#7C4A9E"/>
+  <path fill="#fff" d="M50 24c-15 0-26 6-26 26s11 26 26 26c14 0 25-5 26-22H49v11h13c-2 4-6 6-12 6-9 0-14-5-14-21s5-15 14-15c7 0 11 2 13 7h13C74 29 64 24 50 24z"/>
+</svg>

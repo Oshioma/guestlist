@@ -319,7 +319,7 @@ export function renderEmailHtml(opts: {
     <tr><td align="center" style="padding:0 14px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;">
         <tr><td style="background:#0d0d0c;border-radius:0 0 14px 14px;padding:22px 26px;">
-          <span style="font-size:15px;font-weight:800;letter-spacing:4px;color:#f5f1e6;">GUEST<span style="color:#f2c94c;">LIST</span></span>
+          <span style="font-size:15px;font-weight:800;letter-spacing:4px;color:#f5f1e6;">GUEST<span style="color:#c9a2e8;">LIST</span></span>
         </td></tr>
         <tr><td style="padding:28px 6px 8px;">
           <div style="font-size:24px;font-weight:800;letter-spacing:-0.6px;color:#141414;">${esc(opts.heading)}</div>
@@ -330,7 +330,7 @@ export function renderEmailHtml(opts: {
         </td></tr>
         ${opts.cta ? `
         <tr><td align="center" style="padding:8px 6px 26px;">
-          <a href="${opts.cta.url}" style="display:inline-block;background:#f2c94c;color:#141005;font-weight:800;font-size:14px;letter-spacing:0.4px;text-decoration:none;border-radius:12px;padding:14px 34px;">${esc(opts.cta.label)}</a>
+          <a href="${opts.cta.url}" style="display:inline-block;background:#7c4a9e;color:#ffffff;font-weight:800;font-size:14px;letter-spacing:0.4px;text-decoration:none;border-radius:12px;padding:14px 34px;">${esc(opts.cta.label)}</a>
         </td></tr>` : ''}
         <tr><td style="padding:10px 6px 34px;border-top:1px solid #e4dcc8;">
           <div style="font-size:11px;color:#8a8574;line-height:1.7;">

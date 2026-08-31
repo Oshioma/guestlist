@@ -12,9 +12,10 @@
   --text-soft: rgba(22, 21, 15, 0.82);
   --text-muted: #67655c;
   --text-faint: #93917f;
-  --accent: #f2c94c; /* Guestlist yellow — fills and badges */
-  --accent-ink: #8a6a12; /* Guestlist yellow as TEXT on the light ground */
-  --accent-soft: rgba(242, 201, 76, 0.24);
+  --accent: #7c4a9e; /* Guestlist purple — the brand mark's colour */
+  --accent-ink: #6d4090; /* Guestlist purple as TEXT on the light ground */
+  --accent-soft: rgba(124, 74, 158, 0.16);
+  --on-accent: #ffffff; /* type on purple fills */
   --danger: #b3423a;
   --ok: #45704c;
   --header-bg: rgba(251, 250, 247, 0.86);
@@ -40,8 +41,8 @@
   --text-soft: rgba(234, 234, 234, 0.82);
   --text-muted: #a8a8a8;
   --text-faint: #6f6f6f;
-  --accent-ink: #f2c94c;
-  --accent-soft: rgba(242, 201, 76, 0.14);
+  --accent-ink: #c9a2e8; /* lighter purple reads on the night ground */
+  --accent-soft: rgba(124, 74, 158, 0.3);
   --danger: #e57373;
   --ok: #7a9e7e;
   --header-bg: rgba(7, 7, 7, 0.82);
@@ -98,6 +99,15 @@ button { font-family: inherit; }
   white-space: nowrap;
 }
 .brand span { color: var(--accent-ink); }
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--accent-ink);
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+.brandMark { width: 26px; height: 26px; display: block; }
 
 .mainNav {
   display: flex;
@@ -138,7 +148,7 @@ button { font-family: inherit; }
   padding: 9px 16px;
   border-radius: 999px;
   background: var(--accent);
-  color: #111;
+  color: var(--on-accent, #fff);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 1.2px;
@@ -350,7 +360,7 @@ button { font-family: inherit; }
   top: 12px; right: 52px;
   z-index: 2;
   background: var(--accent);
-  color: #111;
+  color: var(--on-accent, #fff);
   font-size: 10px;
   font-weight: 750;
   letter-spacing: 1.6px;
@@ -583,7 +593,7 @@ button { font-family: inherit; }
   padding: 15px 20px;
   border-radius: 14px;
   background: var(--accent);
-  color: #111;
+  color: var(--on-accent, #fff);
   font-size: 14px;
   font-weight: 750;
   letter-spacing: 1.6px;
