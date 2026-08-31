@@ -3,7 +3,6 @@ import { getCurrentMember } from '@/lib/auth';
 import { getMemberPromoters } from '@/lib/promoterAuth';
 import { queryOne } from '@/lib/db';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { BrandWordmark } from '@/components/BrandWordmark';
 
 export async function SiteHeader() {
   const member = await getCurrentMember();
@@ -18,7 +17,11 @@ export async function SiteHeader() {
     <header className="siteHeader">
       <div className="wrap inner">
         <Link href="/" className="brand" aria-label="Guestlist — home">
-          <BrandWordmark className="brandWordmark" />
+          {/* The real wordmark artwork — purple on the light theme, white in the dark. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="brandWordmark brandOnLight" src="/brand/Guestlist_purple_300dpi.png" alt="GUESTLIST" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="brandWordmark brandOnDark" src="/brand/Guestlist_white_72dpi.png" alt="" aria-hidden />
         </Link>
         <nav className="mainNav">
           <Link href="/events">Events</Link>

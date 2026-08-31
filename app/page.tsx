@@ -185,7 +185,7 @@ export default async function HomePage() {
         </div>
         <div className="wrap homeHeroInner">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="homeBrandMark" src="/brand/logo-mark.svg" alt="" />
+          <img className="homeBrandMark" src="/brand/Guestlist_CirclePurple_300dpi.png" alt="" />
           <div className="homeKicker">A curated guide to dance-music culture</div>
           <h1 className="homeTitle">
             The nights worth
