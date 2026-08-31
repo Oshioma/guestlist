@@ -17,10 +17,36 @@
   --accent-soft: rgba(242, 201, 76, 0.24);
   --danger: #b3423a;
   --ok: #45704c;
+  --header-bg: rgba(251, 250, 247, 0.86);
+  --media-ph: #eae8e1;
+  color-scheme: light;
   --radius: 18px;
   --radius-sm: 12px;
   --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
+}
+
+/* THE NIGHT THEME — the original Guestlist palette. Toggled per visitor
+   (cookie), light is the default. In the dark, gold-as-text goes back to
+   the bright brand yellow. */
+[data-theme="dark"] {
+  --bg: #070707;
+  --bg-raised: #0e0e0e;
+  --surface: rgba(255, 255, 255, 0.03);
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #eaeaea;
+  --text-soft: rgba(234, 234, 234, 0.82);
+  --text-muted: #a8a8a8;
+  --text-faint: #6f6f6f;
+  --accent-ink: #f2c94c;
+  --accent-soft: rgba(242, 201, 76, 0.14);
+  --danger: #e57373;
+  --ok: #7a9e7e;
+  --header-bg: rgba(7, 7, 7, 0.82);
+  --media-ph: #141414;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -51,9 +77,9 @@ button { font-family: inherit; }
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgba(251, 250, 247, 0.86);
+  background: var(--header-bg);
   backdrop-filter: blur(14px);
-  border-bottom: 1px solid rgba(15, 14, 10, 0.6);
+  border-bottom: 1px solid var(--border);
 }
 
 .siteHeader .inner {
@@ -272,7 +298,7 @@ button { font-family: inherit; }
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-raised);
-  border: 1px solid rgba(15, 14, 10, 0.6);
+  border: 1px solid var(--border);
   transition: transform 0.25s ease, border-color 0.25s ease;
   display: flex;
   flex-direction: column;
@@ -411,7 +437,7 @@ button { font-family: inherit; }
   border-radius: 50%;
   border: 2px solid var(--bg-raised);
   margin-left: -8px;
-  background: #eae8e1;
+  background: var(--media-ph);
 }
 .avatarStack img:first-child { margin-left: 0; }
 
@@ -792,7 +818,7 @@ button { font-family: inherit; }
   width: 130px; height: 98px;
   object-fit: cover;
   border-radius: var(--radius-sm);
-  background: #eae8e1;
+  background: var(--media-ph);
 }
 .reviewCard .thumb.empty {
   display: grid; place-items: center;
@@ -1121,7 +1147,7 @@ button { font-family: inherit; }
   align-items: center;
 }
 @media (max-width: 640px) { .perfCard { grid-template-columns: 72px minmax(0, 1fr); } .perfCard .actions { grid-column: 1 / -1; flex-direction: row !important; } }
-.perfCard .thumb { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; background: #eae8e1; }
+.perfCard .thumb { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; background: var(--media-ph); }
 .perfCard h3 { margin: 0 0 4px; font-size: 15.5px; letter-spacing: -0.2px; }
 .perfCard .meta { font-size: 12px; color: var(--text-muted); }
 .perfCard .nums {
@@ -2075,3 +2101,17 @@ button { font-family: inherit; }
   color: #f2f1ec;
   background: rgba(7, 7, 7, 0.25);
 }
+
+/* --- Theme toggle -------------------------------------------------------- */
+.themeToggle {
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-soft);
+  line-height: 1;
+}
+.themeToggle:hover { border-color: var(--accent-ink); }
