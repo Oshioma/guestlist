@@ -2069,6 +2069,63 @@ button { font-family: inherit; }
 .personCard .connectWrap { width: auto; }
 
 /* --- Archive mixes: our card, the platform's player inside ------------- */
+/* ADD AN EVENT — the invitation, sized like one. Full-width panel with a
+   large button, on the pages where someone just saw what's on. */
+.addEventCta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin: 34px 0 12px;
+  padding: 26px clamp(18px, 3vw, 32px);
+  border-radius: calc(var(--radius) + 2px);
+  border: 1px solid var(--accent-soft);
+  background: var(--accent-soft);
+}
+.addEventCtaText { min-width: 0; max-width: 62ch; }
+.addEventCtaTitle {
+  margin: 0;
+  font-size: clamp(19px, 2.6vw, 25px);
+  font-weight: 750;
+  letter-spacing: -0.4px;
+  color: var(--text);
+}
+.addEventCtaSub {
+  margin: 7px 0 0;
+  color: var(--text-soft);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+.addEventCtaBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: 999px;
+  padding: 17px 34px;
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+.addEventCtaBtn:hover { filter: brightness(1.08); }
+@media (max-width: 640px) {
+  .addEventCtaBtn { width: 100%; }
+}
+
+/* Field labels in the You panels (display name and friends). */
+.youFieldLabel {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+.youFieldHint { font-weight: 400; font-size: 12.5px; color: var(--text-muted); }
+
 .mixGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

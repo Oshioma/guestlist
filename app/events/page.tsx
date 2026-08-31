@@ -10,6 +10,7 @@ import { FilterControls } from '@/components/FilterControls';
 import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
 import { toRecCards } from '@/lib/recCards';
 import { PicksHero } from '@/components/PicksHero';
+import { AddEventCta } from '@/components/AddEventCta';
 import { AskPanel } from '@/components/ask/AskPanel';
 
 export const dynamic = 'force-dynamic';
@@ -226,11 +227,10 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
               Browse destinations
             </Link>
           </div>
-          <div className="addPrompt">
-            Know something we’re missing? <Link href="/events/submit">Add an event →</Link>
-          </div>
         </div>
       )}
+
+      <AddEventCta city={city} />
     </main>
   );
 }

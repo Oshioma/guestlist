@@ -7,6 +7,7 @@ import { query } from '@/lib/db';
 import {
   getEmailPrefs, getPrivacy, updateEmailPrefs, updatePrivacy,
 } from '@/lib/privacy';
+import { cleanDisplayName, memberSlug } from '@/lib/members';
 
 export async function GET() {
   try {
@@ -14,8 +15,8 @@ export async function GET() {
     const [privacy, emailPrefs, profile] = await Promise.all([
       getPrivacy(member.id),
       getEmailPrefs(member.id),
-      query<{ bio: string | null; raving_since: number | null; now_doing: string | null; looking_for: string | null; slug: string | null }>(
-        `select bio, raving_since, now_doing, looking_for, slug from members where id = $1`,
+      query<{ display_name: string; bio: string | null; raving_since: number | null; now_doing: string | null; looking_for: string | null; slug: string | null }>(
+        `select display_name, bio, raving_since, now_doing, looking_for, slug from members where id = $1`,
         [member.id]
       ).then((r) => r[0]),
     ]);
@@ -41,6 +42,19 @@ export async function PATCH(req: NextRequest) {
       const p = body.profile;
       const clean = (v: unknown, max: number) =>
         typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
+
+      // The display name is what every other member sees, so it is changed
+      // on its own terms: validated, and the profile slug regenerated with
+      // it so the old name does not linger in the profile URL.
+      if ('displayName' in p) {
+        const name = cleanDisplayName(p.displayName);
+        if (!name) {
+          return NextResponse.json(
+            { error: 'Your name needs to be between 2 and 40 characters' }, { status: 400 });
+        }
+        await query(`update members set display_name = $2, slug = $3 where id = $1`,
+          [member.id, name, memberSlug(name, member.id)]);
+      }
       const year = Number(p.ravingSince);
       await query(
         `update members set

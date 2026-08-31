@@ -447,6 +447,39 @@ console.log('\n— Signup flow —');
   check('signup works', su.status === 200);
   const events = await fresh.fetch('/events');
   check('new member sees events signed in', events.status === 200);
+
+  // A member with no slug would have every link to their profile point at
+  // /members/null, so signup must mint one.
+  const [signedUp] = await q(
+    `select id, slug, display_name from members where display_name = 'Verify Bot' order by created_at desc limit 1`);
+  check('signup generates a profile slug',
+    !!signedUp?.slug && signedUp.slug.startsWith('verify-bot-'));
+  check('that profile page resolves',
+    (await fresh.fetch(`/members/${signedUp.slug}`)).status === 200);
+
+  // Members can rename themselves; the slug follows so the old name does
+  // not linger in the profile URL.
+  const rename = await fresh.fetch('/api/you/settings', {
+    method: 'PATCH', body: JSON.stringify({ profile: { displayName: 'Verifybot' } }),
+  });
+  const [renamed] = await q(
+    `select display_name, slug from members where id = $1`, [signedUp.id]);
+  check('member can change their display name',
+    rename.status === 200 && renamed.display_name === 'Verifybot');
+  check('slug follows the new name, dropping the old one',
+    renamed.slug.startsWith('verifybot-') && !renamed.slug.includes('verify-bot'));
+  check('a one-character name is rejected',
+    (await fresh.fetch('/api/you/settings', {
+      method: 'PATCH', body: JSON.stringify({ profile: { displayName: 'x' } }),
+    })).status === 400);
+
+  const you = await (await fresh.fetch('/you')).text();
+  check('the You page offers the display-name field', you.includes('id="displayName"'));
+  const header = await (await fresh.fetch('/events')).text();
+  check('header no longer carries the + Add Event nav link',
+    !header.includes('+ Add Event'));
+  check('events page carries the big Add an event panel',
+    header.includes('addEventCta') && header.includes('+ Add an event'));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

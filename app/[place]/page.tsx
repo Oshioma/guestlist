@@ -14,6 +14,7 @@ import { EventCard } from '@/components/EventCard';
 import { FollowCityButton } from '@/components/v2c/FollowCityButton';
 import { GuestlistNow } from '@/components/GuestlistNow';
 import { AskPanel } from '@/components/ask/AskPanel';
+import { AddEventCta } from '@/components/AddEventCta';
 import type { EventCard as EventCardType } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
@@ -177,6 +178,8 @@ export default async function PlacePage({ params }: { params: Promise<{ place: s
           )}
         </div>
       )}
+
+      <AddEventCta city={location.name} />
     </main>
   );
 }

@@ -500,7 +500,10 @@ export function PlacesPanel({ initialPlaces, initialPlans }: { initialPlaces: Pl
 
 type Privacy = Record<string, boolean>;
 type EmailPrefs = Record<string, boolean | string>;
-type ProfileFields = { bio: string | null; raving_since: number | null; now_doing: string | null; looking_for: string | null };
+type ProfileFields = {
+  display_name: string; slug: string | null;
+  bio: string | null; raving_since: number | null; now_doing: string | null; looking_for: string | null;
+};
 
 const PRIVACY_LABELS: [string, string][] = [
   ['profile_public', 'Public profile (visible to other members)'],
@@ -542,19 +545,27 @@ export function SettingsPanel({
   const [privacy, setPrivacy] = useState(initialPrivacy);
   const [email, setEmail] = useState(initialEmailPrefs);
   const [profile, setProfile] = useState({
+    displayName: initialProfile.display_name ?? '',
     bio: initialProfile.bio ?? '',
     ravingSince: initialProfile.raving_since ? String(initialProfile.raving_since) : '',
     nowDoing: initialProfile.now_doing ?? '',
     lookingFor: initialProfile.looking_for ?? '',
   });
   const [savedFlash, setSavedFlash] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function patch(body: Record<string, unknown>) {
-    await fetch('/api/you/settings', {
+  async function patch(body: Record<string, unknown>): Promise<boolean> {
+    const res = await fetch('/api/you/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    }).catch(() => {});
+    }).catch(() => null);
+    if (res && !res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? 'Could not save that');
+      return false;
+    }
+    return !!res;
   }
 
   function togglePrivacy(key: string) {
@@ -569,7 +580,8 @@ export function SettingsPanel({
   }
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
-    await patch({ profile });
+    setError(null);
+    if (!(await patch({ profile }))) return;
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 2000);
     router.refresh();
@@ -579,6 +591,15 @@ export function SettingsPanel({
     <div className="youPanel" id="settings">
       <h2 className="youPanelTitle">Your profile</h2>
       <form className="youProfileForm" onSubmit={saveProfile}>
+        <label className="youFieldLabel" htmlFor="displayName">
+          Your name
+          <span className="youFieldHint">
+            What every other member sees — a first name or a nickname is fine.
+          </span>
+        </label>
+        <input id="displayName" placeholder="Your name" value={profile.displayName}
+               maxLength={40} required
+               onChange={(e) => setProfile({ ...profile, displayName: e.target.value })} />
         <textarea placeholder="About you — who you are culturally, not your job title"
                   value={profile.bio} maxLength={600} rows={3}
                   onChange={(e) => setProfile({ ...profile, bio: e.target.value })} />
@@ -593,6 +614,7 @@ export function SettingsPanel({
         <div className="youPanelActions">
           <button className="btnAccent" type="submit">{savedFlash ? '✓ Saved' : 'Save profile'}</button>
         </div>
+        {error && <div className="formError">{error}</div>}
       </form>
 
       <h2 className="youPanelTitle" style={{ marginTop: 26 }}>Privacy</h2>
