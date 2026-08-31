@@ -91,26 +91,14 @@ button { font-family: inherit; }
 }
 
 .brand {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--text);
-  white-space: nowrap;
-}
-.brand span { color: var(--accent-ink); }
-.brand {
   display: inline-flex;
   align-items: center;
-  gap: 11px;
   color: var(--accent-ink);
-  font-weight: 800;
-  letter-spacing: 2px;
 }
+.brandWordmark { height: 22px; width: auto; display: block; }
 .brandMark { width: 40px; height: 40px; display: block; }
 @media (max-width: 720px) {
-  .brand { font-size: 18px; letter-spacing: 1.4px; }
-  .brandMark { width: 32px; height: 32px; }
+  .brandWordmark { height: 17px; }
 }
 
 .mainNav {
@@ -1223,6 +1211,7 @@ button { font-family: inherit; }
   color: #f2f1ec;
 }
 .homeHeroInner .homeKicker { color: var(--accent); }
+.homeBrandMark { width: 64px; height: 64px; margin-bottom: 18px; display: block; }
 .homeHeroInner .homeLead { color: rgba(242, 241, 236, 0.85); }
 .homeHeroInner .btnGhost {
   border-color: rgba(255, 255, 255, 0.4);

@@ -184,6 +184,8 @@ export default async function HomePage() {
           {/* eslint-enable @next/next/no-img-element */}
         </div>
         <div className="wrap homeHeroInner">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="homeBrandMark" src="/brand/logo-mark.svg" alt="" />
           <div className="homeKicker">A curated guide to dance-music culture</div>
           <h1 className="homeTitle">
             The nights worth
