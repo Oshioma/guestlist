@@ -34,7 +34,16 @@ export async function POST(req: NextRequest) {
   if(body.action==='review' && body.momentId && (body.decision==='publish'||body.decision==='reject')) {
     return NextResponse.json(await reviewMoment(body.momentId,body.decision));
   }
-  if(body.action==='match' && body.videoId) return NextResponse.json({matches:await autoMatchArtists(body.videoId)});
+  if(body.action==='bulk-review' && (body.decision==='publish'||body.decision==='reject')) {
+    const status=body.decision==='publish'?'published':'hidden';
+    const rows=await query<{id:string}>(`update artist_video_moments set status=$1::artist_video_status,updated_at=now() where status='review' returning id`,[status]);
+    return NextResponse.json({ok:true,updated:rows.length,decision:body.decision});
+  }
+  if(body.action==='hide-moment' && body.momentId) {
+    const rows=await query<{id:string}>(`update artist_video_moments set status='hidden',updated_at=now() where id=$1 returning id`,[body.momentId]);
+    if(!rows.length) return NextResponse.json({error:'Moment not found'},{status:404});
+    return NextResponse.json({ok:true,hidden:1});
+  }
   if(body.action==='update' && body.videoId) {
     await query(`update artist_videos set is_interview=coalesce($2,is_interview), status=coalesce($3::artist_video_status,status),
       transcript_text=coalesce($4,transcript_text), transcript_status=case when $4::text is not null then 'ready'::video_transcript_status else transcript_status end,
