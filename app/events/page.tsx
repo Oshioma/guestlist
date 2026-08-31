@@ -9,7 +9,7 @@ import { EventCard } from '@/components/EventCard';
 import { FilterControls } from '@/components/FilterControls';
 import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
 import { toRecCards } from '@/lib/recCards';
-import { RecShelf } from '@/components/v2c/RecShelf';
+import { PicksHero } from '@/components/PicksHero';
 import { AskPanel } from '@/components/ask/AskPanel';
 
 export const dynamic = 'force-dynamic';
@@ -99,7 +99,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   if (member && noFilters && (tab === 'for-you' || tab === 'this-weekend')) {
     const window = tab === 'this-weekend' ? weekendWindow() : { from: null, to: null };
     picks = await getRecommendedEvents(member.id, {
-      limit: 6, from: window.from, to: window.to,
+      limit: 8, from: window.from, to: window.to,
     });
     await trackRecommendationImpressions(member.id, picks, `events_${tab}`);
   }
@@ -141,6 +141,14 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
         Nights, parties, festivals and experiences worth leaving the house for —
         curated for people who were raised on this music.
       </p>
+
+      {picks.length > 0 && (
+        <PicksHero
+          title={tab === 'this-weekend' ? 'Your weekend, picked' : 'Picks for you'}
+          surface={`events_${tab}`}
+          events={toRecCards(picks)}
+        />
+      )}
 
       <AskPanel isSignedIn={!!member} />
 
@@ -184,14 +192,6 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
           nearMe: lat != null && lng != null,
         }}
       />
-
-      {picks.length > 0 && (
-        <RecShelf
-          title={tab === 'this-weekend' ? 'Your weekend, picked' : 'Picks for you'}
-          surface={`events_${tab}`}
-          events={toRecCards(picks)}
-        />
-      )}
 
       <div className="resultMeta">
         {events.length === 0
