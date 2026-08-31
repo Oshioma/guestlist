@@ -7,15 +7,30 @@ export function VideoArchiveDesk(){
  const [videos,setVideos]=useState<Video[]>([]); const [moments,setMoments]=useState<Moment[]>([]); const [busy,setBusy]=useState(''); const [msg,setMsg]=useState(''); const [transcript,setTranscript]=useState<Record<string,string>>({});
  async function load(){const r=await fetch('/api/admin/video-archive'); if(r.ok){const j=await r.json();setVideos(j.videos||[]);setMoments(j.moments||[])}}
  useEffect(()=>{load()},[]);
- async function act(body:Record<string,unknown>,key=''){setBusy(key);setMsg('');const r=await fetch('/api/admin/video-archive',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const j=await r.json();setMsg(r.ok?(j.updated!=null?`${j.updated} moments updated.`:j.created?`Created ${j.created} review moments.`:'Saved.'):j.error||'Action failed');setBusy('');if(r.ok)load();return r.ok}
- async function sync(){const ok=await act({action:'sync',channelKey:'oshioma'},'sync');if(ok)setMsg('YouTube catalogue synced.')}
+ async function act(body:Record<string,unknown>,key=''){setBusy(key);setMsg('');const r=await fetch('/api/admin/video-archive',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const j=await r.json();setMsg(r.ok?(j.updated!=null?`${j.updated} moments updated.`:j.created?`Created ${j.created} review moments.`:'Saved.'):j.error||'Action failed');setBusy('');if(r.ok)load();return {ok:r.ok,data:j}}
+ async function sync(){
+   setBusy('sync'); setMsg('Starting YouTube sync…');
+   let reset=true; let total=0; let pages=0;
+   try{
+     while(true){
+       const r=await fetch('/api/admin/video-archive',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'sync',channelKey:'oshioma',reset})});
+       const j=await r.json();
+       if(!r.ok) throw new Error(j.error||'Sync failed');
+       reset=false; pages++; total+=Number(j.processed||0);
+       setMsg(`YouTube sync: ${total} videos processed${j.done?' — complete.':'…'}`);
+       if(j.done) break;
+     }
+     await load();
+   }catch(e){setMsg(e instanceof Error?e.message:'Sync failed');}
+   finally{setBusy('');}
+ }
  async function bulk(decision:'publish'|'reject'){
    const label=decision==='publish'?'publish every moment currently awaiting review':'reject every moment currently awaiting review';
    if(!window.confirm(`Are you sure you want to ${label}?`))return;
    await act({action:'bulk-review',decision},`bulk-${decision}`);
  }
  async function hideMoment(m:Moment){if(!window.confirm(`Remove “${m.title}” from the review queue/public archive? It will be hidden, not permanently erased.`))return;await act({action:'hide-moment',momentId:m.id},m.id)}
- return <div><div className="adminHeader"><div><h1>Video Archive</h1><p className="adminSub">Guestlist interviews → artists → transcript intelligence → timestamped moments → Ask.</p></div><button className="btn" disabled={!!busy} onClick={sync}>{busy==='sync'?'Syncing…':'Sync YouTube channel'}</button></div>
+ return <div><div className="adminHeader"><div><h1>Video Archive</h1><p className="adminSub">Guestlist interviews → artists → transcript intelligence → timestamped moments → Ask.</p></div><button className="btn" disabled={!!busy} onClick={sync}>{busy==='sync'?'Syncing in batches…':'Sync YouTube channel'}</button></div>
  {msg&&<p className="adminSub">{msg}</p>}
  <div style={{display:'grid',gap:12,marginTop:24}}>{videos.map(v=><div className="adminCard" key={v.id}>
   <div style={{display:'grid',gridTemplateColumns:'120px 1fr auto',gap:14,alignItems:'center'}}>{v.thumbnail_url?<img src={v.thumbnail_url} alt="" style={{width:120,aspectRatio:'16/9',objectFit:'cover'}}/>:<div/>}<div><b>{v.title}</b><div className="adminSub">{v.artists?.map(a=>a.name).join(', ')||'Artist not matched'} · {v.moment_count} moments {v.review_count?`· ${v.review_count} awaiting review`:''} · transcript {v.transcript_status}</div></div>
