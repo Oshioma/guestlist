@@ -33,6 +33,20 @@ export async function POST(req: NextRequest) {
     try{return NextResponse.json(await pullYouTubeTranscript(body.videoId))}
     catch(e){await query(`update artist_videos set transcript_status='failed',updated_at=now() where id=$1`,[body.videoId]);return NextResponse.json({error:e instanceof Error?e.message:'Transcript pull failed'},{status:400})}
   }
+  if(body.action==='pull-interview-transcripts'){
+    const limit=Math.min(Math.max(Number(body.limit)||8,1),12);
+    const rows=await query<{id:string}>(`select id from artist_videos
+      where is_interview=true and transcript_status<>'ready'::video_transcript_status
+      order by published_at desc nulls last limit $1`,[limit]);
+    let ready=0,failed=0;
+    const errors:Array<{videoId:string;error:string}>=[];
+    for(const row of rows){
+      try{const result=await pullYouTubeTranscript(row.id);if(result?.found)ready++;else failed++}
+      catch(e){failed++;const message=e instanceof Error?e.message:'Transcript pull failed';errors.push({videoId:row.id,error:message});await query(`update artist_videos set transcript_status='failed',updated_at=now() where id=$1`,[row.id])}
+    }
+    const remainingRows=await query<{count:number}>(`select count(*)::int count from artist_videos where is_interview=true and transcript_status<>'ready'::video_transcript_status`);
+    return NextResponse.json({ok:true,processed:rows.length,ready,failed,remaining:Number(remainingRows[0]?.count||0),errors});
+  }
   if(body.action==='delete-videos' && Array.isArray(body.videoIds)) {
     const ids=[...new Set(body.videoIds.filter((id:unknown)=>typeof id==='string' && id))];
     if(!ids.length) return NextResponse.json({error:'No videos selected'},{status:400});
@@ -63,6 +77,10 @@ export async function POST(req: NextRequest) {
       transcript_text=coalesce($4,transcript_text), transcript_status=case when $4::text is not null then 'ready'::video_transcript_status else transcript_status end,
       transcript_source=case when $4::text is not null then 'manual' else transcript_source end, updated_at=now() where id=$1`,
       [body.videoId, body.isInterview ?? null, body.status ?? null, body.transcript ?? null]);
+    if(body.isInterview===true && body.transcript==null){
+      try{const transcriptResult=await pullYouTubeTranscript(body.videoId);return NextResponse.json({ok:true,autoTranscript:transcriptResult})}
+      catch(e){await query(`update artist_videos set transcript_status='failed',updated_at=now() where id=$1`,[body.videoId]);return NextResponse.json({ok:true,autoTranscript:{found:false,error:e instanceof Error?e.message:'Transcript pull failed'}})}
+    }
     return NextResponse.json({ok:true});
   }
   if(body.action==='moment' && body.videoId && body.title && Number.isFinite(body.startSeconds)) {
