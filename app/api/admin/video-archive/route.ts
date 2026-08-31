@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const me=await admin(); if(!me) return NextResponse.json({error:'Forbidden'},{status:403});
   const body=await req.json();
   if(body.action==='sync') {
-    try { return NextResponse.json(await importYouTubeChannel(body.channelKey || 'oshioma')); }
+    try { return NextResponse.json(await importYouTubeChannel(body.channelKey || 'oshioma', body.reset === true)); }
     catch(e){ return NextResponse.json({error:e instanceof Error?e.message:'Sync failed'},{status:400}); }
   }
   if(body.action==='match' && body.videoId) return NextResponse.json({matches:await autoMatchArtists(body.videoId)});
