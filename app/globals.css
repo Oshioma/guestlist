@@ -1649,6 +1649,128 @@ button { font-family: inherit; }
 .recHide:disabled { opacity: 0.5; cursor: default; }
 .recFeedback { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 4px; }
 
+/* Picks marquee — flyer artwork leads, the way the original site did it.
+   The band is a dark stage in BOTH themes (flyers live on dark), so all
+   type inside is set explicitly, never from theme tokens. */
+.picksHero {
+  position: relative;
+  overflow: hidden;
+  border-radius: calc(var(--radius) + 4px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: #0d0c10;
+  margin: 18px 0 22px;
+}
+.picksHeroBg {
+  position: absolute; inset: -30px;
+  width: calc(100% + 60px); height: calc(100% + 60px);
+  object-fit: cover;
+  filter: blur(34px) saturate(1.05) brightness(0.5);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.picksHero::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(13, 12, 16, 0.55) 0%, rgba(13, 12, 16, 0.35) 40%, rgba(13, 12, 16, 0.92) 100%);
+  pointer-events: none;
+}
+.picksHeroInner {
+  position: relative; z-index: 2;
+  padding: 18px clamp(16px, 3vw, 28px) 16px;
+  color: #f2f1ec;
+}
+.picksHeroTop {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 14px;
+}
+.picksHeroKicker {
+  font-size: 12px; letter-spacing: 2.4px; text-transform: uppercase;
+  font-weight: 700; color: #c9a2e8;
+}
+.picksHeroNav { display: flex; align-items: center; gap: 10px; }
+.picksHeroCount { font-size: 11.5px; letter-spacing: 1px; color: rgba(242, 241, 236, 0.65); }
+.picksArrow {
+  width: 34px; height: 34px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(13, 12, 16, 0.4);
+  color: #f2f1ec; font-size: 20px; line-height: 1;
+  display: grid; place-items: center; padding-bottom: 3px;
+}
+.picksArrow:hover { background: rgba(255, 255, 255, 0.14); }
+.picksStrip {
+  display: flex; gap: 14px; align-items: center;
+  overflow-x: auto; scrollbar-width: none;
+  padding: 6px 2px 10px;
+}
+.picksStrip::-webkit-scrollbar { display: none; }
+.picksTile {
+  flex-shrink: 0;
+  width: clamp(150px, 17vw, 210px);
+  aspect-ratio: 3 / 4;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  padding: 0; cursor: pointer; background: #1a1922;
+  transition: transform 0.25s ease, border-color 0.25s ease, opacity 0.25s ease;
+  opacity: 0.62;
+}
+.picksTile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.picksTileArt { display: block; width: 100%; height: 100%; }
+.picksTileArt > * { width: 100%; height: 100%; }
+.picksTile:hover { opacity: 0.9; }
+.picksTile.active {
+  opacity: 1;
+  transform: scale(1.06);
+  border-color: #fff;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
+}
+.picksHeroFoot {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 18px; flex-wrap: wrap; margin-top: 10px;
+}
+.picksHeroInfo { min-width: 0; max-width: 62ch; }
+.picksHeroTitle {
+  display: block;
+  font-size: clamp(20px, 3.4vw, 34px);
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  line-height: 1.08;
+  text-transform: uppercase;
+  color: #fff;
+  text-wrap: balance;
+}
+.picksHeroTitle:hover { color: #c9a2e8; }
+.picksHeroMeta { margin-top: 7px; font-size: 13.5px; color: rgba(242, 241, 236, 0.8); }
+.picksHeroReasons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.picksHeroReasons .recReason {
+  color: #e6d3f7;
+  background: rgba(124, 74, 158, 0.32);
+  border-color: rgba(201, 162, 232, 0.45);
+}
+.picksHeroActions { display: flex; gap: 10px; flex-wrap: wrap; }
+.picksBtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; padding: 12px 26px;
+  font-size: 12.5px; font-weight: 750; letter-spacing: 1.6px; text-transform: uppercase;
+  border: 1.5px solid transparent; cursor: pointer;
+}
+.picksBtn.solid { background: #fff; color: #16150f; }
+.picksBtn.solid:hover { background: #e6d3f7; }
+.picksBtn.outline { border-color: rgba(255, 255, 255, 0.55); color: #fff; background: rgba(13, 12, 16, 0.3); }
+.picksBtn.outline:hover { border-color: #fff; background: rgba(255, 255, 255, 0.1); }
+.picksHeroFeedback { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; align-items: center; }
+.picksHeroFeedback .chip { background: rgba(13, 12, 16, 0.5); color: #f2f1ec; border-color: rgba(255, 255, 255, 0.3); }
+.picksHide {
+  background: none; border: none; cursor: pointer;
+  color: rgba(242, 241, 236, 0.6); font-size: 11px; padding: 0;
+  text-decoration: underline; text-decoration-color: rgba(242, 241, 236, 0.35);
+}
+.picksHide:hover { color: #fff; }
+@media (max-width: 640px) {
+  .picksTile { width: clamp(130px, 38vw, 170px); }
+  .picksHeroFoot { align-items: flex-start; flex-direction: column; }
+}
+
 /* My Guestlist (member home) */
 .myGuestlist { padding-top: 26px; }
 .myGuestlistTitle { font-size: clamp(24px, 5vw, 32px); letter-spacing: -0.7px; margin: 4px 0 14px; }
