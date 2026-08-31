@@ -2,17 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentMember } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { autoMatchArtists, importYouTubeChannel } from '@/lib/videoArchive';
+import { extractVideoMoments, reviewMoment } from '@/lib/videoMomentsAI';
 
 async function admin() { const m=await getCurrentMember(); return m?.role==='admin' ? m : null; }
 
 export async function GET() {
   if (!await admin()) return NextResponse.json({error:'Forbidden'},{status:403});
-  const videos=await query(`select v.*, coalesce(json_agg(json_build_object('id',a.id,'name',a.name,'slug',a.slug)) filter(where a.id is not null),'[]') artists,
-    (select count(*)::int from artist_video_moments m where m.video_id=v.id) moment_count
+  const videos=await query(`select v.*, coalesce(json_agg(distinct jsonb_build_object('id',a.id,'name',a.name,'slug',a.slug)) filter(where a.id is not null),'[]') artists,
+    (select count(*)::int from artist_video_moments m where m.video_id=v.id) moment_count,
+    (select count(*)::int from artist_video_moments m where m.video_id=v.id and m.status='review') review_count
     from artist_videos v left join artist_video_artists va on va.video_id=v.id left join artists a on a.id=va.artist_id
     group by v.id order by v.published_at desc nulls last limit 500`);
+  const moments=await query(`select m.*,v.title video_title,v.youtube_video_id from artist_video_moments m join artist_videos v on v.id=m.video_id
+    where m.status='review' order by m.created_at desc limit 200`);
   const sync=await query(`select * from youtube_channel_imports order by updated_at desc`);
-  return NextResponse.json({videos,sync});
+  return NextResponse.json({videos,moments,sync});
 }
 
 export async function POST(req: NextRequest) {
@@ -21,6 +25,14 @@ export async function POST(req: NextRequest) {
   if(body.action==='sync') {
     try { return NextResponse.json(await importYouTubeChannel(body.channelKey || 'oshioma')); }
     catch(e){ return NextResponse.json({error:e instanceof Error?e.message:'Sync failed'},{status:400}); }
+  }
+  if(body.action==='match' && body.videoId) return NextResponse.json({matches:await autoMatchArtists(body.videoId)});
+  if(body.action==='extract' && body.videoId) {
+    try { return NextResponse.json(await extractVideoMoments(body.videoId)); }
+    catch(e){ return NextResponse.json({error:e instanceof Error?e.message:'Extraction failed'},{status:400}); }
+  }
+  if(body.action==='review' && body.momentId && (body.decision==='publish'||body.decision==='reject')) {
+    return NextResponse.json(await reviewMoment(body.momentId,body.decision));
   }
   if(body.action==='match' && body.videoId) return NextResponse.json({matches:await autoMatchArtists(body.videoId)});
   if(body.action==='update' && body.videoId) {
