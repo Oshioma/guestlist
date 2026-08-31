@@ -29,7 +29,14 @@ function testVerdict(t: TestFetchResult): { text: string; bad: boolean } {
     return { text: `OK — ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'} via ${t.method?.toUpperCase()}`, bad: false };
   }
   if (t.bot.ok) {
-    return { text: 'Reachable, but no event links found in the raw HTML — the page may render its listings with JavaScript, or its link paths are unrecognised', bad: true };
+    // Naming the method matters: a zero-candidate RSS result means the saved
+    // feed is the problem, not the listing page's markup.
+    return {
+      text: t.method === 'rss'
+        ? 'Reachable, but this feed contains no event links — it is probably a generic blog or news feed. Clear the feed URL below so scans use the listing page again.'
+        : 'Reachable, but no event links found in the raw HTML — the page may render its listings with JavaScript, or its link paths are unrecognised',
+      bad: true,
+    };
   }
   if (t.browser.ok) {
     return { text: `The site filters by user agent: GuestlistBot got ${probeLabel(t.bot)} while a browser user agent got ${probeLabel(t.browser)}`, bad: true };
@@ -38,12 +45,13 @@ function testVerdict(t: TestFetchResult): { text: string; bad: boolean } {
 }
 
 export function SourceControls({
-  id, name, url, active, trust, pollingEnabled, pollFrequencyHours,
+  id, name, url, feedUrl, active, trust, pollingEnabled, pollFrequencyHours,
   city, country, genreIds, genres, countries,
 }: {
   id: string;
   name: string;
   url: string;
+  feedUrl: string | null;
   active: boolean;
   trust: string;
   pollingEnabled: boolean;
@@ -64,6 +72,7 @@ export function SourceControls({
   const [tagOpen, setTagOpen] = useState(false);
   const [tagName, setTagName] = useState(name);
   const [tagUrl, setTagUrl] = useState(url);
+  const [tagFeedUrl, setTagFeedUrl] = useState(feedUrl ?? '');
   const [tagCity, setTagCity] = useState(city ?? '');
   const [tagCountry, setTagCountry] = useState(country ?? '');
   const [tagGenres, setTagGenres] = useState<string[]>(genreIds);
@@ -221,6 +230,12 @@ export function SourceControls({
                  placeholder="https://…" type="url"
                  style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)',
                           borderRadius: 8, color: 'var(--text)', padding: '6px 8px', fontSize: 12 }} />
+          {/* Empty clears the saved feed, sending scans back to the listing page. */}
+          <input value={tagFeedUrl} onChange={(e) => setTagFeedUrl(e.target.value)}
+                 placeholder="Feed URL (blank = scan the page)" type="url"
+                 title="Leave blank to scan the listing page instead of a feed"
+                 style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)',
+                          borderRadius: 8, color: 'var(--text)', padding: '6px 8px', fontSize: 12 }} />
           <input value={tagCity} onChange={(e) => setTagCity(e.target.value)}
                  placeholder="City (London)" maxLength={80}
                  style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)',
@@ -242,7 +257,7 @@ export function SourceControls({
               // The panel stays open on failure so a URL clash or typo can
               // be corrected without losing the edits.
               const ok = await patch({
-                name: tagName, url: tagUrl,
+                name: tagName, url: tagUrl, feedUrl: tagFeedUrl.trim() || null,
                 city: tagCity, country: tagCountry, genreIds: tagGenres,
               });
               if (ok) setTagOpen(false);
@@ -274,6 +289,13 @@ export function SourceControls({
         return (
           <div style={{ fontSize: 11.5, lineHeight: 1.5, color: v.bad ? 'var(--danger)' : 'var(--text-soft)' }}>
             {v.text}
+            {/* The target is the scanner's own choice (feed URL if set, else
+                the listing page). Showing it stops a feed-vs-page mismatch
+                from reading as a contradiction against the scan summary. */}
+            <div style={{ color: 'var(--text-faint)', fontSize: 11, wordBreak: 'break-all' }}>
+              fetched {testResult.method ? `as ${testResult.method.toUpperCase()}: ` : ': '}
+              {testResult.target}
+            </div>
             <div style={{ color: 'var(--text-faint)', fontSize: 11 }}>
               bot: {probeLabel(testResult.bot)} ({testResult.bot.ms}ms) · browser:{' '}
               {probeLabel(testResult.browser)} ({testResult.browser.ms}ms)

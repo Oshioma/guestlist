@@ -205,8 +205,12 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
   } else {
     method = 'html';
     candidates = identifyCandidateLinks(fetched.body, fetched.finalUrl);
-    // Remember an advertised feed for future scans (no extra fetch now).
-    if (!source.feed_url) {
+    // An advertised feed is a FALLBACK, not an upgrade. Only look at one when
+    // the listing page itself yielded nothing: sites routinely advertise a
+    // generic blog or news feed, and adopting one while the page was working
+    // would permanently redirect every later scan to an empty feed. Gating on
+    // an empty page also keeps the probe fetch off the healthy path.
+    if (!source.feed_url && candidates.length === 0) {
       const root = parse(fetched.body);
       const feed = root
         .querySelectorAll('link[rel="alternate"]')
@@ -214,7 +218,18 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
         ?.getAttribute('href');
       const feedAbs = feed && canonicaliseCandidateUrl(feed, fetched.finalUrl);
       if (feedAbs) {
-        await query(`update event_sources set feed_url = $2 where id = $1`, [sourceId, feedAbs]);
+        await sleep(ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
+        const probe = await fetcher(feedAbs, {
+          ...ctx.fetchOptions,
+          accept: 'application/rss+xml,application/atom+xml,application/xml;q=0.9',
+        });
+        const feedCandidates =
+          probe.ok && looksLikeFeed(probe.contentType, probe.body)
+            ? parseFeedLinks(probe.body, probe.finalUrl).length
+            : 0;
+        if (feedCandidates > 0) {
+          await query(`update event_sources set feed_url = $2 where id = $1`, [sourceId, feedAbs]);
+        }
       }
     }
   }
