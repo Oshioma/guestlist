@@ -110,14 +110,13 @@ function parseYouTubeDuration(value?: string): number | null {
 }
 
 // Imports one YouTube uploads page (max 50 videos) per call so a large channel
-// never has to finish inside one Vercel request. The next-page cursor is persisted
-// and the admin UI repeatedly calls this function until done=true.
+// never has to finish inside one Vercel request. For legacy /user/... channels,
+// resolve the exact username via channels.list(forUsername) — never fuzzy search.
 export async function importYouTubeChannel(channelKey = 'oshioma', reset = false): Promise<YouTubeImportResult> {
   const key = process.env.YOUTUBE_API_KEY;
   if (!key) throw new Error('YOUTUBE_API_KEY is not configured');
 
-  type Search = { items?: Array<{ id: { channelId?: string } }> };
-  type Channels = { items?: Array<{ id: string; contentDetails: { relatedPlaylists: { uploads: string } } }> };
+  type Channels = { items?: Array<{ id: string; snippet?: { title?: string }; contentDetails: { relatedPlaylists: { uploads: string } } }> };
   type Playlist = { nextPageToken?: string; items?: Array<{ contentDetails: { videoId: string } }> };
   type Videos = { items?: Array<{ id: string; snippet: { title: string; description?: string; publishedAt?: string; thumbnails?: Record<string,{url:string}> }; contentDetails?: { duration?: string } }> };
   type ImportState = { channel_id: string | null; uploads_playlist_id: string | null; last_page_token: string | null; status: string; video_count: number };
@@ -127,31 +126,43 @@ export async function importYouTubeChannel(channelKey = 'oshioma', reset = false
     [channelKey]
   );
 
-  let channelId = !reset ? (state?.channel_id || '') : '';
-  let uploadsPlaylistId = !reset ? (state?.uploads_playlist_id || '') : '';
-
-  if (!channelId) {
-    if (channelKey.startsWith('UC')) channelId = channelKey;
-    else {
-      const s = await yt<Search>(`search?part=snippet&type=channel&maxResults=5&q=${encodeURIComponent(channelKey)}`, key);
-      channelId = s.items?.[0]?.id.channelId || '';
-    }
-  }
-  if (!channelId) throw new Error(`YouTube channel not found: ${channelKey}`);
-
-  if (!uploadsPlaylistId) {
-    const c = await yt<Channels>(`channels?part=contentDetails&id=${encodeURIComponent(channelId)}`, key);
+  // Resolve the exact channel every time. `oshioma` is the legacy username from
+  // https://www.youtube.com/user/oshioma, so search.list must not be used here.
+  let channelId = '';
+  let uploadsPlaylistId = '';
+  if (channelKey.startsWith('UC')) {
+    channelId = channelKey;
+    const c = await yt<Channels>(`channels?part=snippet,contentDetails&id=${encodeURIComponent(channelId)}`, key);
     uploadsPlaylistId = c.items?.[0]?.contentDetails.relatedPlaylists.uploads || '';
+  } else {
+    const c = await yt<Channels>(`channels?part=snippet,contentDetails&forUsername=${encodeURIComponent(channelKey)}`, key);
+    const exact = c.items?.[0];
+    channelId = exact?.id || '';
+    uploadsPlaylistId = exact?.contentDetails.relatedPlaylists.uploads || '';
   }
+
+  if (!channelId) throw new Error(`Exact YouTube channel not found for username: ${channelKey}`);
   if (!uploadsPlaylistId) throw new Error('Uploads playlist not available');
+
+  // If an earlier fuzzy lookup pointed this importer at the wrong channel, remove
+  // only untouched auto-imported draft rows from that wrong channel and restart.
+  if (state?.channel_id && state.channel_id !== channelId) {
+    await query(`delete from artist_videos v
+      where v.youtube_channel_id=$1
+        and v.status='draft'
+        and v.is_interview=false
+        and v.transcript_status='missing'
+        and not exists (select 1 from artist_video_moments m where m.video_id=v.id)`, [state.channel_id]);
+    reset = true;
+    state = null;
+  }
 
   if (!state || reset) {
     await query(`insert into youtube_channel_imports(channel_key, channel_id, uploads_playlist_id, status, last_page_token, video_count)
       values($1,$2,$3,'syncing',null,0)
       on conflict(channel_key) do update set channel_id=excluded.channel_id,uploads_playlist_id=excluded.uploads_playlist_id,
-      status='syncing',last_page_token=null,video_count=case when $4 then 0 else youtube_channel_imports.video_count end,
-      last_error=null,updated_at=now()`, [channelKey, channelId, uploadsPlaylistId, reset]);
-    state = { channel_id: channelId, uploads_playlist_id: uploadsPlaylistId, last_page_token: null, status: 'syncing', video_count: reset ? 0 : (state?.video_count || 0) };
+      status='syncing',last_page_token=null,video_count=0,last_error=null,updated_at=now()`, [channelKey, channelId, uploadsPlaylistId]);
+    state = { channel_id: channelId, uploads_playlist_id: uploadsPlaylistId, last_page_token: null, status: 'syncing', video_count: 0 };
   } else if (state.status !== 'syncing') {
     await query(`update youtube_channel_imports set status='syncing',last_page_token=null,last_error=null,updated_at=now() where channel_key=$1`, [channelKey]);
     state.last_page_token = null;
@@ -184,10 +195,9 @@ export async function importYouTubeChannel(channelKey = 'oshioma', reset = false
         });
         await query(`insert into artist_videos(youtube_video_id,youtube_channel_id,title,description,thumbnail_url,published_at,duration_seconds,source_url,is_guestlist_original)
           values ${tuples.join(',')}
-          on conflict(youtube_video_id) do update set title=excluded.title,description=excluded.description,
+          on conflict(youtube_video_id) do update set youtube_channel_id=excluded.youtube_channel_id,title=excluded.title,description=excluded.description,
           thumbnail_url=excluded.thumbnail_url,published_at=excluded.published_at,duration_seconds=excluded.duration_seconds,updated_at=now()`, values);
 
-        // Match canonical artists for the whole page in one SQL operation rather than several queries per video.
         await query(`insert into artist_video_artists(video_id,artist_id,role,confidence,source)
           select v.id,a.id,'interviewee',80,'title_match'
           from artist_videos v
