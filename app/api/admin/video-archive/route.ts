@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   if(body.action==='pull-interview-transcripts'){
     const limit=Math.min(Math.max(Number(body.limit)||8,1),12);
     const rows=await query<{id:string}>(`select id from artist_videos
-      where is_interview=true and transcript_status<>'ready'::video_transcript_status
+      where is_interview=true and transcript_status in ('missing'::video_transcript_status,'partial'::video_transcript_status)
       order by published_at desc nulls last limit $1`,[limit]);
     let ready=0,failed=0;
     const errors:Array<{videoId:string;error:string}>=[];
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       try{const result=await pullYouTubeTranscript(row.id);if(result?.found)ready++;else failed++}
       catch(e){failed++;const message=e instanceof Error?e.message:'Transcript pull failed';errors.push({videoId:row.id,error:message});await query(`update artist_videos set transcript_status='failed',updated_at=now() where id=$1`,[row.id])}
     }
-    const remainingRows=await query<{count:number}>(`select count(*)::int count from artist_videos where is_interview=true and transcript_status<>'ready'::video_transcript_status`);
+    const remainingRows=await query<{count:number}>(`select count(*)::int count from artist_videos where is_interview=true and transcript_status in ('missing'::video_transcript_status,'partial'::video_transcript_status)`);
     return NextResponse.json({ok:true,processed:rows.length,ready,failed,remaining:Number(remainingRows[0]?.count||0),errors});
   }
   if(body.action==='delete-videos' && Array.isArray(body.videoIds)) {
