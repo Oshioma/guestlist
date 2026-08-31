@@ -82,17 +82,37 @@ export async function autoMatchArtists(videoId: string) {
   return matches;
 }
 
-export type YouTubeImportResult = { imported: number; updated: number; channelId: string; uploadsPlaylistId: string };
+export type YouTubeImportResult = {
+  imported: number;
+  updated: number;
+  processed: number;
+  channelId: string;
+  uploadsPlaylistId: string;
+  done: boolean;
+  nextPageToken: string | null;
+};
 
 async function yt<T>(path: string, key: string): Promise<T> {
   const sep = path.includes('?') ? '&' : '?';
-  const res = await fetch(`https://www.googleapis.com/youtube/v3/${path}${sep}key=${encodeURIComponent(key)}`, { cache: 'no-store' });
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/${path}${sep}key=${encodeURIComponent(key)}`, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(15000),
+  });
   if (!res.ok) throw new Error(`YouTube API ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return res.json() as Promise<T>;
 }
 
-// Imports metadata only. Guestlist does not download/re-host YouTube video files.
-export async function importYouTubeChannel(channelKey = 'oshioma'): Promise<YouTubeImportResult> {
+function parseYouTubeDuration(value?: string): number | null {
+  if (!value) return null;
+  const match = value.match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
+  if (!match) return null;
+  return (Number(match[1] || 0) * 86400) + (Number(match[2] || 0) * 3600) + (Number(match[3] || 0) * 60) + Number(match[4] || 0);
+}
+
+// Imports one YouTube uploads page (max 50 videos) per call so a large channel
+// never has to finish inside one Vercel request. The next-page cursor is persisted
+// and the admin UI repeatedly calls this function until done=true.
+export async function importYouTubeChannel(channelKey = 'oshioma', reset = false): Promise<YouTubeImportResult> {
   const key = process.env.YOUTUBE_API_KEY;
   if (!key) throw new Error('YOUTUBE_API_KEY is not configured');
 
@@ -100,47 +120,90 @@ export async function importYouTubeChannel(channelKey = 'oshioma'): Promise<YouT
   type Channels = { items?: Array<{ id: string; contentDetails: { relatedPlaylists: { uploads: string } } }> };
   type Playlist = { nextPageToken?: string; items?: Array<{ contentDetails: { videoId: string } }> };
   type Videos = { items?: Array<{ id: string; snippet: { title: string; description?: string; publishedAt?: string; thumbnails?: Record<string,{url:string}> }; contentDetails?: { duration?: string } }> };
+  type ImportState = { channel_id: string | null; uploads_playlist_id: string | null; last_page_token: string | null; status: string; video_count: number };
 
-  let channelId = channelKey.startsWith('UC') ? channelKey : '';
+  let state = await queryOne<ImportState>(
+    `select channel_id,uploads_playlist_id,last_page_token,status,video_count from youtube_channel_imports where channel_key=$1`,
+    [channelKey]
+  );
+
+  let channelId = !reset ? (state?.channel_id || '') : '';
+  let uploadsPlaylistId = !reset ? (state?.uploads_playlist_id || '') : '';
+
   if (!channelId) {
-    const s = await yt<Search>(`search?part=snippet&type=channel&maxResults=5&q=${encodeURIComponent(channelKey)}`, key);
-    channelId = s.items?.[0]?.id.channelId || '';
+    if (channelKey.startsWith('UC')) channelId = channelKey;
+    else {
+      const s = await yt<Search>(`search?part=snippet&type=channel&maxResults=5&q=${encodeURIComponent(channelKey)}`, key);
+      channelId = s.items?.[0]?.id.channelId || '';
+    }
   }
   if (!channelId) throw new Error(`YouTube channel not found: ${channelKey}`);
-  const c = await yt<Channels>(`channels?part=contentDetails&id=${encodeURIComponent(channelId)}`, key);
-  const uploadsPlaylistId = c.items?.[0]?.contentDetails.relatedPlaylists.uploads;
+
+  if (!uploadsPlaylistId) {
+    const c = await yt<Channels>(`channels?part=contentDetails&id=${encodeURIComponent(channelId)}`, key);
+    uploadsPlaylistId = c.items?.[0]?.contentDetails.relatedPlaylists.uploads || '';
+  }
   if (!uploadsPlaylistId) throw new Error('Uploads playlist not available');
 
-  await query(`insert into youtube_channel_imports(channel_key, channel_id, uploads_playlist_id, status)
-    values($1,$2,$3,'syncing') on conflict(channel_key) do update set channel_id=excluded.channel_id,
-    uploads_playlist_id=excluded.uploads_playlist_id,status='syncing',last_error=null,updated_at=now()`,
-    [channelKey, channelId, uploadsPlaylistId]);
+  if (!state || reset) {
+    await query(`insert into youtube_channel_imports(channel_key, channel_id, uploads_playlist_id, status, last_page_token, video_count)
+      values($1,$2,$3,'syncing',null,0)
+      on conflict(channel_key) do update set channel_id=excluded.channel_id,uploads_playlist_id=excluded.uploads_playlist_id,
+      status='syncing',last_page_token=null,video_count=case when $4 then 0 else youtube_channel_imports.video_count end,
+      last_error=null,updated_at=now()`, [channelKey, channelId, uploadsPlaylistId, reset]);
+    state = { channel_id: channelId, uploads_playlist_id: uploadsPlaylistId, last_page_token: null, status: 'syncing', video_count: reset ? 0 : (state?.video_count || 0) };
+  } else if (state.status !== 'syncing') {
+    await query(`update youtube_channel_imports set status='syncing',last_page_token=null,last_error=null,updated_at=now() where channel_key=$1`, [channelKey]);
+    state.last_page_token = null;
+  }
 
-  let pageToken = ''; let imported = 0; let updated = 0;
+  const pageToken = state.last_page_token || '';
+
   try {
-    do {
-      const p = await yt<Playlist>(`playlistItems?part=contentDetails&maxResults=50&playlistId=${encodeURIComponent(uploadsPlaylistId)}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`, key);
-      const ids = (p.items || []).map(i => i.contentDetails.videoId).filter(Boolean);
-      if (ids.length) {
-        const detail = await yt<Videos>(`videos?part=snippet,contentDetails&id=${encodeURIComponent(ids.join(','))}`, key);
-        for (const v of detail.items || []) {
-          const existing = await queryOne<{ id: string }>(`select id from artist_videos where youtube_video_id=$1`, [v.id]);
+    const p = await yt<Playlist>(`playlistItems?part=contentDetails&maxResults=50&playlistId=${encodeURIComponent(uploadsPlaylistId)}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`, key);
+    const ids = (p.items || []).map(i => i.contentDetails.videoId).filter(Boolean);
+    let imported = 0;
+    let updated = 0;
+
+    if (ids.length) {
+      const existing = await query<{ youtube_video_id: string }>(`select youtube_video_id from artist_videos where youtube_video_id = any($1::text[])`, [ids]);
+      const existingIds = new Set(existing.map(r => r.youtube_video_id));
+      imported = ids.filter(id => !existingIds.has(id)).length;
+      updated = ids.length - imported;
+
+      const detail = await yt<Videos>(`videos?part=snippet,contentDetails&id=${encodeURIComponent(ids.join(','))}`, key);
+      const videos = detail.items || [];
+
+      if (videos.length) {
+        const values: unknown[] = [];
+        const tuples = videos.map((v, i) => {
           const thumb = v.snippet.thumbnails?.maxres?.url || v.snippet.thumbnails?.high?.url || v.snippet.thumbnails?.medium?.url || null;
-          await query(`insert into artist_videos(youtube_video_id,youtube_channel_id,title,description,thumbnail_url,published_at,source_url,is_guestlist_original)
-            values($1,$2,$3,$4,$5,$6,$7,true)
-            on conflict(youtube_video_id) do update set title=excluded.title,description=excluded.description,
-              thumbnail_url=excluded.thumbnail_url,published_at=excluded.published_at,updated_at=now()`,
-            [v.id, channelId, v.snippet.title, v.snippet.description || null, thumb, v.snippet.publishedAt || null, `https://www.youtube.com/watch?v=${v.id}`]);
-          const row = await queryOne<{ id: string }>(`select id from artist_videos where youtube_video_id=$1`, [v.id]);
-          if (row) await autoMatchArtists(row.id);
-          existing ? updated++ : imported++;
-        }
+          const offset = i * 9;
+          values.push(v.id, channelId, v.snippet.title, v.snippet.description || null, thumb, v.snippet.publishedAt || null, parseYouTubeDuration(v.contentDetails?.duration), `https://www.youtube.com/watch?v=${v.id}`, true);
+          return `($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5},$${offset+6},$${offset+7},$${offset+8},$${offset+9})`;
+        });
+        await query(`insert into artist_videos(youtube_video_id,youtube_channel_id,title,description,thumbnail_url,published_at,duration_seconds,source_url,is_guestlist_original)
+          values ${tuples.join(',')}
+          on conflict(youtube_video_id) do update set title=excluded.title,description=excluded.description,
+          thumbnail_url=excluded.thumbnail_url,published_at=excluded.published_at,duration_seconds=excluded.duration_seconds,updated_at=now()`, values);
+
+        // Match canonical artists for the whole page in one SQL operation rather than several queries per video.
+        await query(`insert into artist_video_artists(video_id,artist_id,role,confidence,source)
+          select v.id,a.id,'interviewee',80,'title_match'
+          from artist_videos v
+          join artists a on length(a.name)>=3 and (v.title || ' ' || coalesce(v.description,'')) ilike '%' || a.name || '%'
+          where v.youtube_video_id = any($1::text[])
+          on conflict do nothing`, [ids]);
       }
-      pageToken = p.nextPageToken || '';
-    } while (pageToken);
-    await query(`update youtube_channel_imports set status='ready',last_synced_at=now(),last_page_token=null,
-      video_count=$2,updated_at=now() where channel_key=$1`, [channelKey, imported + updated]);
-    return { imported, updated, channelId, uploadsPlaylistId };
+    }
+
+    const nextPageToken = p.nextPageToken || null;
+    const done = !nextPageToken;
+    await query(`update youtube_channel_imports set status=$2,last_synced_at=case when $2='ready' then now() else last_synced_at end,
+      last_page_token=$3,video_count=video_count+$4,last_error=null,updated_at=now() where channel_key=$1`,
+      [channelKey, done ? 'ready' : 'syncing', nextPageToken, ids.length]);
+
+    return { imported, updated, processed: ids.length, channelId, uploadsPlaylistId, done, nextPageToken };
   } catch (e) {
     await query(`update youtube_channel_imports set status='failed',last_error=$2,updated_at=now() where channel_key=$1`,
       [channelKey, e instanceof Error ? e.message : 'Unknown error']);
