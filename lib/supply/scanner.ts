@@ -236,13 +236,32 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
 
   // Which candidates are new for this source?
   const seenRows = candidates.length
-    ? await query<{ url: string }>(
-        `select url from source_seen_urls where source_id = $1 and url = any($2)`,
+    ? await query<{ url: string; extraction_id: string | null }>(
+        `select url, extraction_id from source_seen_urls where source_id = $1 and url = any($2)`,
         [sourceId, candidates]
       )
     : [];
   const seenSet = new Set(seenRows.map((r) => r.url));
   const newCandidates = candidates.filter((u) => !seenSet.has(u));
+
+  // SEEN IS NOT PROCESSED. Every candidate is recorded below, but only
+  // maxExtractionsPerScan of them run per scan — so eligibility has to mean
+  // "no extraction attempted yet", not "never seen before". Keying off seen
+  // alone stranded every candidate past the cap forever: they were marked seen
+  // on the first scan, counted as old on the next, and never extracted.
+  // A URL that already has an extraction (succeeded OR failed) stays skipped;
+  // failures are re-run deliberately from the supply log.
+  const attempted = new Set(
+    seenRows.filter((r) => r.extraction_id !== null).map((r) => r.url)
+  );
+  // Freshly discovered candidates go first, then the backlog, each in page
+  // order. A URL whose extraction threw records no extraction_id and so
+  // returns here next scan; putting new links ahead of it keeps one
+  // persistently broken page from consuming the whole per-scan budget.
+  const pending = [
+    ...candidates.filter((u) => !seenSet.has(u)),
+    ...candidates.filter((u) => seenSet.has(u) && !attempted.has(u)),
+  ];
 
   for (const url of candidates) {
     await query(
@@ -255,7 +274,7 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
   let extracted = 0;
   let failedCount = 0;
   let duplicates = 0;
-  const toProcess = newCandidates.slice(0, supplyConfig.scan.maxExtractionsPerScan);
+  const toProcess = pending.slice(0, supplyConfig.scan.maxExtractionsPerScan);
   for (let i = 0; i < toProcess.length; i++) {
     if (i > 0) await sleep(ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
     try {
