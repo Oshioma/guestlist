@@ -3,6 +3,7 @@ import { getCurrentMember } from '@/lib/auth';
 import { getMemberPromoters } from '@/lib/promoterAuth';
 import { queryOne } from '@/lib/db';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { BrandWordmark } from '@/components/BrandWordmark';
 
 export async function SiteHeader() {
   const member = await getCurrentMember();
@@ -16,10 +17,8 @@ export async function SiteHeader() {
   return (
     <header className="siteHeader">
       <div className="wrap inner">
-        <Link href="/" className="brand">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="brandMark" src="/brand/logo-mark.svg" alt="" />
-          GUESTLIST
+        <Link href="/" className="brand" aria-label="Guestlist — home">
+          <BrandWordmark className="brandWordmark" />
         </Link>
         <nav className="mainNav">
           <Link href="/events">Events</Link>
