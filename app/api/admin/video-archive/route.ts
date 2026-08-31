@@ -26,6 +26,16 @@ export async function POST(req: NextRequest) {
     try { return NextResponse.json(await importYouTubeChannel(body.channelKey || 'oshioma', body.reset === true)); }
     catch(e){ return NextResponse.json({error:e instanceof Error?e.message:'Sync failed'},{status:400}); }
   }
+  if(body.action==='delete-videos' && Array.isArray(body.videoIds)) {
+    const ids=[...new Set(body.videoIds.filter((id:unknown)=>typeof id==='string' && id))];
+    if(!ids.length) return NextResponse.json({error:'No videos selected'},{status:400});
+    // Child records are removed explicitly so this works regardless of FK cascade settings.
+    await query(`delete from artist_video_moment_entities where moment_id in (select id from artist_video_moments where video_id=any($1::uuid[]))`,[ids]);
+    await query(`delete from artist_video_moments where video_id=any($1::uuid[])`,[ids]);
+    await query(`delete from artist_video_artists where video_id=any($1::uuid[])`,[ids]);
+    const rows=await query<{id:string}>(`delete from artist_videos where id=any($1::uuid[]) returning id`,[ids]);
+    return NextResponse.json({ok:true,deleted:rows.length});
+  }
   if(body.action==='match' && body.videoId) return NextResponse.json({matches:await autoMatchArtists(body.videoId)});
   if(body.action==='extract' && body.videoId) {
     try { return NextResponse.json(await extractVideoMoments(body.videoId)); }
