@@ -38,6 +38,9 @@ export type SafeFetchOptions = {
   maxBytes?: number;
   maxRedirects?: number;
   accept?: string;
+  // Diagnostics only (admin test-fetch): override the User-Agent for this
+  // one request. The scanner itself always fetches as GuestlistBot.
+  userAgent?: string;
   // TEST ONLY: hostnames allowed to resolve to otherwise-blocked addresses,
   // so fixtures can run on 127.0.0.1. Never set from request-derived data.
   allowHostsForTests?: string[];
@@ -188,7 +191,7 @@ function requestOnce(
         method: 'GET',
         lookup: makeSafeLookup(opts.allowHostsForTests) as never,
         headers: {
-          'User-Agent': supplyConfig.fetch.userAgent,
+          'User-Agent': opts.userAgent ?? supplyConfig.fetch.userAgent,
           Accept: opts.accept ?? 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.5',
           'Accept-Language': 'en-GB,en;q=0.8',
         },
