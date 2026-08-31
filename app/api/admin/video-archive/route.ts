@@ -18,13 +18,15 @@ export async function GET() {
     group by v.id order by v.published_at desc nulls last limit 500`);
 
   const momentSelect=`select m.*,v.title video_title,v.youtube_video_id,
-      coalesce(a.name,'Unmatched artist') artist_name,a.slug artist_slug
+      coalesce(a.name,'Unmatched artist') artist_name,a.slug artist_slug,a.id artist_id
     from artist_video_moments m join artist_videos v on v.id=m.video_id
     left join lateral (
-      select a2.name,a2.slug from artist_video_artists va2
+      select a2.id,a2.name,a2.slug from artist_video_artists va2
       join artists a2 on a2.id=va2.artist_id
       where va2.video_id=v.id
-      order by case va2.role when 'interviewee' then 0 when 'featured' then 1 else 2 end,va2.confidence desc nulls last
+      order by case when va2.source='admin' then 0 else 1 end,
+               case va2.role when 'interviewee' then 0 when 'featured' then 1 else 2 end,
+               va2.confidence desc nulls last
       limit 1
     ) a on true`;
   const moments=await query(`${momentSelect} where m.status='review' order by a.name nulls last,v.published_at desc nulls last,m.start_seconds limit 300`);
@@ -63,6 +65,22 @@ export async function POST(req: NextRequest) {
     await query(`delete from artist_video_artists where video_id=any($1::uuid[])`,[ids]);
     const rows=await query<{id:string}>(`delete from artist_videos where id=any($1::uuid[]) returning id`,[ids]);
     return NextResponse.json({ok:true,deleted:rows.length});
+  }
+  if(body.action==='change-artist' && Array.isArray(body.videoIds) && typeof body.artistName==='string'){
+    const ids=[...new Set(body.videoIds.filter((id:unknown)=>typeof id==='string'&&id))];
+    const name=body.artistName.trim();
+    if(!ids.length||!name) return NextResponse.json({error:'Video and artist are required'},{status:400});
+    let artists=await query<{id:string;name:string;slug:string}>(`select id,name,slug from artists where lower(name)=lower($1) order by name limit 2`,[name]);
+    if(!artists.length){
+      artists=await query<{id:string;name:string;slug:string}>(`select id,name,slug from artists where name ilike '%'||$1||'%' order by case when name ilike $1||'%' then 0 else 1 end,length(name),name limit 6`,[name]);
+      if(artists.length!==1) return NextResponse.json({error:artists.length?`More than one artist matches. Enter the exact name: ${artists.map(a=>a.name).join(', ')}`:`No artist found matching “${name}”.`},{status:400});
+    }
+    const artist=artists[0];
+    for(const videoId of ids){
+      await query(`delete from artist_video_artists where video_id=$1 and role='interviewee'`,[videoId]);
+      await query(`insert into artist_video_artists(video_id,artist_id,role,confidence,source) values($1,$2,'interviewee',100,'admin') on conflict(video_id,artist_id,role) do update set confidence=100,source='admin'`,[videoId,artist.id]);
+    }
+    return NextResponse.json({ok:true,updated:ids.length,artist});
   }
   if(body.action==='match' && body.videoId) return NextResponse.json({matches:await autoMatchArtists(body.videoId)});
   if(body.action==='extract' && body.videoId) {try{return NextResponse.json(await extractVideoMoments(body.videoId))}catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Extraction failed'},{status:400})}}
