@@ -34,12 +34,13 @@ export async function extractVideoMoments(videoId: string) {
 
   const prompt = `You are indexing an original Guestlist DJ/artist interview.\n\nVIDEO: ${video.title}\nDURATION_SECONDS: ${video.duration_seconds ?? 'unknown'}\n\nTRANSCRIPT:\n${video.transcript_text.slice(0, 120000)}\n\nReturn ONLY valid JSON: {"moments":[...]}. Identify 4-12 genuinely useful self-contained moments. Each moment must use only facts actually present in the transcript. Fields: startSeconds integer, endSeconds integer|null, title concise, summary 1 sentence, excerpt short verbatim excerpt if useful, topicSlug lowercase-hyphenated, topicLabel human label. If timestamps are absent from the transcript, use startSeconds 0 and do not pretend to know an exact timestamp. Never invent artists, clubs, dates, genres or stories.`;
 
+  const model = process.env.INTERVIEW_AI_MODEL || 'claude-sonnet-4-6';
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
-    body: JSON.stringify({model:process.env.INTERVIEW_AI_MODEL || 'claude-sonnet-4-20250514',max_tokens:3500,messages:[{role:'user',content:prompt}]})
+    body: JSON.stringify({model,max_tokens:3500,messages:[{role:'user',content:prompt}]})
   });
-  if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0,300)}`);
+  if (!res.ok) throw new Error(`Claude ${res.status} (${model}): ${(await res.text()).slice(0,300)}`);
   const data = await res.json() as ClaudeResponse;
   const text = data.content?.find(c=>c.type==='text')?.text || '';
   let parsed: {moments?: unknown[]};
@@ -55,7 +56,7 @@ export async function extractVideoMoments(videoId: string) {
       values($1,$2,$3,$4,$5,$6,$7,$8,'review',85,'ai') on conflict do nothing`,
       [videoId,start,end,m.title.trim(),m.summary?.trim()||null,m.excerpt?.trim()||null,m.topicSlug?.trim()||null,m.topicLabel?.trim()||null]);
   }
-  return {created:moments.length};
+  return {created:moments.length,model};
 }
 
 export async function reviewMoment(momentId: string, decision: 'publish'|'reject') {
