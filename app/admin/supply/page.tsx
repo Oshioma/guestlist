@@ -3,7 +3,7 @@
 // failures. Failures are never silently swallowed — they all land here.
 
 import Link from 'next/link';
-import { query } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
 import { fmtDate } from '@/lib/util';
 import { RetryExtraction } from '@/components/admin/RetryExtraction';
 
@@ -34,8 +34,41 @@ type Row = {
   warnings: string[];
 };
 
-export default async function SupplyPage() {
-  const [rows, stats] = await Promise.all([
+// Outcomes that produced or matched an event. Everything else is a failure
+// worth reading a reason for.
+const OK_STATUSES = ['succeeded', 'possible_duplicate', 'duplicate_linked'];
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export default async function SupplyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ source?: string; status?: string }>;
+}) {
+  const params = await searchParams;
+  // Reject anything that is not a real id or a known status, so a hand-edited
+  // query string cannot reach the SQL.
+  const sourceFilter = UUID.test(params.source ?? '') ? params.source! : null;
+  const statusFilter =
+    params.status === 'failures' || (params.status && STATUS_LABEL[params.status])
+      ? params.status
+      : null;
+
+  const args: unknown[] = [];
+  const where: string[] = [];
+  if (sourceFilter) { args.push(sourceFilter); where.push(`x.source_id = $${args.length}`); }
+  if (statusFilter === 'failures') {
+    args.push(OK_STATUSES); where.push(`not (x.status = any($${args.length}))`);
+  } else if (statusFilter) {
+    args.push(statusFilter); where.push(`x.status = $${args.length}`);
+  }
+  const clause = where.length ? `where ${where.join(' and ')}` : '';
+
+  // Status chips count within the source only, so the row of chips stays put
+  // while a status filter is applied.
+  const sourceArgs = sourceFilter ? [sourceFilter] : [];
+  const sourceClause = sourceFilter ? 'where x.source_id = $1' : '';
+
+  const [rows, stats, statusCounts, filteredSource] = await Promise.all([
     query<Row>(
       `select x.id, x.url, x.status, x.failure_detail, x.overall_confidence, x.relevance,
               x.duplicate_state, x.structured_data_found, x.ai_used, x.ai_model,
@@ -45,8 +78,10 @@ export default async function SupplyPage() {
          from extractions x
          left join events e on e.id = x.event_id
          left join event_sources s on s.id = x.source_id
+        ${clause}
         order by x.created_at desc
-        limit 100`
+        limit 100`,
+      args
     ),
     query<{ n: number; ok: number; ai: number; structured: number; tokens_in: number; tokens_out: number }>(
       `select count(*)::int as n,
@@ -55,10 +90,32 @@ export default async function SupplyPage() {
               count(*) filter (where structured_data_found)::int as structured,
               coalesce(sum(ai_input_tokens), 0)::int as tokens_in,
               coalesce(sum(ai_output_tokens), 0)::int as tokens_out
-         from extractions`
+         from extractions x ${clause}`,
+      args
     ),
+    query<{ status: string; n: number }>(
+      `select x.status, count(*)::int as n from extractions x ${sourceClause}
+        group by x.status order by n desc`,
+      sourceArgs
+    ),
+    sourceFilter
+      ? queryOne<{ name: string }>(`select name from event_sources where id = $1`, [sourceFilter])
+      : Promise.resolve(null),
   ]);
   const s = stats[0];
+  const failureCount = statusCounts
+    .filter((c) => !OK_STATUSES.includes(c.status) && c.status !== 'processing')
+    .reduce((n, c) => n + c.n, 0);
+
+  const filterHref = (next: { source?: string | null; status?: string | null }) => {
+    const q = new URLSearchParams();
+    const src = next.source === undefined ? sourceFilter : next.source;
+    const st = next.status === undefined ? statusFilter : next.status;
+    if (src) q.set('source', src);
+    if (st) q.set('status', st);
+    const qs = q.toString();
+    return qs ? `/admin/supply?${qs}` : '/admin/supply';
+  };
 
   return (
     <main>
@@ -68,6 +125,40 @@ export default async function SupplyPage() {
         {s.structured} hit structured data · {s.ai} used AI ({s.tokens_in.toLocaleString()} in /{' '}
         {s.tokens_out.toLocaleString()} out tokens).
       </p>
+
+      {filteredSource && (
+        <p className="adminSub" style={{ marginTop: -6 }}>
+          Filtered to <strong>{filteredSource.name}</strong> ·{' '}
+          <Link href={filterHref({ source: null, status: null })} style={{ textDecoration: 'underline' }}>
+            show all sources
+          </Link>
+        </p>
+      )}
+
+      {/* A source's failures are only useful if you can isolate them — this is
+          the path from "10 failed" on the sources desk to the actual reasons. */}
+      <div className="chipRow" style={{ marginBottom: 18 }}>
+        <Link className={`chip${!statusFilter ? ' active' : ''}`} href={filterHref({ status: null })}>
+          All outcomes
+        </Link>
+        {failureCount > 0 && (
+          <Link
+            className={`chip${statusFilter === 'failures' ? ' active' : ''}`}
+            href={filterHref({ status: statusFilter === 'failures' ? null : 'failures' })}
+          >
+            Failures only ({failureCount})
+          </Link>
+        )}
+        {statusCounts.map((c) => (
+          <Link
+            key={c.status}
+            className={`chip${statusFilter === c.status ? ' active' : ''}`}
+            href={filterHref({ status: statusFilter === c.status ? null : c.status })}
+          >
+            {STATUS_LABEL[c.status] ?? c.status} ({c.n})
+          </Link>
+        ))}
+      </div>
 
       <div className="adminTableWrap">
         <table className="adminTable">
@@ -142,7 +233,11 @@ export default async function SupplyPage() {
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={7} style={{ color: 'var(--text-faint)' }}>No extractions yet.</td></tr>
+              <tr><td colSpan={7} style={{ color: 'var(--text-faint)' }}>
+                {sourceFilter || statusFilter
+                  ? 'No extractions match these filters.'
+                  : 'No extractions yet.'}
+              </td></tr>
             )}
           </tbody>
         </table>
