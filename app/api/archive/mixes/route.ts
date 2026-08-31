@@ -24,21 +24,40 @@ export async function POST(req: NextRequest) {
         { status: 400 });
     }
 
-    const event = await queryOne<{ id: string }>(
-      `select id from archive_events where id = $1 and status <> 'rejected'`,
-      [String(body.archiveEventId ?? '')]);
-    if (!event) return NextResponse.json({ error: 'Night not found' }, { status: 404 });
+    // A mix targets a specific night OR a scene/club directly.
+    let eventId: string | null = null;
+    let sceneId: string | null = null;
+    if (body.archiveEventId) {
+      const event = await queryOne<{ id: string }>(
+        `select id from archive_events where id = $1 and status <> 'rejected'`,
+        [String(body.archiveEventId)]);
+      if (!event) return NextResponse.json({ error: 'Night not found' }, { status: 404 });
+      eventId = event.id;
+    } else if (body.sceneEntityId) {
+      const scene = await queryOne<{ id: string }>(
+        `select id from scene_entities where id = $1 and status = 'approved'`,
+        [String(body.sceneEntityId)]);
+      if (!scene) return NextResponse.json({ error: 'Scene not found' }, { status: 404 });
+      sceneId = scene.id;
+    } else {
+      return NextResponse.json({ error: 'A night or a scene is required' }, { status: 400 });
+    }
 
     const status = member.role === 'admin' ? 'published' : 'pending';
     const row = await queryOne<{ id: string }>(
       `insert into archive_mixes
-         (archive_event_id, title, artist_name, platform, url, contributed_by, credit_contributor, status, published_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, case when $8 = 'published' then now() end)
-       on conflict (archive_event_id, url) do nothing
+         (archive_event_id, scene_entity_id, title, artist_name, platform, url,
+          contributed_by, credit_contributor, status, published_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, case when $9 = 'published' then now() end)
+       on conflict do nothing
        returning id`,
-      [event.id, title, artist, parsed.platform, parsed.canonicalUrl, member.id,
+      [eventId, sceneId, title, artist, parsed.platform, parsed.canonicalUrl, member.id,
        body.credit !== false, status]);
-    if (!row) return NextResponse.json({ error: 'That mix is already on this night' }, { status: 409 });
+    if (!row) {
+      return NextResponse.json(
+        { error: eventId ? 'That mix is already on this night' : 'That mix is already on this scene' },
+        { status: 409 });
+    }
 
     await track('archive_contribution', {
       memberId: member.id,

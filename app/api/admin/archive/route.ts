@@ -87,13 +87,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'publish_mix' || action === 'reject_mix') {
-      const row = await queryOne<{ id: string; archive_event_id: string }>(
+      const row = await queryOne<{ id: string; archive_event_id: string | null }>(
         `update archive_mixes set status = $2,
                 published_at = case when $2 = 'published' then coalesce(published_at, now()) end
           where id = $1 returning id, archive_event_id`,
         [String(body.mixId ?? ''), action === 'publish_mix' ? 'published' : 'rejected']);
       if (!row) return NextResponse.json({ error: 'Mix not found' }, { status: 404 });
-      if (action === 'publish_mix') {
+      if (action === 'publish_mix' && row.archive_event_id) {
         await notifyAttendees(row.archive_event_id, 'A mix from a night you were at is now playable');
       }
       return NextResponse.json({ ok: true });

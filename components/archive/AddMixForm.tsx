@@ -5,7 +5,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export function AddMixForm({ archiveEventId, isSignedIn }: { archiveEventId: string; isSignedIn: boolean }) {
+export function AddMixForm({
+  archiveEventId,
+  sceneEntityId,
+  label = '+ Add a mix from this night',
+  isSignedIn,
+}: {
+  archiveEventId?: string;
+  sceneEntityId?: string;
+  label?: string;
+  isSignedIn: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState('');
@@ -21,7 +31,7 @@ export function AddMixForm({ archiveEventId, isSignedIn }: { archiveEventId: str
   if (!open) {
     return (
       <button className="btnGhost" type="button" onClick={() => setOpen(true)}>
-        + Add a mix from this night
+        {label}
       </button>
     );
   }
@@ -35,7 +45,7 @@ export function AddMixForm({ archiveEventId, isSignedIn }: { archiveEventId: str
       const res = await fetch('/api/archive/mixes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archiveEventId, url, title, artist }),
+        body: JSON.stringify({ archiveEventId, sceneEntityId, url, title, artist }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
