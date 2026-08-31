@@ -11,6 +11,24 @@ export const FIELD_SOURCE_VALUES = [
 ] as const;
 export type FieldSource = (typeof FIELD_SOURCE_VALUES)[number];
 
+// ADVISORY FIELD, NEVER FATAL. `notes` is free text the model may add for a
+// human reader — it only ever becomes a warning. Models routinely return a
+// single note as a bare string instead of an array, and that alone used to
+// fail the whole parse and throw away an otherwise-valid extraction
+// ("invalid_shape: notes: expected array, received string"). So normalise
+// instead of validating: wrap a scalar, drop non-strings, and clamp length and
+// count rather than erroring on them. Data-bearing arrays such as `artists`
+// stay strict on purpose — silently reshaping those would invent content.
+const advisoryNotes = z
+  .preprocess((v) => {
+    const arr = typeof v === 'string' ? [v] : Array.isArray(v) ? v : [];
+    return arr
+      .filter((n): n is string => typeof n === 'string')
+      .slice(0, 20)
+      .map((n) => n.slice(0, 300));
+  }, z.array(z.string()))
+  .default([]);
+
 const nullableTrimmed = z
   .string()
   .transform((s) => s.trim())
@@ -129,7 +147,7 @@ export const aiProposalSchema = z.object({
     .optional()
     .transform((v) => v ?? null),
   field_confidence: z.record(z.string(), confidence).default({}),
-  notes: z.array(z.string().max(300)).max(20).default([]),
+  notes: advisoryNotes,
 });
 
 export type AIProposal = z.infer<typeof aiProposalSchema>;
