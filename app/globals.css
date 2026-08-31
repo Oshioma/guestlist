@@ -96,6 +96,9 @@ button { font-family: inherit; }
   color: var(--accent-ink);
 }
 .brandWordmark { height: 22px; width: auto; display: block; }
+.brandOnDark { display: none; }
+[data-theme="dark"] .brandOnLight { display: none; }
+[data-theme="dark"] .brandOnDark { display: block; }
 .brandMark { width: 40px; height: 40px; display: block; }
 @media (max-width: 720px) {
   .brandWordmark { height: 17px; }
