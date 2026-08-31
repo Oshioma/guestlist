@@ -5,6 +5,10 @@
 // else is rejected with a clear message, which also guarantees every mix in
 // the archive actually plays in-page.
 
+// Every platform's player renders at the same height so mix cards line
+// up in a grid regardless of where the audio lives.
+export const MIX_PLAYER_HEIGHT = 180;
+
 export type MixPlatform = 'youtube' | 'soundcloud' | 'mixcloud';
 
 export type ParsedMix = {
@@ -32,7 +36,7 @@ export function parseMixUrl(raw: string): ParsedMix | null {
       platform: 'youtube',
       canonicalUrl: `https://www.youtube.com/watch?v=${id}`,
       embedSrc: `https://www.youtube-nocookie.com/embed/${id}`,
-      height: 200,
+      height: MIX_PLAYER_HEIGHT,
     };
   }
 
@@ -46,7 +50,7 @@ export function parseMixUrl(raw: string): ParsedMix | null {
       // Widget takes the page URL; the accent colour matches Guestlist.
       embedSrc: `https://w.soundcloud.com/player/?url=${encodeURIComponent(canonical)}`
         + '&color=%237c4a9e&auto_play=false&hide_related=true&show_comments=false&show_teaser=false',
-      height: 166,
+      height: MIX_PLAYER_HEIGHT,
     };
   }
 
@@ -58,8 +62,8 @@ export function parseMixUrl(raw: string): ParsedMix | null {
       platform: 'mixcloud',
       canonicalUrl: `https://www.mixcloud.com${feed}`,
       embedSrc: `https://player-widget.mixcloud.com/widget/iframe/?feed=${encodeURIComponent(feed)}`
-        + '&hide_cover=1&light=0',
-      height: 120,
+        + '&hide_cover=0&light=0',
+      height: MIX_PLAYER_HEIGHT,
     };
   }
 

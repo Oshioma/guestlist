@@ -2084,6 +2084,10 @@ button { font-family: inherit; }
   flex-direction: column;
   gap: 8px;
 }
+/* Every player is the same height (see MIX_PLAYER_HEIGHT), and the footer
+   pins to the card's bottom edge so rows in the grid line up. */
+.mixCard .mixFrame { flex-shrink: 0; }
+.mixCard .mixFoot { margin-top: auto; }
 .mixCardHead {
   display: flex;
   align-items: baseline;
