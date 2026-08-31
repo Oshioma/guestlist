@@ -80,8 +80,29 @@ button { font-family: inherit; }
   z-index: 50;
   background: var(--header-bg);
   backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border);
 }
+/* The grey line belongs to the navigation row; the account strip sits
+   under it, which is what buys the nav its size. */
+.headerMain { border-bottom: 1px solid var(--border); }
+.headerUnderbar { font-size: 11.5px; }
+.headerUnderbarInner {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+  min-height: 30px;
+}
+.signOutLink {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+}
+.signOutLink:hover { color: var(--text); }
 
 .siteHeader .inner {
   display: flex;
@@ -107,13 +128,14 @@ button { font-family: inherit; }
 .mainNav {
   display: flex;
   align-items: center;
-  gap: 20px;
-  font-size: 12px;
+  gap: 26px;
+  font-size: 15px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 1.4px;
-  color: var(--text-muted);
+  letter-spacing: 1.1px;
+  color: var(--text-soft);
 }
-.mainNav a:hover { color: var(--text); }
+.mainNav a:hover { color: var(--accent-ink); }
 .mainNav a.active { color: var(--text); }
 
 .headerRight {
@@ -1601,7 +1623,7 @@ button { font-family: inherit; }
 /* Mobile header: scroll the nav instead of overflowing the page. */
 @media (max-width: 720px) {
   .siteHeader .inner { gap: 14px; height: auto; min-height: 54px; flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
-  .mainNav { order: 3; flex-basis: 100%; overflow-x: auto; gap: 16px; white-space: nowrap; padding-bottom: 4px; scrollbar-width: none; }
+  .mainNav { order: 3; flex-basis: 100%; overflow-x: auto; gap: 18px; font-size: 13.5px; white-space: nowrap; padding-bottom: 4px; scrollbar-width: none; }
   .mainNav::-webkit-scrollbar { display: none; }
   .headerRight { gap: 10px; }
 }
