@@ -17,7 +17,9 @@ export async function SiteHeader() {
     <header className="siteHeader">
       <div className="wrap inner">
         <Link href="/" className="brand">
-          Guest<span>list</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="brandMark" src="/brand/logo-mark.svg" alt="" />
+          GUESTLIST
         </Link>
         <nav className="mainNav">
           <Link href="/events">Events</Link>

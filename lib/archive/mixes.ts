@@ -45,7 +45,7 @@ export function parseMixUrl(raw: string): ParsedMix | null {
       canonicalUrl: canonical,
       // Widget takes the page URL; the accent colour matches Guestlist.
       embedSrc: `https://w.soundcloud.com/player/?url=${encodeURIComponent(canonical)}`
-        + '&color=%23f2c94c&auto_play=false&hide_related=true&show_comments=false&show_teaser=false',
+        + '&color=%237c4a9e&auto_play=false&hide_related=true&show_comments=false&show_teaser=false',
       height: 166,
     };
   }
