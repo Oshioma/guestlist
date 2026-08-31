@@ -273,7 +273,16 @@ export function SourceControls({
             <>
               {scanResult.candidatesFound} candidate URL{scanResult.candidatesFound === 1 ? '' : 's'} ·{' '}
               {scanResult.newCandidates} new · {scanResult.extracted} extracted ·{' '}
-              {scanResult.duplicates} duplicate · {scanResult.failed} failed
+              {scanResult.duplicates} duplicate ·{' '}
+              {/* Failures carry a stored reason — link straight to it. */}
+              {scanResult.failed > 0 ? (
+                <a href={`/admin/supply?source=${id}&status=failures`}
+                   style={{ textDecoration: 'underline', color: 'var(--danger)' }}>
+                  {scanResult.failed} failed — why?
+                </a>
+              ) : (
+                <>{scanResult.failed} failed</>
+              )}
               {scanResult.method && <> · via {scanResult.method.toUpperCase()}</>}
               {scanResult.extracted > 0 && (
                 <> — <a href="/admin/events?state=new" style={{ textDecoration: 'underline' }}>review →</a></>
