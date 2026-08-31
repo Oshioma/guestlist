@@ -2,7 +2,7 @@
    Continues the visual language of the original landing page. */
 
 :root {
-  --bg: #fbfaf7;
+  --bg: #ffffff;
   --bg-raised: #ffffff;
   --surface: rgba(15, 14, 10, 0.035);
   --surface-hover: rgba(15, 14, 10, 0.07);
@@ -18,7 +18,7 @@
   --on-accent: #ffffff; /* type on purple fills */
   --danger: #b3423a;
   --ok: #45704c;
-  --header-bg: rgba(251, 250, 247, 0.86);
+  --header-bg: rgba(255, 255, 255, 0.86);
   --media-ph: #eae8e1;
   color-scheme: light;
   --radius: 18px;
@@ -2166,7 +2166,7 @@ button { font-family: inherit; }
 .askCard {
   display: flex;
   gap: 12px;
-  background: var(--bg, #fbfaf7);
+  background: var(--bg, #ffffff);
   border: 1px solid var(--border, #ddd);
   border-radius: 12px;
   padding: 10px;
@@ -2206,7 +2206,7 @@ button { font-family: inherit; }
 .askInputRow input {
   flex: 1;
   min-width: 0;
-  background: var(--bg, #fbfaf7);
+  background: var(--bg, #ffffff);
   border: 1px solid var(--border-strong, #bbb);
   border-radius: 999px;
   color: var(--text, #16150f);

@@ -365,8 +365,16 @@ try {
   {
     check('/clubmessenger renders for members', (await oshi.fetch('/clubmessenger')).status === 200);
     const anonPage = await anon.fetch('/clubmessenger');
+    const anonHtml = await anonPage.text();
     check('/clubmessenger renders a join prompt for anon',
-      anonPage.status === 200 && (await anonPage.text()).includes('Join Guestlist'));
+      anonPage.status === 200 && anonHtml.includes('Join Guestlist'));
+    check('anon still sees what is on tonight',
+      anonHtml.includes('Verify Warehouse Night') && anonHtml.includes('Sign in to see who’s out'));
+    const memberNames = await q(`select display_name from members where id = any($1)`,
+      [[ids.nadia, ids.dan, ids.kwame, ids.jules]]);
+    check('anon never sees who is there — no names, no here-now counts',
+      !anonHtml.includes('here now')
+      && memberNames.every((m) => !anonHtml.includes(m.display_name)));
     check('event room page renders', (await nadia.fetch(`/clubmessenger/events/${E}`)).status === 200);
     const heatHtml = await (await oshi.fetch('/clubmessenger')).text();
     check('honest heat: tiny numbers earn no Heating up badge', !heatHtml.includes('Heating up'));
