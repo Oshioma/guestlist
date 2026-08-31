@@ -6,6 +6,27 @@ import { cleanGenreIds, cleanPlace } from '@/lib/util';
 
 const TRUST_VALUES = ['new', 'trusted', 'restricted', 'blocked'];
 
+export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    const admin = await requireAdmin();
+    const { id } = await ctx.params;
+    // Scan history and genre tags cascade; events found through this source
+    // stay (their source_id nulls out) — deleting a source never deletes
+    // the events it discovered.
+    const row = await queryOne<{ name: string; url: string }>(
+      `delete from event_sources where id = $1 returning name, url`, [id]);
+    if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    await audit('source_deleted', { actorId: admin.id, detail: { sourceId: id, name: row.name, url: row.url } });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    console.error(err);
+    return NextResponse.json({ error: 'Something went wrong' }, { status: 500 });
+  }
+}
+
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const admin = await requireAdmin();

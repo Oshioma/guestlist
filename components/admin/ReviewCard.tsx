@@ -71,12 +71,13 @@ export function ReviewCard({ event }: { event: AdminEventRow }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  async function call(label: string, path: string, body?: unknown) {
+  async function call(label: string, path: string, body?: unknown, method?: string) {
     setBusy(label);
     setError('');
     const res = await fetch(path, {
-      method: body === undefined ? 'POST' : 'PATCH',
+      method: method ?? (body === undefined ? 'POST' : 'PATCH'),
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body ?? {}),
     });
@@ -226,6 +227,20 @@ export function ReviewCard({ event }: { event: AdminEventRow }) {
         <Link className="btnGhost" style={{ textAlign: 'center' }} href={`/events/${event.slug}`}>
           Preview
         </Link>
+        {/* Permanent — two clicks required, never a browser popup. */}
+        <button
+          className="btnGhost"
+          style={{ color: 'var(--danger)', borderColor: confirmDelete ? 'var(--danger)' : undefined }}
+          disabled={!!busy}
+          type="button"
+          onClick={() => {
+            if (!confirmDelete) { setConfirmDelete(true); return; }
+            call('delete', `/api/admin/events/${event.id}`, undefined, 'DELETE');
+          }}
+          onBlur={() => setConfirmDelete(false)}
+        >
+          {busy === 'delete' ? '…' : confirmDelete ? 'Really delete?' : 'Delete'}
+        </button>
       </div>
     </div>
   );

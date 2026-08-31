@@ -283,7 +283,18 @@ try {
     check('/people shows Nadia (shared The End, 1999–2002 overlap)', html.includes('Nadia K'));
     check('danced-with module present', html.includes('People you may have danced with'));
     check('overlap years shown when both members share them', /1999–2002|Both went to/.test(html));
-    check('connected members are not re-suggested (Jules hidden)', !html.includes('Jules'));
+    // Connected members are never re-SUGGESTED — but since the Your people
+    // section they DO have a permanent home on /people, so Jules must only
+    // appear there (after that section's label), never in the discovery
+    // sections above it.
+    const mainEnd = html.indexOf('</main>');
+    const visible = mainEnd === -1 ? html : html.slice(0, mainEnd); // skip RSC payload
+    const yp = visible.indexOf('Your people (');
+    const disc = ['People you may have danced with', 'From your scene', 'Going to the same events']
+      .map((s) => visible.indexOf(s)).filter((i) => i !== -1)[0] ?? visible.length;
+    check('connected members are not re-suggested (Jules only under Your people)',
+      yp !== -1 && visible.slice(yp, disc).includes('Jules')
+      && !visible.slice(0, yp).includes('Jules') && !visible.slice(disc).includes('Jules'));
 
     const profileHtml = await (await oshi.fetch(`/members/${await mslug('dev-nadia@example.com')}`)).text();
     check('profile shows mutually visible shared history',

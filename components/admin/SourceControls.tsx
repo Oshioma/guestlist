@@ -36,6 +36,16 @@ export function SourceControls({
   const [tagCity, setTagCity] = useState(city ?? '');
   const [tagCountry, setTagCountry] = useState(country ?? '');
   const [tagGenres, setTagGenres] = useState<string[]>(genreIds);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  async function remove() {
+    setBusy(true);
+    setError('');
+    const res = await fetch(`/api/admin/sources/${id}`, { method: 'DELETE' });
+    setBusy(false);
+    if (res.ok) router.refresh();
+    else setError((await res.json().catch(() => ({})))?.error ?? 'Failed');
+  }
 
   async function patch(body: Record<string, unknown>) {
     setBusy(true);
@@ -133,6 +143,19 @@ export function SourceControls({
           type="button"
         >
           {tagOpen ? 'Close tags' : 'Tag place/genres'}
+        </button>
+        {/* Permanent — two clicks required. Events found through this
+            source survive (their source link just clears). */}
+        <button
+          className="btnGhost"
+          style={{ padding: '4px 10px', fontSize: 10.5, color: 'var(--danger)',
+                   borderColor: confirmDelete ? 'var(--danger)' : undefined }}
+          onClick={() => { if (confirmDelete) remove(); else setConfirmDelete(true); }}
+          onBlur={() => setConfirmDelete(false)}
+          disabled={busy}
+          type="button"
+        >
+          {confirmDelete ? 'Really delete?' : 'Delete'}
         </button>
       </div>
       {tagOpen && (

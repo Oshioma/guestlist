@@ -14,6 +14,7 @@ export function toRecCards(recs: RecommendedEvent[]): RecCardData[] {
     city: r.city,
     venue_name: r.venue_name,
     primary_image_url: r.primary_image_url,
+    genres: r.genres.map((g) => g.name),
     price: formatPrice(r.price_from, r.price_to, r.currency),
     reasons: r.reasons.slice(0, 2).map(reasonText),
     explore: r.reasons.some((x) => x.code === 'EXPLORE'),
