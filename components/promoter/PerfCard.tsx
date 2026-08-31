@@ -30,10 +30,10 @@ export function PerfCard({
           {fmtEventDate(event.start_at, event.end_at, event.timezone)}
           {event.venue_name && ` · ${event.venue_name}`}
           {event.city && ` · ${event.city}`}
-          {pending && <span style={{ color: 'var(--accent)' }}> · awaiting review</span>}
+          {pending && <span style={{ color: 'var(--accent-ink, var(--accent))' }}> · awaiting review</span>}
           {event.possible_duplicate_of && <span style={{ color: 'var(--danger)' }}> · possible duplicate</span>}
           {event.listing_status !== 'confirmed' && (
-            <span style={{ color: 'var(--accent)' }}> · {event.listing_status.replace('_', ' ')}</span>
+            <span style={{ color: 'var(--accent-ink, var(--accent))' }}> · {event.listing_status.replace('_', ' ')}</span>
           )}
         </div>
         <div className="nums">

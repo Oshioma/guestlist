@@ -28,6 +28,7 @@
     "@types/pg": "^8.11.10",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "playwright-core": "^1.62.1",
     "tsx": "^4.23.13",
     "typescript": "^5.7.0",
     "undici": "^8.10.0"

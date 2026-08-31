@@ -139,7 +139,7 @@ export default async function AdminArchivePage() {
               {e.contributor && ` · By ${e.contributor}`}
             </div>
             {e.dup_title && (
-              <div style={{ color: 'var(--accent)', fontSize: 12, marginTop: 4 }}>
+              <div style={{ color: 'var(--accent-ink, var(--accent))', fontSize: 12, marginTop: 4 }}>
                 Possible duplicate of “{e.dup_title}”
               </div>
             )}
@@ -166,7 +166,7 @@ export default async function AdminArchivePage() {
               {!i.event_title && ' · no night attached yet — publishing creates one'}
             </span>
             {i.status === 'published' && (
-              <div style={{ color: 'var(--accent)', fontSize: 12, marginTop: 3 }}>
+              <div style={{ color: 'var(--accent-ink, var(--accent))', fontSize: 12, marginTop: 3 }}>
                 Published but NOT visible — its night is {i.event_title ? 'not published' : 'missing'}.
                 Publish item again to fix.
               </div>

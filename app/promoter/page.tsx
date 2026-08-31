@@ -104,8 +104,8 @@ export default async function PromoterOverviewPage({
         upcoming.map((e) => <PerfCard key={e.id} event={e} promoterId={promoter.id} />)
       ) : (
         <p className="adminSub">
-          Nothing upcoming. <Link href="/promoter/events/new" style={{ color: 'var(--accent)' }}>Create an event</Link>{' '}
-          or <Link href="/promoter/sources" style={{ color: 'var(--accent)' }}>connect your website</Link>.
+          Nothing upcoming. <Link href="/promoter/events/new" style={{ color: 'var(--accent-ink, var(--accent))' }}>Create an event</Link>{' '}
+          or <Link href="/promoter/sources" style={{ color: 'var(--accent-ink, var(--accent))' }}>connect your website</Link>.
         </p>
       )}
 

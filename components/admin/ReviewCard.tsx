@@ -173,7 +173,7 @@ export function ReviewCard({ event }: { event: AdminEventRow }) {
           {event.ai_used != null && (
             <span className="confidencePill">{event.structured_data_found ? 'Structured data' : 'No structured data'}{event.ai_used ? ' + AI' : ''}</span>
           )}
-          {event.featured && <span className="confidencePill" style={{ color: 'var(--accent)' }}>Featured</span>}
+          {event.featured && <span className="confidencePill" style={{ color: 'var(--accent-ink, var(--accent))' }}>Featured</span>}
           {error && <span style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</span>}
         </div>
       </div>

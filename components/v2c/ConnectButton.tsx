@@ -88,8 +88,8 @@ export function ConnectButton({
           {menuOpen && (
             <span style={{
               position: 'absolute', top: '110%', right: 0, zIndex: 30, minWidth: 220,
-              background: 'var(--bg-raised, #111)', border: '1px solid var(--border-strong, #333)',
-              borderRadius: 10, padding: 6, display: 'grid', gap: 2, boxShadow: '0 8px 30px rgba(0,0,0,.5)',
+              background: 'var(--bg-raised, #fff)', border: '1px solid var(--border-strong, #bbb)',
+              borderRadius: 10, padding: 6, display: 'grid', gap: 2, boxShadow: '0 8px 30px rgba(0,0,0,.18)',
             }}>
               <button className="btnGhost" type="button" disabled={busy}
                       style={{ justifyContent: 'flex-start', fontSize: 12 }}

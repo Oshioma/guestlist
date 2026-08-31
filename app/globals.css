@@ -2,6 +2,34 @@
    Continues the visual language of the original landing page. */
 
 :root {
+  --bg: #fbfaf7;
+  --bg-raised: #ffffff;
+  --surface: rgba(15, 14, 10, 0.035);
+  --surface-hover: rgba(15, 14, 10, 0.07);
+  --border: rgba(15, 14, 10, 0.1);
+  --border-strong: rgba(15, 14, 10, 0.2);
+  --text: #16150f;
+  --text-soft: rgba(22, 21, 15, 0.82);
+  --text-muted: #67655c;
+  --text-faint: #93917f;
+  --accent: #f2c94c; /* Guestlist yellow — fills and badges */
+  --accent-ink: #8a6a12; /* Guestlist yellow as TEXT on the light ground */
+  --accent-soft: rgba(242, 201, 76, 0.24);
+  --danger: #b3423a;
+  --ok: #45704c;
+  --header-bg: rgba(251, 250, 247, 0.86);
+  --media-ph: #eae8e1;
+  color-scheme: light;
+  --radius: 18px;
+  --radius-sm: 12px;
+  --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+}
+
+/* THE NIGHT THEME — the original Guestlist palette. Toggled per visitor
+   (cookie), light is the default. In the dark, gold-as-text goes back to
+   the bright brand yellow. */
+[data-theme="dark"] {
   --bg: #070707;
   --bg-raised: #0e0e0e;
   --surface: rgba(255, 255, 255, 0.03);
@@ -12,14 +40,13 @@
   --text-soft: rgba(234, 234, 234, 0.82);
   --text-muted: #a8a8a8;
   --text-faint: #6f6f6f;
-  --accent: #f2c94c; /* Guestlist yellow — use sparingly */
+  --accent-ink: #f2c94c;
   --accent-soft: rgba(242, 201, 76, 0.14);
   --danger: #e57373;
   --ok: #7a9e7e;
-  --radius: 18px;
-  --radius-sm: 12px;
-  --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
+  --header-bg: rgba(7, 7, 7, 0.82);
+  --media-ph: #141414;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -50,9 +77,9 @@ button { font-family: inherit; }
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgba(7, 7, 7, 0.82);
+  background: var(--header-bg);
   backdrop-filter: blur(14px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border);
 }
 
 .siteHeader .inner {
@@ -70,7 +97,7 @@ button { font-family: inherit; }
   color: var(--text);
   white-space: nowrap;
 }
-.brand span { color: var(--accent); }
+.brand span { color: var(--accent-ink); }
 
 .mainNav {
   display: flex;
@@ -138,8 +165,8 @@ button { font-family: inherit; }
 .btnGhost:hover { background: var(--surface-hover); color: var(--text); }
 
 .btnGhost.isActive {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
   background: var(--accent-soft);
 }
 
@@ -185,7 +212,7 @@ button { font-family: inherit; }
 .tab:hover { color: var(--text); }
 .tab.active {
   color: var(--text);
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--accent-ink);
 }
 
 .chipRow {
@@ -242,8 +269,8 @@ button { font-family: inherit; }
 }
 .filterRow select:hover { border-color: var(--border-strong); }
 .filterRow select.isSet, .filterRow .isSet {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
   background: var(--accent-soft);
 }
 
@@ -271,7 +298,7 @@ button { font-family: inherit; }
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-raised);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
   transition: transform 0.25s ease, border-color 0.25s ease;
   display: flex;
   flex-direction: column;
@@ -303,6 +330,7 @@ button { font-family: inherit; }
   position: absolute;
   top: 12px; left: 12px;
   z-index: 2;
+  color: #f2f1ec; /* sits on a dark scrim over the image, whatever the theme */
   background: rgba(7, 7, 7, 0.78);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -314,7 +342,7 @@ button { font-family: inherit; }
 .dateBadge .d { font-size: 18px; font-weight: 750; letter-spacing: 0; }
 .dateBadge .m {
   font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
-  color: var(--text-muted); margin-top: 2px;
+  color: rgba(242, 241, 236, 0.75); margin-top: 2px;
 }
 
 .featuredBadge {
@@ -340,7 +368,7 @@ button { font-family: inherit; }
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(7, 7, 7, 0.7);
   backdrop-filter: blur(8px);
-  color: var(--text);
+  color: #f2f1ec;
   font-size: 15px;
   line-height: 1;
   cursor: pointer;
@@ -348,7 +376,7 @@ button { font-family: inherit; }
   place-items: center;
 }
 .saveBtn:hover { border-color: var(--text-muted); }
-.saveBtn.saved { color: var(--accent); border-color: var(--accent); }
+.saveBtn.saved { color: var(--accent-ink); border-color: var(--accent-ink); }
 
 .eventCard .body {
   padding: 16px 16px 18px;
@@ -391,7 +419,7 @@ button { font-family: inherit; }
   border-radius: 999px;
   padding: 4px 9px;
 }
-.tag.type { color: var(--accent); border-color: rgba(242, 201, 76, 0.35); }
+.tag.type { color: var(--accent-ink); border-color: rgba(242, 201, 76, 0.35); }
 
 .socialRow {
   margin-top: auto;
@@ -409,7 +437,7 @@ button { font-family: inherit; }
   border-radius: 50%;
   border: 2px solid var(--bg-raised);
   margin-left: -8px;
-  background: #141414;
+  background: var(--media-ph);
 }
 .avatarStack img:first-child { margin-left: 0; }
 
@@ -441,7 +469,7 @@ button { font-family: inherit; }
   font-size: 13px;
   color: var(--text-muted);
 }
-.emptyState .addPrompt a { color: var(--accent); }
+.emptyState .addPrompt a { color: var(--accent-ink); }
 
 /* ---------- event detail ---------- */
 
@@ -474,7 +502,7 @@ button { font-family: inherit; }
   font-size: 12px;
   letter-spacing: 2.2px;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-ink);
   margin-bottom: 12px;
   font-weight: 650;
 }
@@ -535,7 +563,7 @@ button { font-family: inherit; }
   font-size: 10.5px;
   letter-spacing: 1.6px;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .sideCard {
@@ -587,7 +615,7 @@ button { font-family: inherit; }
   color: var(--text-muted);
   flex-shrink: 0;
 }
-.verifiedMark { color: var(--accent); font-size: 12px; }
+.verifiedMark { color: var(--accent-ink); font-size: 12px; }
 
 .mapLink {
   display: block;
@@ -744,7 +772,7 @@ button { font-family: inherit; }
   font-size: 14.5px;
   outline: none;
 }
-.urlRow input:focus { border-color: var(--accent); }
+.urlRow input:focus { border-color: var(--accent-ink); }
 @media (max-width: 560px) {
   .urlRow { flex-direction: column; }
 }
@@ -790,7 +818,7 @@ button { font-family: inherit; }
   width: 130px; height: 98px;
   object-fit: cover;
   border-radius: var(--radius-sm);
-  background: #141414;
+  background: var(--media-ph);
 }
 .reviewCard .thumb.empty {
   display: grid; place-items: center;
@@ -868,8 +896,9 @@ button { font-family: inherit; }
   overflow: hidden;
   margin-top: 30px;
   background:
-    linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.75) 55%, rgba(7,7,7,1) 100%),
+    linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.75) 55%, rgba(12,12,10,0.97) 100%),
     url('/hero.jpg') center / cover no-repeat;
+  color: #f2f1ec;
 }
 .landingHeroInner { padding: 80px 28px 50px; }
 .landingHero h1 {
@@ -946,13 +975,13 @@ button { font-family: inherit; }
   color: var(--text-muted);
 }
 .evChip.green { border-color: rgba(122, 158, 126, 0.6); color: #9dbf9f; }
-.evChip.amber { border-color: rgba(242, 201, 76, 0.5); color: var(--accent); }
+.evChip.amber { border-color: rgba(242, 201, 76, 0.5); color: var(--accent-ink); }
 .evChip.red { border-color: rgba(229, 115, 115, 0.5); color: var(--danger); }
 
 .warnList {
   margin-top: 8px;
   font-size: 12px;
-  color: var(--accent);
+  color: var(--accent-ink);
   opacity: 0.85;
   line-height: 1.6;
 }
@@ -960,7 +989,7 @@ button { font-family: inherit; }
 .trustPill { font-size: 10.5px; letter-spacing: 1px; text-transform: uppercase; border-radius: 999px; padding: 3px 9px; border: 1px solid var(--border-strong); }
 .trustPill.trusted { color: #9dbf9f; border-color: rgba(122,158,126,0.6); }
 .trustPill.new { color: var(--text-muted); }
-.trustPill.restricted { color: var(--accent); border-color: rgba(242,201,76,0.5); }
+.trustPill.restricted { color: var(--accent-ink); border-color: rgba(242,201,76,0.5); }
 .trustPill.blocked { color: var(--danger); border-color: rgba(229,115,115,0.5); }
 
 /* ---------- listing status badges ---------- */
@@ -975,7 +1004,7 @@ button { font-family: inherit; }
   padding: 5px 11px;
 }
 .listingBadge.cancelled { background: rgba(229,115,115,0.16); color: var(--danger); border: 1px solid rgba(229,115,115,0.45); }
-.listingBadge.sold_out { background: rgba(242,201,76,0.14); color: var(--accent); border: 1px solid rgba(242,201,76,0.4); }
+.listingBadge.sold_out { background: rgba(242,201,76,0.14); color: var(--accent-ink); border: 1px solid rgba(242,201,76,0.4); }
 .listingBadge.postponed, .listingBadge.rescheduled { background: var(--surface-hover); color: var(--text-muted); border: 1px solid var(--border-strong); }
 
 .cancelBanner {
@@ -1033,7 +1062,7 @@ button { font-family: inherit; }
   font-size: 11px;
   letter-spacing: 1.6px;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-ink);
   border: 1px solid rgba(242,201,76,0.45);
   border-radius: 999px;
   padding: 5px 11px;
@@ -1086,7 +1115,7 @@ button { font-family: inherit; }
   color: var(--text-muted); white-space: nowrap;
   border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
-.dashNav a.active { color: var(--text); border-bottom-color: var(--accent); }
+.dashNav a.active { color: var(--text); border-bottom-color: var(--accent-ink); }
 
 .statGrid {
   display: grid;
@@ -1118,7 +1147,7 @@ button { font-family: inherit; }
   align-items: center;
 }
 @media (max-width: 640px) { .perfCard { grid-template-columns: 72px minmax(0, 1fr); } .perfCard .actions { grid-column: 1 / -1; flex-direction: row !important; } }
-.perfCard .thumb { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; background: #141414; }
+.perfCard .thumb { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 10px; background: var(--media-ph); }
 .perfCard h3 { margin: 0 0 4px; font-size: 15.5px; letter-spacing: -0.2px; }
 .perfCard .meta { font-size: 12px; color: var(--text-muted); }
 .perfCard .nums {
@@ -1133,7 +1162,7 @@ button { font-family: inherit; }
   border-bottom: 1px solid rgba(255,255,255,0.05);
   padding: 10px 0; font-size: 13.5px; flex-wrap: wrap;
 }
-.attentionRow .issues { color: var(--accent); font-size: 12px; }
+.attentionRow .issues { color: var(--accent-ink); font-size: 12px; }
 
 .onboardStep {
   display: flex; align-items: center; gap: 12px;
@@ -1176,12 +1205,21 @@ button { font-family: inherit; }
   z-index: 2;
   padding-top: clamp(90px, 14vw, 170px);
   padding-bottom: clamp(50px, 7vw, 90px);
+  /* The hero copy sits on a dark photo scrim, whatever the page theme. */
+  color: #f2f1ec;
+}
+.homeHeroInner .homeKicker { color: var(--accent); }
+.homeHeroInner .homeLead { color: rgba(242, 241, 236, 0.85); }
+.homeHeroInner .btnGhost {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #f2f1ec;
+  background: rgba(7, 7, 7, 0.25);
 }
 .homeKicker {
   font-size: 12px;
   letter-spacing: 2.4px;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-weight: 700;
   margin-bottom: 16px;
 }
@@ -1316,7 +1354,7 @@ button { font-family: inherit; }
   margin: 12px 0;
   font-size: 14px;
 }
-.clubMyPresenceGo { margin-left: auto; color: var(--accent); font-weight: 600; font-size: 13px; }
+.clubMyPresenceGo { margin-left: auto; color: var(--accent-ink); font-weight: 600; font-size: 13px; }
 
 .clubActivity { display: grid; gap: 2px; margin-bottom: 10px; }
 .clubActivityRow {
@@ -1350,7 +1388,7 @@ button { font-family: inherit; }
 .clubEventTitle { font-weight: 700; font-size: 16px; letter-spacing: -0.3px; }
 .clubEventMeta { color: var(--text-muted); font-size: 12.5px; margin-top: 3px; }
 .clubEventSocial { display: flex; gap: 10px; flex-wrap: wrap; font-size: 13px; margin-top: 8px; }
-.clubFriendLine { color: var(--accent); font-weight: 600; }
+.clubFriendLine { color: var(--accent-ink); font-weight: 600; }
 .mutedLine { color: var(--text-muted); }
 .myRsvpMark { color: var(--text-muted); font-size: 12px; }
 .heatBadge {
@@ -1358,14 +1396,14 @@ button { font-family: inherit; }
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-ink);
   background: rgba(242, 201, 76, 0.12);
   border: 1px solid rgba(242, 201, 76, 0.35);
   border-radius: 999px;
   padding: 3px 10px;
   white-space: nowrap;
 }
-.friendMark { color: var(--accent); }
+.friendMark { color: var(--accent-ink); }
 .clubFootNote { color: var(--text-muted); font-size: 12px; margin-top: 26px; text-align: center; }
 
 /* Event room page */
@@ -1435,7 +1473,7 @@ button { font-family: inherit; }
 }
 .presenceStatusForm input:focus,
 .roomChatForm input:focus,
-.pingCustomForm input:focus { outline: none; border-color: var(--accent); }
+.pingCustomForm input:focus { outline: none; border-color: var(--accent-ink); }
 @media (max-width: 759px) {
   .presenceSticky {
     position: fixed;
@@ -1486,7 +1524,7 @@ button { font-family: inherit; }
   padding: 6px 14px;
   cursor: pointer;
 }
-.peopleTab.isActive { color: var(--accent); border-color: rgba(242, 201, 76, 0.5); background: rgba(242, 201, 76, 0.08); }
+.peopleTab.isActive { color: var(--accent-ink); border-color: rgba(242, 201, 76, 0.5); background: rgba(242, 201, 76, 0.08); }
 .personRow { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-top: 1px solid var(--border); }
 .personRow:first-of-type { border-top: none; }
 .personAvatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
@@ -1501,7 +1539,7 @@ button { font-family: inherit; }
 .personInfo { flex: 1; min-width: 0; }
 .personName { font-weight: 600; font-size: 14px; }
 .personStatus { color: var(--text-muted); font-size: 12px; }
-.pingReply { color: var(--accent); }
+.pingReply { color: var(--accent-ink); }
 
 /* Pings */
 .pingInbox { display: grid; gap: 8px; margin: 12px 0; }
@@ -1518,13 +1556,13 @@ button { font-family: inherit; }
 /* Notifications */
 .notifPanel { margin: 4px 0 10px; }
 .notifHead { display: flex; gap: 8px; }
-.notifHasUnread { color: var(--accent); border-color: rgba(242, 201, 76, 0.5); }
+.notifHasUnread { color: var(--accent-ink); border-color: rgba(242, 201, 76, 0.5); }
 .notifPrefs { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-top: 8px; display: grid; gap: 6px; }
 .notifPrefRow { display: flex; align-items: center; gap: 10px; font-size: 13.5px; cursor: pointer; }
 .notifList { border: 1px solid var(--border); border-radius: var(--radius); margin-top: 8px; padding: 6px 12px; }
 .notifRow { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 13.5px; }
 .notifRow:first-child { border-top: none; }
-.notifRow a:hover { color: var(--accent); }
+.notifRow a:hover { color: var(--accent-ink); }
 .notifTime { color: var(--text-muted); font-size: 11.5px; white-space: nowrap; }
 
 /* Event page module */
@@ -1537,7 +1575,7 @@ button { font-family: inherit; }
   margin-bottom: 14px;
 }
 .tonightModule:hover { background: rgba(242, 201, 76, 0.12); }
-.tonightModuleTitle { font-weight: 800; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--accent); }
+.tonightModuleTitle { font-weight: 800; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--accent-ink); }
 .tonightModuleBody { color: var(--text); font-size: 13.5px; margin-top: 5px; }
 
 /* Admin */
@@ -1585,7 +1623,7 @@ button { font-family: inherit; }
   font-weight: 650;
   letter-spacing: 0.3px;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-ink);
   background: rgba(242, 201, 76, 0.1);
   border: 1px solid rgba(242, 201, 76, 0.3);
   border-radius: 999px;
@@ -1615,7 +1653,7 @@ button { font-family: inherit; }
 .travelCard:hover { background: rgba(242, 201, 76, 0.12); }
 .travelWhere { font-weight: 750; }
 .travelWhen { color: var(--text-muted); font-size: 12px; }
-.travelCount { color: var(--accent); font-size: 12.5px; font-weight: 600; }
+.travelCount { color: var(--accent-ink); font-size: 12.5px; font-weight: 600; }
 
 /* People */
 .peopleWrap { max-width: 900px; }
@@ -1630,7 +1668,7 @@ button { font-family: inherit; }
 .personCard:hover { border-color: var(--border-strong); }
 .personCardMain { display: flex; gap: 10px; align-items: center; flex: 1; min-width: 0; }
 .personCardBody { display: grid; gap: 2px; min-width: 0; }
-.personReason { color: var(--accent); font-size: 11.5px; }
+.personReason { color: var(--accent-ink); font-size: 11.5px; }
 
 /* People you may have danced with — the standout module */
 .dancedWith {
@@ -1645,7 +1683,7 @@ button { font-family: inherit; }
 .dancedTitle {
   font-size: 19px; letter-spacing: -0.4px; margin: 0 0 14px;
   text-transform: uppercase; letter-spacing: 1.5px; font-size: 13px;
-  color: var(--accent); font-weight: 800;
+  color: var(--accent-ink); font-weight: 800;
 }
 .dancedGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .dancedCard {
@@ -1675,7 +1713,7 @@ button { font-family: inherit; }
 .profileRavingSince {
   display: inline-block; margin-top: 8px;
   font-size: 11px; font-weight: 750; letter-spacing: 1px; text-transform: uppercase;
-  color: var(--accent); border: 1px solid rgba(242, 201, 76, 0.4);
+  color: var(--accent-ink); border: 1px solid rgba(242, 201, 76, 0.4);
   border-radius: 999px; padding: 3px 12px;
 }
 .profileActions { display: flex; gap: 8px; align-items: center; }
@@ -1702,7 +1740,7 @@ button { font-family: inherit; }
   padding: 10px 14px;
   margin-bottom: 14px;
   font-size: 13px;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-weight: 600;
 }
 
@@ -1727,7 +1765,7 @@ button { font-family: inherit; }
   background: var(--bg); border: 1px solid var(--border-strong); border-radius: 10px;
   color: var(--text); padding: 11px 13px; font-size: 14px; margin-top: 6px;
 }
-.youSearch:focus { outline: none; border-color: var(--accent); }
+.youSearch:focus { outline: none; border-color: var(--accent-ink); }
 .youResults { border: 1px solid var(--border); border-radius: var(--radius); margin-top: 8px; padding: 6px 12px; }
 .youResultRow, .youHistoryRow {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
@@ -1738,7 +1776,7 @@ button { font-family: inherit; }
 .youHistoryMeta { color: var(--text-muted); font-size: 12.5px; }
 .youAddMissing {
   background: none; border: none; cursor: pointer; padding: 10px 0;
-  color: var(--accent); font-size: 13px; font-weight: 600; width: 100%; text-align: left;
+  color: var(--accent-ink); font-size: 13px; font-weight: 600; width: 100%; text-align: left;
 }
 .youHistoryForm { padding: 10px 0 6px; }
 .youYearRow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
@@ -1751,7 +1789,7 @@ button { font-family: inherit; }
 }
 .youProfileForm { display: grid; gap: 8px; }
 .youProfileForm textarea { width: 100%; resize: vertical; font-family: inherit; }
-.youNotice { color: var(--accent); font-size: 13px; margin-top: 10px; }
+.youNotice { color: var(--accent-ink); font-size: 13px; margin-top: 10px; }
 .youPlaceRow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
 .youPlaceSearchRow { display: flex; gap: 8px; margin-top: 6px; }
 .youPlaceSearchRow .youSearch { margin-top: 0; }
@@ -1772,7 +1810,7 @@ button { font-family: inherit; }
 .exploreCard:hover { border-color: var(--border-strong); background: var(--surface-hover); }
 .exploreName { font-weight: 750; font-size: 17px; letter-spacing: -0.3px; }
 .exploreCountry { color: var(--text-muted); font-size: 12px; }
-.exploreStats { color: var(--accent); font-size: 12px; margin-top: 6px; }
+.exploreStats { color: var(--accent-ink); font-size: 12px; margin-top: 6px; }
 
 /* Admin: city health */
 .cityHealthTable { border-collapse: collapse; font-size: 13px; width: 100%; }
@@ -1781,7 +1819,7 @@ button { font-family: inherit; }
 .cityStatus { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
 .cityStatus.seeding { color: var(--text-muted); }
 .cityStatus.live { color: #7ed99a; }
-.cityStatus.strong { color: var(--accent); }
+.cityStatus.strong { color: var(--accent-ink); }
 
 /* ── V2D: notification centre ───────────────────────────────────────────── */
 .bellLink { position: relative; font-size: 15px; text-decoration: none; }
@@ -1806,7 +1844,7 @@ button { font-family: inherit; }
 /* ── V2E: The Archive ───────────────────────────────────────────────────── */
 .archiveWrap { max-width: 900px; }
 .archiveTitle { font-size: clamp(28px, 6vw, 42px); letter-spacing: -1px; margin: 4px 0 6px; text-transform: uppercase; }
-.archiveDate { font-size: 18px; color: var(--accent); font-weight: 700; letter-spacing: 0.5px; }
+.archiveDate { font-size: 18px; color: var(--accent-ink); font-weight: 700; letter-spacing: 0.5px; }
 .archiveCirca { color: var(--text-muted); font-size: 13px; font-weight: 400; letter-spacing: 0; }
 .archiveMeta { color: var(--text-muted); margin-top: 6px; font-size: 14.5px; }
 .archiveEventGrid { display: grid; grid-template-columns: 1fr; gap: 26px; padding-top: 14px; }
@@ -1833,7 +1871,7 @@ button { font-family: inherit; }
   flex: 1; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px;
   color: var(--text); padding: 13px 16px; font-size: 15px; min-width: 0;
 }
-.archiveSearch input:focus { outline: none; border-color: var(--accent); }
+.archiveSearch input:focus { outline: none; border-color: var(--accent-ink); }
 .archiveTwoCol { display: grid; gap: 22px; margin: 18px 0; }
 @media (min-width: 760px) { .archiveTwoCol { grid-template-columns: 1fr 1fr; } }
 .flyerGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
@@ -1843,14 +1881,14 @@ button { font-family: inherit; }
   border-radius: 10px; border: 1px solid var(--border);
   transition: border-color 0.15s ease;
 }
-.flyerCard:hover img { border-color: var(--accent); }
+.flyerCard:hover img { border-color: var(--accent-ink); }
 .flyerCaption { font-size: 11.5px; color: var(--text-muted); }
 
 /* I was there */
 .iwtWrap { margin-top: 18px; }
 .iwtRow { display: flex; gap: 10px; align-items: center; }
 .iwtBtn { font-size: 15px; padding: 13px 26px; letter-spacing: 1px; }
-.iwtBtn.isSet { background: transparent; color: var(--accent); border: 1px solid rgba(242,201,76,0.6); }
+.iwtBtn.isSet { background: transparent; color: var(--accent-ink); border: 1px solid rgba(242,201,76,0.6); }
 .iwtCount { color: var(--text-muted); font-size: 13px; margin-top: 8px; }
 .iwtOptions { margin-top: 10px; }
 
@@ -1881,7 +1919,7 @@ button { font-family: inherit; }
 .yourPeopleCard { display: grid; gap: 3px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-raised); text-decoration: none; }
 .yourPeopleCard:hover { border-color: var(--border-strong); }
 .yourPeopleName { font-weight: 600; font-size: 14px; color: var(--text); }
-.yourPeopleEvent { font-size: 13px; color: var(--accent); }
+.yourPeopleEvent { font-size: 13px; color: var(--accent-ink); }
 .yourPeopleMeta { font-size: 12px; color: var(--text-muted); }
 .announceSteps { display: grid; gap: 14px; max-width: 640px; }
 .announceTypeGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
@@ -1893,10 +1931,10 @@ button { font-family: inherit; }
 /* ── V2G: @guestlist ─────────────────────────────────────────────────── */
 .guestlistNow { border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; margin: 18px 0; background: var(--bg-raised); display: grid; gap: 12px; }
 .guestlistNowHead { display: flex; gap: 10px; align-items: baseline; }
-.guestlistNowBadge { font-weight: 700; color: var(--accent); font-size: 14px; }
+.guestlistNowBadge { font-weight: 700; color: var(--accent-ink); font-size: 14px; }
 .guestlistNowSub { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; }
 .guestlistNowItem { display: grid; gap: 6px; font-size: 14px; line-height: 1.5; }
-.guestlistNowLink { font-size: 12px; color: var(--accent); text-decoration: none; }
+.guestlistNowLink { font-size: 12px; color: var(--accent-ink); text-decoration: none; }
 
 /* Connect button cluster: real layout, never overlapping card content */
 .connectWrap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex-shrink: 0; margin-left: auto; }
@@ -1910,8 +1948,8 @@ button { font-family: inherit; }
   margin-top: 10px;
 }
 .mixCard {
-  background: var(--bg-raised, #111);
-  border: 1px solid var(--border, #222);
+  background: var(--bg-raised, #fff);
+  border: 1px solid var(--border, #ddd);
   border-radius: 14px;
   padding: 12px 14px 10px;
   display: flex;
@@ -1925,10 +1963,10 @@ button { font-family: inherit; }
   flex-wrap: wrap;
 }
 .mixTitle { font-weight: 600; font-size: 14px; }
-.mixArtist { color: var(--text-muted, #999); font-size: 12.5px; }
+.mixArtist { color: var(--text-muted, #666); font-size: 12.5px; }
 .mixPlatform {
   margin-left: auto;
-  color: var(--text-faint, #777);
+  color: var(--text-faint, #8a8878);
   font-size: 10.5px;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -1941,8 +1979,8 @@ button { font-family: inherit; }
   flex-wrap: wrap;
   font-size: 12px;
 }
-.mixEventLink { text-decoration: underline; color: var(--text-soft, #ccc); }
-.mixCredit { color: var(--text-faint, #777); margin-left: auto; }
+.mixEventLink { text-decoration: underline; color: var(--text-soft, #444); }
+.mixCredit { color: var(--text-faint, #8a8878); margin-left: auto; }
 
 /* --- Genre artwork: the default pic when an event has no image ---------- */
 .genreArt {
@@ -1968,8 +2006,8 @@ button { font-family: inherit; }
 
 /* --- Ask @guestlist ----------------------------------------------------- */
 .askPanel {
-  background: var(--bg-raised, #101010);
-  border: 1px solid var(--border, #232323);
+  background: var(--bg-raised, #fff);
+  border: 1px solid var(--border, #ddd);
   border-radius: 16px;
   padding: 16px;
   margin: 18px 0 22px;
@@ -1985,7 +2023,7 @@ button { font-family: inherit; }
 .askTurn { display: grid; gap: 8px; }
 .askQuestion {
   justify-self: end;
-  background: var(--surface, #1b1b1b);
+  background: var(--surface, rgba(15,14,10,0.05));
   border-radius: 12px 12px 2px 12px;
   padding: 8px 12px;
   font-size: 13.5px;
@@ -1996,8 +2034,8 @@ button { font-family: inherit; }
 .askCard {
   display: flex;
   gap: 12px;
-  background: var(--bg, #070707);
-  border: 1px solid var(--border, #232323);
+  background: var(--bg, #fbfaf7);
+  border: 1px solid var(--border, #ddd);
   border-radius: 12px;
   padding: 10px;
   align-items: flex-start;
@@ -2016,30 +2054,30 @@ button { font-family: inherit; }
 .askCardMediaEmpty { display: block; width: 100%; height: 100%; background: linear-gradient(135deg,#141414,#1e1a10); }
 .askCardBody { display: grid; gap: 4px; min-width: 0; }
 .askCardTitle { font-weight: 600; font-size: 14px; }
-.askCardMeta { color: var(--text-muted, #999); font-size: 12px; }
+.askCardMeta { color: var(--text-muted, #666); font-size: 12px; }
 .askReasonRow { display: flex; flex-wrap: wrap; gap: 6px; }
 .askReason {
   font-size: 11px;
-  color: var(--text-soft, #ccc);
-  background: var(--surface, #1b1b1b);
+  color: var(--text-soft, #444);
+  background: var(--surface, rgba(15,14,10,0.05));
   border-radius: 999px;
   padding: 2px 9px;
 }
 .askMomentum { color: var(--accent, #f2c94c); }
 .askFeedback { display: flex; gap: 8px; }
 .askFeedback button {
-  background: none; border: 1px solid var(--border, #232323);
+  background: none; border: 1px solid var(--border, #ddd);
   border-radius: 999px; padding: 3px 10px; cursor: pointer; font-size: 13px;
 }
-.askFeedbackDone { color: var(--text-faint, #777); font-size: 12px; }
+.askFeedbackDone { color: var(--text-faint, #8a8878); font-size: 12px; }
 .askInputRow { display: flex; gap: 8px; }
 .askInputRow input {
   flex: 1;
   min-width: 0;
-  background: var(--bg, #070707);
-  border: 1px solid var(--border-strong, #333);
+  background: var(--bg, #fbfaf7);
+  border: 1px solid var(--border-strong, #bbb);
   border-radius: 999px;
-  color: var(--text, #eee);
+  color: var(--text, #16150f);
   padding: 10px 16px;
   font-size: 14px;
 }
@@ -2048,3 +2086,32 @@ button { font-family: inherit; }
   .askPanel { padding: 12px; border-radius: 14px; }
   .askQuestion { max-width: 95%; }
 }
+
+/* --- Photo-scrim heroes keep light type on the light theme -------------- */
+.detailHeroInner, .profileHeroInner {
+  color: #f2f1ec;
+}
+.detailHeroInner .detailKicker, .profileHeroInner [class*="Kicker"] { color: var(--accent); }
+.detailHeroInner :is(.detailMetaRow, [class*="Meta"]) { color: rgba(242, 241, 236, 0.82); }
+.detailHeroInner .detailMetaRow strong { color: #fff; }
+.profileHeroInner :is(.profileFacts, [class*="Meta"], [class*="Sub"]) { color: rgba(242, 241, 236, 0.82); }
+.profileHeroInner .profileFacts b { color: #fff; }
+.detailHeroInner .btnGhost, .profileHeroInner .btnGhost {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #f2f1ec;
+  background: rgba(7, 7, 7, 0.25);
+}
+
+/* --- Theme toggle -------------------------------------------------------- */
+.themeToggle {
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-soft);
+  line-height: 1;
+}
+.themeToggle:hover { border-color: var(--accent-ink); }

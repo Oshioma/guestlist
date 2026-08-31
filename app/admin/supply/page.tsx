@@ -113,7 +113,7 @@ export default async function SupplyPage() {
                     </div>
                   )}
                   {r.warnings.length > 0 && (
-                    <div style={{ color: 'var(--accent)', fontSize: 11 }}>{r.warnings.length} warning{r.warnings.length === 1 ? '' : 's'}</div>
+                    <div style={{ color: 'var(--accent-ink, var(--accent))', fontSize: 11 }}>{r.warnings.length} warning{r.warnings.length === 1 ? '' : 's'}</div>
                   )}
                 </td>
                 <td>

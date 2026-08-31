@@ -43,7 +43,7 @@ function LoginForm() {
         {busy ? '…' : 'Sign in'}
       </button>
       <div className="sub" style={{ marginTop: 18, marginBottom: 0 }}>
-        New here? <Link href={`/signup?next=${encodeURIComponent(next)}`} style={{ color: 'var(--accent)' }}>Join Guestlist</Link>
+        New here? <Link href={`/signup?next=${encodeURIComponent(next)}`} style={{ color: 'var(--accent-ink, var(--accent))' }}>Join Guestlist</Link>
       </div>
     </form>
   );

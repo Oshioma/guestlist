@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getCurrentMember } from '@/lib/auth';
 import { getMemberPromoters } from '@/lib/promoterAuth';
 import { queryOne } from '@/lib/db';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export async function SiteHeader() {
   const member = await getCurrentMember();
@@ -31,6 +32,7 @@ export async function SiteHeader() {
           {member?.role === 'admin' && <Link href="/admin/events">Admin</Link>}
         </nav>
         <div className="headerRight">
+          <ThemeToggle />
           {member ? (
             <>
               <Link href="/notifications" className="bellLink" title="Notifications">
