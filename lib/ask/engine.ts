@@ -11,6 +11,7 @@ import {
   archiveLookup, cityTimezone, memberAskContext, momentumNotes, pastToPresent,
   personalPicks, resolveDateWindow, searchEvents, socialOverlay, type AskEventRow,
 } from './tools';
+import { askThresholds, dataDensity } from './coldstart';
 import { buildAllowlist, validateClaims } from './validate';
 import { defaultAskWriter, TemplateAskWriter, type AskWriterClient } from './writer';
 import type { AskAnswer, AskAnswerType, AskCard, AskIntent } from './types';
@@ -124,6 +125,12 @@ export async function askGuestlist(req: AskRequest): Promise<AskAnswer> {
   }
   if (intent.travelCity && !intent.city) intent = { ...intent, city: intent.travelCity };
 
+  // COLD START MODE — how much data exists around this query decides how
+  // Ask ranks and how it talks (levels 5–7 of the signal hierarchy switch
+  // on only when the numbers are real).
+  const thresholds = await askThresholds();
+  const density = await dataDensity(intent.city, req.viewerId, thresholds);
+
   const src = `ask-${conversation.id.slice(0, 8)}`;
   const needsCity = !intent.archive && !intent.pastToPresent && !intent.social
     && !intent.personalized && !intent.worthTravelling;
@@ -223,16 +230,25 @@ export async function askGuestlist(req: AskRequest): Promise<AskAnswer> {
     }
   } else if (intent.momentum) {
     // ---- MOMENTUM ------------------------------------------------------
+    // Cold start: below the evidence floor, "heating up" does not exist as
+    // a concept — Ask says so honestly and curates on relevance instead.
     type = 'EVENT_RECOMMENDATIONS';
     toolCalls += 2;
     const rows = await searchEvents({ ...intent, date: intent.date ?? { kind: 'tonight' } }, { limit: 15 });
-    const notes = await momentumNotes(rows.map((r) => r.id));
+    const notes = await momentumNotes(rows.map((r) => r.id), thresholds.momentum);
     const hot = rows.filter((r) => notes.has(r.id));
-    cards = hot.slice(0, MAX_CARDS).map((e) => eventCard(e, {
-      reasons: e.genres.slice(0, 2), social: null, momentumNote: notes.get(e.id) ?? null, src,
-    }));
-    if (!cards.length) deterministicCommentary =
-      'Nothing is showing unusual movement right now — quiet so far.';
+    if (hot.length) {
+      cards = hot.slice(0, MAX_CARDS).map((e) => eventCard(e, {
+        reasons: e.genres.slice(0, 2), social: null, momentumNote: notes.get(e.id) ?? null, src,
+      }));
+    } else {
+      cards = rows.slice(0, MAX_CARDS).map((e) => eventCard(e, {
+        reasons: e.genres.slice(0, 2), social: null, momentumNote: null, src,
+      }));
+      deterministicCommentary = density.mode === 'cold'
+        ? `Too early to call anything "heating up" — not enough activity is flowing through Guestlist here yet. ${cards.length ? 'What fits, on merit:' : ''}`.trim()
+        : 'Nothing is showing unusual movement right now — quiet so far.';
+    }
   } else if (intent.worthTravelling) {
     // ---- WORTH TRAVELLING ----------------------------------------------
     type = 'EVENT_RECOMMENDATIONS';
@@ -294,27 +310,40 @@ export async function askGuestlist(req: AskRequest): Promise<AskAnswer> {
     if (rows.length) {
       toolCalls += 2;
       const [social, notes] = await Promise.all([
-        socialOverlay(req.viewerId, rows.map((r) => r.id)),
-        momentumNotes(rows.map((r) => r.id)),
+        // Level 6 (social) only runs when the viewer actually has people.
+        density.socialOn ? socialOverlay(req.viewerId, rows.map((r) => r.id))
+          : Promise.resolve(new Map<string, never>()),
+        momentumNotes(rows.map((r) => r.id), thresholds.momentum),
       ]);
       const memberGenres = new Set((memberCtx?.topGenres ?? []).map((g) => g.toLowerCase()));
       const scored = rows.map((e) => {
         const s = social.get(e.id);
         let score = 0;
-        if (s) score += s.close_friends_going * 30 + s.connections_going * 20 + s.scene_going * 8;
-        if (notes.has(e.id)) score += 15;
+        // Levels 1–4 always rank: query fit (SQL already filtered), taste,
+        // travel context. Levels 5–7 (popularity, social, momentum) count
+        // only past their density gates — early Guestlist is a curator,
+        // not a popularity contest.
         if (e.genres.some((g) => memberGenres.has(g.toLowerCase()))) score += 12;
-        if (intent.sizePref === 'small') score -= Math.min(20, e.going_count / 10);
         if (intent.travelCity && (e.city ?? '').toLowerCase() === intent.travelCity.toLowerCase()) score += 5;
+        if (s) score += s.close_friends_going * 30 + s.connections_going * 20
+          + (s.scene_going >= thresholds.sceneGoing ? s.scene_going * 8 : 0);
+        if (density.popularityOn) {
+          if (notes.has(e.id)) score += 15;
+          if (intent.sizePref === 'small') score -= Math.min(20, e.going_count / 10);
+        } else if (intent.sizePref === 'small' && e.event_type === 'festival') {
+          score -= 10; // size still respects hard facts, never sparse RSVPs
+        }
         return { e, s, score };
       }).sort((a, b) => b.score - a.score);
 
       cards = scored.slice(0, MAX_CARDS).map(({ e, s }) => {
         const reasons: string[] = [...e.genres.slice(0, 2)];
         if (intent.sizePref === 'small' && e.event_type !== 'festival') reasons.push('Smaller room');
+        // Social reasons only ever render with actual eligible people —
+        // an empty "your people are going" module must not exist.
         if (s?.close_friends_going) reasons.push(`★ ${s.close_friends_going === 1 ? 'Someone you’re close to is' : `${s.close_friends_going} people you’re close to are`} going`);
         else if (s?.connections_going) reasons.push(`${s.connections_going} connection${s.connections_going === 1 ? '' : 's'} going`);
-        else if (s?.scene_going) reasons.push('People from your scene are going');
+        else if (s && s.scene_going >= thresholds.sceneGoing) reasons.push('People from your scene are going');
         if (e.genres.some((g) => memberGenres.has(g.toLowerCase()))) reasons.push('Matches your taste');
         if (intent.travelCity) reasons.push('In a city you’re visiting');
         return eventCard(e, {
@@ -359,7 +388,9 @@ export async function askGuestlist(req: AskRequest): Promise<AskAnswer> {
     const result = await writer.write({ question, intent, cards, channel: req.channel, relaxation });
     if (result.ok) {
       aiDraft = result.commentary;
-      const check = validateClaims(result.commentary, allow);
+      const check = validateClaims(result.commentary, allow, {
+        hasMomentumEvidence: cards.some((c) => c.momentumNote),
+      });
       if (check.ok) {
         commentary = result.commentary;
         aiModel = result.model;
@@ -391,7 +422,17 @@ export async function askGuestlist(req: AskRequest): Promise<AskAnswer> {
   if (!req.viewerId && type !== 'CLARIFICATION') followUps.push("What's heating up tonight?");
 
   // ---- PERSIST + ANALYTICS ---------------------------------------------
-  const persistedIntent = { ...intent, cityAmbiguous: undefined };
+  // The density snapshot rides along for evaluation: every answer records
+  // how much data it was standing on.
+  const persistedIntent = {
+    ...intent,
+    cityAmbiguous: undefined,
+    _density: {
+      mode: density.mode, events: density.events, rsvpVolume: density.rsvpVolume,
+      activeMembers: density.activeMembers, archiveCoverage: density.archiveCoverage,
+      socialCoverage: density.socialCoverage,
+    },
+  };
   const message = (await queryOne<{ id: string }>(
     `insert into ask_messages
        (conversation_id, member_id, channel, ip_hash, question, intent, answer_type,

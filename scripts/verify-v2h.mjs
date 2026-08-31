@@ -370,6 +370,74 @@ try {
   }
 
   // -------------------------------------------------------------------------
+  console.log('\n— Cold Start Mode: sparse data is a product state —');
+  {
+    // Every answer records the data density it stood on.
+    const base = await ask(nadia, 'jungle in London tonight');
+    const bi = await intentOf(base.data.messageId);
+    check('density snapshot recorded on every ask',
+      bi.intent._density && ['cold', 'warm'].includes(bi.intent._density.mode)
+      && typeof bi.intent._density.rsvpVolume === 'number');
+
+    // Below the evidence floor, "heating up" does not exist — honest words,
+    // relevance-ranked curation instead.
+    const cold = await ask(jules, "what's heating up in Amsterdam tonight?");
+    check('cold city momentum → honest "too early", no fake movement',
+      /too early/i.test(cold.data.commentary)
+      && cold.data.cards.every((c) => c.momentumNote === null));
+
+    // One extra RSVP is not momentum: a single going + click stays silent.
+    const [tiny] = await q(
+      `insert into events (title, slug, status, listing_status, event_type, start_at, end_at, timezone, city, country)
+       values ('Ask Test: Leeds Loft', 'ask-test-leeds-loft', 'live', 'confirmed', 'club_night',
+               now() + interval '4 hours', now() + interval '8 hours', 'Europe/London', 'Leeds', 'United Kingdom')
+       returning id`);
+    await q(`insert into member_event_actions (member_id, event_id, rsvp, rsvp_at)
+             values ($1, $2, 'going', now() - interval '30 minutes')`, [ids.steve, tiny.id]);
+    await q(`insert into analytics_events (event_type, event_id) values ('ticket_clicked', $1)`, [tiny.id]);
+    const leeds = await ask(jules, "what's heating up in Leeds tonight?");
+    check('minimum evidence: +1 RSVP never becomes "heating up"',
+      leeds.data.cards.every((c) => c.momentumNote === null)
+      && !/picking up|heating up/i.test(leeds.data.cards.map((c) => JSON.stringify(c.reasons)).join('')));
+
+    // Thresholds are centralized and admin-overridable.
+    await q(`insert into system_settings (key, value) values ('ask_thresholds', $1)
+             on conflict (key) do update set value = $1`,
+      [JSON.stringify({ minCityRsvps: 1, minActiveMembers: 1 })]);
+    const warm = await ask(nadia, 'jungle in London tonight');
+    check('thresholds overridable: forced-warm mode recorded',
+      (await intentOf(warm.data.messageId)).intent._density.mode === 'warm');
+    await q(`update system_settings set value = $1 where key = 'ask_thresholds'`,
+      [JSON.stringify({ minCityRsvps: 999999 })]);
+    const forced = await ask(nadia, 'jungle in London tonight');
+    check('thresholds overridable: forced-cold mode recorded',
+      (await intentOf(forced.data.messageId)).intent._density.mode === 'cold');
+    check('cold mode still curates: hard facts + taste, cards intact',
+      forced.data.cards.length >= 1 && forced.data.cards.every((c) => c.reasons.length >= 1));
+    await q(`delete from system_settings where key = 'ask_thresholds'`);
+
+    // Momentum language requires momentum evidence; "trending" is banned
+    // outright until the word can mean something.
+    const hype = await ask(nadia, 'house in Brighton this weekend', {
+      headers: { 'x-ask-writer-fixture': JSON.stringify({ commentary: 'Everything is heating up this weekend.' }) },
+    });
+    check('momentum language without evidence rejected',
+      !/heating up/i.test(hype.data.commentary)
+      && (await intentOf(hype.data.messageId)).validation.ok === false);
+    const trend = await ask(nadia, 'jungle in London tonight', {
+      headers: { 'x-ask-writer-fixture': JSON.stringify({ commentary: 'Trending: Ask Test: Basement Jungle.' }) },
+    });
+    check('"trending" is banned at current data volume',
+      !/trending/i.test(trend.data.commentary));
+
+    // No empty social module, ever: reasons never mention people unless
+    // eligible people exist.
+    check('no zero-people social reasons on any card',
+      ![...base.data.cards, ...forced.data.cards]
+        .some((c) => c.reasons.some((r) => /^0 |undefined/.test(r))));
+  }
+
+  // -------------------------------------------------------------------------
   console.log('\n— Entity + number fact locking —');
   {
     const invented = await ask(nadia, 'jungle in London tonight', {

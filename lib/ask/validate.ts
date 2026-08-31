@@ -51,8 +51,24 @@ const COMMON = new Set([
 
 export type ClaimValidation = { ok: true } | { ok: false; problems: string[] };
 
-export function validateClaims(text: string, allow: AskAllowlist): ClaimValidation {
+// Momentum language needs momentum evidence. "Trending" needs volume
+// Guestlist does not have yet — the word is simply banned until then.
+const MOMENTUM_WORDS = /\b(heating up|picking up|blowing up|buzzing|momentum)\b/i;
+const BANNED_CLAIM_WORDS = /\btrending\b/i;
+
+export function validateClaims(
+  text: string,
+  allow: AskAllowlist,
+  opts: { hasMomentumEvidence?: boolean } = {}
+): ClaimValidation {
   const problems: string[] = [];
+
+  if (BANNED_CLAIM_WORDS.test(text)) {
+    problems.push('claim word "trending" is not available at current data volume');
+  }
+  if (MOMENTUM_WORDS.test(text) && !opts.hasMomentumEvidence) {
+    problems.push('momentum language without momentum evidence');
+  }
 
   // Numbers: every digit sequence must be evidenced (or a small ordinal).
   for (const m of text.matchAll(/\d[\d,.:]*\d|\d/g)) {

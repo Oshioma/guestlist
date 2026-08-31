@@ -152,15 +152,23 @@ export async function socialOverlay(
   return out;
 }
 
-// Momentum, explained — never a bare score (public Heat is V2I).
-export async function momentumNotes(eventIds: string[]): Promise<Map<string, string>> {
+// Momentum, explained — never a bare score (public Heat is V2I), and never
+// below the minimum evidence floor: one extra RSVP is not "heating up".
+export async function momentumNotes(
+  eventIds: string[],
+  min: { goingLast6h: number; ticketClicks24h: number; hereNow: number }
+): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const heat = await heatForEvents(eventIds);
   for (const [id, h] of heat) {
     const bits: string[] = [];
-    if (h.signals.goingLast6h >= 2) bits.push(`${h.signals.goingLast6h} marked Going in the last six hours`);
-    if (h.signals.ticketClicks24h >= 3) bits.push('ticket clicks are above its recent baseline');
-    if (h.signals.hereNow >= 2) bits.push('people are checked in right now');
+    if (h.signals.goingLast6h >= min.goingLast6h) {
+      bits.push(`${h.signals.goingLast6h} marked Going in the last six hours`);
+    }
+    if (h.signals.ticketClicks24h >= min.ticketClicks24h) {
+      bits.push('ticket clicks are above its recent baseline');
+    }
+    if (h.signals.hereNow >= min.hereNow) bits.push('people are checked in right now');
     if (bits.length) out.set(id, `Picking up — ${bits.join(' and ')}.`);
   }
   return out;
