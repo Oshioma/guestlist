@@ -31,7 +31,6 @@ export async function SiteHeader() {
           <Link href="/archive">Archive</Link>
           <Link href="/promoters">Promoters</Link>
           {member && <Link href="/you">You</Link>}
-          <Link href="/events/submit">+ Add Event</Link>
           {promoterships.length > 0 && <Link href="/promoter">Dashboard</Link>}
           {member?.role === 'admin' && <Link href="/admin/events">Admin</Link>}
         </nav>
@@ -47,7 +46,9 @@ export async function SiteHeader() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={member.avatar_url} alt="" />
                 )}
-                {member.display_name}
+                {/* First name only — the chip is an identity marker, not a
+                    place to publish someone's full name in every page. */}
+                {member.display_name.split(' ')[0]}
               </span>
               <form action="/api/auth/logout" method="post">
                 <button className="btnGhost" type="submit">Sign out</button>

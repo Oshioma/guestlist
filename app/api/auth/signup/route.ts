@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queryOne } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
 import { createSession, hashPassword, setSessionCookie } from '@/lib/auth';
+import { memberSlug } from '@/lib/members';
 
 export async function POST(req: NextRequest) {
   const data = await req.json().catch(() => ({}));
@@ -24,11 +25,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'That email is already registered' }, { status: 409 });
   }
 
+  // The profile slug is generated here — without it every link to this
+  // member's profile would point at /members/null.
   const member = await queryOne<{ id: string }>(
     `insert into members (email, password_hash, display_name, home_city)
      values ($1, $2, $3, $4) returning id`,
     [email, hashPassword(password), displayName, homeCity]
   );
+  await query(`update members set slug = $2 where id = $1`,
+    [member!.id, memberSlug(displayName, member!.id)]);
 
   const token = await createSession(member!.id);
   await setSessionCookie(token);

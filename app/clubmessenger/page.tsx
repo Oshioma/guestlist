@@ -19,6 +19,7 @@ import { AutoRefresh } from '@/components/clubmessenger/AutoRefresh';
 import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
 import { NotificationsPanel } from '@/components/clubmessenger/NotificationsPanel';
 import { HeatCardLink } from '@/components/clubmessenger/HeatCardLink';
+import { AddEventCta } from '@/components/AddEventCta';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,6 +93,9 @@ export default async function ClubMessengerPage() {
             </Link>
           ))}
         </div>
+
+        <AddEventCta heading="On tonight and not listed?"
+                     sub="Add it now — it shows up here the moment it's approved." />
       </main>
     );
   }
@@ -226,6 +230,9 @@ export default async function ClubMessengerPage() {
           );
         })}
       </div>
+
+      <AddEventCta heading="On tonight and not listed?"
+                   sub="Add it now — it shows up here the moment it's approved." />
 
       <div className="clubFootNote">
         Presence is manual — you’re only “here” when you tap I’M HERE, and

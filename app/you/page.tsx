@@ -37,8 +37,11 @@ export default async function YouPage() {
     ),
     getPrivacy(member.id),
     getEmailPrefs(member.id),
-    query<{ bio: string | null; raving_since: number | null; now_doing: string | null; looking_for: string | null }>(
-      `select bio, raving_since, now_doing, looking_for from members where id = $1`,
+    query<{
+      display_name: string; slug: string | null;
+      bio: string | null; raving_since: number | null; now_doing: string | null; looking_for: string | null;
+    }>(
+      `select display_name, slug, bio, raving_since, now_doing, looking_for from members where id = $1`,
       [member.id]
     ).then((r) => r[0]),
   ]);
