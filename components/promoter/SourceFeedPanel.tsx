@@ -135,7 +135,7 @@ export function SourceFeedPanel({
         {pendingReview > 0 && (
           <>
             {' · '}
-            <Link href="/promoter/events" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+            <Link href="/promoter/events" style={{ color: 'var(--accent-ink, var(--accent))', textDecoration: 'underline' }}>
               {pendingReview} awaiting your review
             </Link>
           </>

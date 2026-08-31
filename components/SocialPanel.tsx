@@ -62,7 +62,7 @@ function MemberRow({ member: m }: { member: Attendee }) {
             m.display_name
           )}
           {m.is_close ? (
-            <span className="friendMark" title="Close friend" style={{ color: 'var(--accent)' }}> ★</span>
+            <span className="friendMark" title="Close friend" style={{ color: 'var(--accent-ink, var(--accent))' }}> ★</span>
           ) : m.is_connected ? (
             <span className="friendMark" title="Connected"> ✦</span>
           ) : friend ? (

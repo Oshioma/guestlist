@@ -15,7 +15,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         className="mainNav"
         style={{ paddingTop: 22, borderBottom: '1px solid var(--border)', paddingBottom: 14 }}
       >
-        <span style={{ color: 'var(--accent)', fontWeight: 700 }}>Admin</span>
+        <span style={{ color: 'var(--accent-ink, var(--accent))', fontWeight: 700 }}>Admin</span>
         <Link href="/admin/events">Events</Link>
         <Link href="/admin/promoters">Promoters</Link>
         <Link href="/admin/sources">Sources</Link>

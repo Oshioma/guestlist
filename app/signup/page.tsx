@@ -55,7 +55,7 @@ function SignupForm() {
         {busy ? '…' : 'Join'}
       </button>
       <div className="sub" style={{ marginTop: 18, marginBottom: 0 }}>
-        Already a member? <Link href={`/login?next=${encodeURIComponent(next)}`} style={{ color: 'var(--accent)' }}>Sign in</Link>
+        Already a member? <Link href={`/login?next=${encodeURIComponent(next)}`} style={{ color: 'var(--accent-ink, var(--accent))' }}>Sign in</Link>
       </div>
     </form>
   );
