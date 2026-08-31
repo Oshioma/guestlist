@@ -807,6 +807,57 @@ try {
   }
 
   // -------------------------------------------------------------------------
+  console.log('\n— Mixes on scenes: direct mixes + night roll-up —');
+  {
+    const [theEnd] = await q(`select id, name, slug from scene_entities where name = 'The End'`);
+    const clubUrl = `/archive/clubs/${theEnd.slug}`;
+
+    // The Metalheadz night is linked to its scene entity, so its published
+    // mix rolls up onto that scene's page automatically.
+    const mhClub = await anon.html('/archive/clubs/metalheadz-sunday-sessions-london');
+    check('night mixes roll up onto the linked scene page',
+      mhClub.includes('The mixes') && mhClub.includes('Doc Scott — 3am set'));
+
+    check('a mix needs a night or a scene',
+      (await jules.post('/api/archive/mixes',
+        { url: 'https://youtu.be/jNQXAC9IVRw', title: 'Floating set' })).status === 400);
+    check('unknown scene rejected',
+      (await jules.post('/api/archive/mixes', {
+        sceneEntityId: '00000000-0000-0000-0000-000000000000',
+        url: 'https://youtu.be/jNQXAC9IVRw', title: 'Floating set',
+      })).status === 404);
+
+    const sceneMix = await (await jules.post('/api/archive/mixes', {
+      sceneEntityId: theEnd.id, url: 'https://youtu.be/jNQXAC9IVRw',
+      title: 'Mr C — closing room one', artist: 'Mr C',
+    })).json();
+    check('member scene mix lands pending, off the club page',
+      (await q(`select status from archive_mixes where id = $1`, [sceneMix.id]))[0].status === 'pending'
+      && !(await anon.html(clubUrl)).includes('Mr C — closing room one'));
+    check('desk labels the scene mix',
+      (await oshi.html('/admin/archive')).includes('The End (scene)'));
+
+    await oshi.post('/api/admin/archive', { action: 'publish_mix', mixId: sceneMix.id });
+    const club = await anon.html(clubUrl);
+    check('published scene mix plays on the club page in our card',
+      club.includes('Mr C — closing room one') && club.includes('mixCard'));
+    check('scene mix appears on the archive main page with a scene link',
+      (await anon.html('/archive')).includes('Mr C — closing room one'));
+    check('duplicate link on the same scene blocked', await (async () => {
+      const r = await jules.post('/api/archive/mixes', {
+        sceneEntityId: theEnd.id, url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw', title: 'Again',
+      });
+      return r.status === 409 && /already on this scene/.test((await r.json()).error ?? '');
+    })());
+
+    check('member sees the add-a-night shortcut on the scene page',
+      (await jules.html(clubUrl)).includes(`+ Add a night at ${theEnd.name}`)
+      && !(await anon.html(clubUrl)).includes('+ Add a night at'));
+    check('add-a-night shortcut prefills the event name',
+      (await jules.html('/archive/add?scene=The%20End')).includes('value="The End"'));
+  }
+
+  // -------------------------------------------------------------------------
   console.log('\n— Legacy suites untouched (spot checks) —');
   {
     check('live events browse still healthy', (await anon.fetch('/events')).status === 200);

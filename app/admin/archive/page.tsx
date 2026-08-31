@@ -68,9 +68,11 @@ export default async function AdminArchivePage() {
       contributor: string | null; event_title: string;
     }>(
       `select x.id, x.title, x.artist_name, x.platform, x.url,
-              m.display_name as contributor, e.title as event_title
+              m.display_name as contributor,
+              coalesce(e.title, se.name || ' (scene)') as event_title
          from archive_mixes x
-         join archive_events e on e.id = x.archive_event_id
+         left join archive_events e on e.id = x.archive_event_id
+         left join scene_entities se on se.id = x.scene_entity_id
          left join members m on m.id = x.contributed_by
         where x.status = 'pending'
         order by x.created_at limit 30`

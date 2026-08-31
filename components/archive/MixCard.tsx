@@ -16,6 +16,8 @@ export type MixRow = {
   event_title?: string;
   event_slug?: string;
   display_date?: string;
+  scene_name?: string;
+  scene_slug?: string;
 };
 
 export function MixCard({ mix }: { mix: MixRow }) {
@@ -36,13 +38,17 @@ export function MixCard({ mix }: { mix: MixRow }) {
         allow="autoplay; encrypted-media; picture-in-picture"
         title={mix.title}
       />
-      {(mix.event_title || (mix.credit_contributor && mix.contributor)) && (
+      {(mix.event_title || mix.scene_name || (mix.credit_contributor && mix.contributor)) && (
         <div className="mixFoot">
-          {mix.event_title && mix.event_slug && (
+          {mix.event_title && mix.event_slug ? (
             <Link href={`/archive/events/${mix.event_slug}`} className="mixEventLink">
               {mix.event_title}{mix.display_date && ` · ${mix.display_date}`}
             </Link>
-          )}
+          ) : mix.scene_name && mix.scene_slug ? (
+            <Link href={`/archive/clubs/${mix.scene_slug}`} className="mixEventLink">
+              {mix.scene_name}
+            </Link>
+          ) : null}
           {mix.credit_contributor && mix.contributor && (
             <span className="mixCredit">Added by {mix.contributor}</span>
           )}

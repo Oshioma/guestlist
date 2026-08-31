@@ -33,9 +33,9 @@ async function shrinkImage(file: File): Promise<File> {
   return file;
 }
 
-export function ContributeForm() {
+export function ContributeForm({ initialEventName = '' }: { initialEventName?: string }) {
   const router = useRouter();
-  const [mode, setMode] = useState<'flyer' | 'event'>('flyer');
+  const [mode, setMode] = useState<'flyer' | 'event'>(initialEventName ? 'event' : 'flyer');
   const [file, setFile] = useState<File | null>(null);
   const [itemType, setItemType] = useState('flyer');
   const [what, setWhat] = useState('');
@@ -43,7 +43,7 @@ export function ContributeForm() {
   const [where, setWhere] = useState('');
   const [notes, setNotes] = useState('');
   const [credit, setCredit] = useState(true);
-  const [manual, setManual] = useState({ title: '', year: '', circa: '', venue: '', promoter: '', city: '', country: '', notes: '' });
+  const [manual, setManual] = useState({ title: initialEventName, year: '', circa: '', venue: '', promoter: '', city: '', country: '', notes: '' });
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

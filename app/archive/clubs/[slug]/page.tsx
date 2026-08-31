@@ -10,6 +10,8 @@ import { discoverableSql } from '@/lib/privacy';
 import { notBlockedSql } from '@/lib/connections';
 import { fmtEventDate } from '@/lib/util';
 import { AddToHistoryButton } from '@/components/archive/AddToHistoryButton';
+import { AddMixForm } from '@/components/archive/AddMixForm';
+import { MixCard, type MixRow } from '@/components/archive/MixCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +31,7 @@ export default async function SceneEntityPage({ params }: { params: Promise<{ sl
   );
   if (!entity || (entity.status !== 'approved' && member?.role !== 'admin')) notFound();
 
-  const [memberCount, myHistory, genres, events, flyers, people, lineage, nowEvents] = await Promise.all([
+  const [memberCount, myHistory, genres, events, flyers, people, lineage, nowEvents, mixes] = await Promise.all([
     queryOne<{ n: number }>(
       `select count(*)::int as n from member_scene_history h
          join members m on m.id = h.member_id
@@ -103,6 +105,24 @@ export default async function SceneEntityPage({ params }: { params: Promise<{ sl
         group by e.id order by n desc, e.start_at limit 4`,
       [entity.id]
     ),
+    // Mixes: attached to this scene directly, plus every mix from its
+    // archived nights — the scene page becomes a listening page.
+    query<MixRow>(
+      `select x.id, x.title, x.artist_name, x.platform, x.url, x.credit_contributor,
+              m.display_name as contributor,
+              e.title as event_title, e.slug as event_slug, e.display_date
+         from archive_mixes x
+         left join members m on m.id = x.contributed_by
+         left join archive_events e on e.id = x.archive_event_id and e.status = 'published'
+        where x.status = 'published'
+          and (x.scene_entity_id = $1
+               or x.archive_event_id in (
+                 select aee.archive_event_id from archive_event_entities aee
+                   join archive_events ae on ae.id = aee.archive_event_id and ae.status = 'published'
+                  where aee.entity_id = $1))
+        order by x.published_at desc limit 12`,
+      [entity.id]
+    ),
   ]);
 
   const era = entity.active_from_year
@@ -125,7 +145,14 @@ export default async function SceneEntityPage({ params }: { params: Promise<{ sl
           ? `${memberCount} Guestlist member${memberCount === 1 ? '' : 's'} went here`
           : 'Be the first to claim this place in your history'}
       </div>
-      <AddToHistoryButton entityId={entity.id} added={myHistory} isSignedIn={!!member} />
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <AddToHistoryButton entityId={entity.id} added={myHistory} isSignedIn={!!member} />
+        {member && (
+          <Link href={`/archive/add?scene=${encodeURIComponent(entity.name)}`} className="btnGhost">
+            {`+ Add a night at ${entity.name}`}
+          </Link>
+        )}
+      </div>
       {entity.description && <p className="prose" style={{ marginTop: 14 }}>{entity.description}</p>}
 
       {lineage.length > 0 && (
@@ -165,6 +192,22 @@ export default async function SceneEntityPage({ params }: { params: Promise<{ sl
           </div>
         </section>
       )}
+
+      <section style={{ marginTop: 20 }}>
+        <div className="sectionLabel">The mixes</div>
+        {mixes.length > 0 ? (
+          <div className="mixGrid">
+            {mixes.map((x) => <MixCard key={x.id} mix={x} />)}
+          </div>
+        ) : (
+          <p className="youPanelSub" style={{ marginTop: 0 }}>
+            {`No mixes from ${entity.name} yet — got one?`}
+          </p>
+        )}
+        <div style={{ marginTop: 10 }}>
+          <AddMixForm sceneEntityId={entity.id} label={`+ Add a ${entity.name} mix`} isSignedIn={!!member} />
+        </div>
+      </section>
 
       {people.length > 0 && (
         <section style={{ marginTop: 20 }}>

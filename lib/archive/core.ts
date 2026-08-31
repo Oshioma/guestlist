@@ -492,11 +492,13 @@ export async function archiveHighlights() {
     query(
       `select x.id, x.title, x.artist_name, x.platform, x.url, x.credit_contributor,
               m.display_name as contributor,
-              e.title as event_title, e.slug as event_slug, e.display_date
+              e.title as event_title, e.slug as event_slug, e.display_date,
+              se.name as scene_name, se.slug as scene_slug
          from archive_mixes x
-         join archive_events e on e.id = x.archive_event_id and e.status = 'published'
+         left join archive_events e on e.id = x.archive_event_id and e.status = 'published'
+         left join scene_entities se on se.id = x.scene_entity_id and se.status = 'approved'
          left join members m on m.id = x.contributed_by
-        where x.status = 'published'
+        where x.status = 'published' and (e.id is not null or se.id is not null)
         order by x.published_at desc limit 6`
     ),
   ]);
