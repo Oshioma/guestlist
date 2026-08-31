@@ -11,15 +11,27 @@ export async function GET() {
   if (!await admin()) return NextResponse.json({error:'Forbidden'},{status:403});
   const videos=await query(`select v.*, coalesce(json_agg(distinct jsonb_build_object('id',a.id,'name',a.name,'slug',a.slug)) filter(where a.id is not null),'[]') artists,
     (select count(*)::int from artist_video_moments m where m.video_id=v.id) moment_count,
-    (select count(*)::int from artist_video_moments m where m.video_id=v.id and m.status='review') review_count
+    (select count(*)::int from artist_video_moments m where m.video_id=v.id and m.status='review') review_count,
+    (select count(*)::int from artist_video_moments m where m.video_id=v.id and m.status='published') published_count
     from artist_videos v left join artist_video_artists va on va.video_id=v.id left join artists a on a.id=va.artist_id
     group by v.id order by v.published_at desc nulls last limit 500`);
-  const moments=await query(`select m.*,v.title video_title,v.youtube_video_id from artist_video_moments m join artist_videos v on v.id=m.video_id
-    where m.status='review' order by m.created_at desc limit 200`);
+
+  const momentSelect=`select m.*,v.title video_title,v.youtube_video_id,
+      coalesce(a.name,'Unmatched artist') artist_name,a.slug artist_slug
+    from artist_video_moments m join artist_videos v on v.id=m.video_id
+    left join lateral (
+      select a2.name,a2.slug from artist_video_artists va2
+      join artists a2 on a2.id=va2.artist_id
+      where va2.video_id=v.id
+      order by case va2.role when 'interviewee' then 0 when 'featured' then 1 else 2 end,va2.confidence desc nulls last
+      limit 1
+    ) a on true`;
+  const moments=await query(`${momentSelect} where m.status='review' order by a.name nulls last,v.published_at desc nulls last,m.start_seconds limit 300`);
+  const publishedMoments=await query(`${momentSelect} where m.status='published' order by a.name nulls last,v.published_at desc nulls last,m.start_seconds limit 800`);
   const sync=await query(`select * from youtube_channel_imports order by updated_at desc`);
   let youtubeConnection:{connected:boolean;channel_id?:string|null;channel_title?:string|null;connected_at?:string};
   try{youtubeConnection=await youtubeConnectionStatus()}catch{youtubeConnection={connected:false}}
-  return NextResponse.json({videos,moments,sync,youtubeConnection});
+  return NextResponse.json({videos,moments,publishedMoments,sync,youtubeConnection});
 }
 
 export async function POST(req: NextRequest) {
