@@ -17,6 +17,7 @@ import { memberPlaces } from '@/lib/locations';
 import { RecShelf } from '@/components/v2c/RecShelf';
 import { GuestlistNow } from '@/components/GuestlistNow';
 import { AskPanel } from '@/components/ask/AskPanel';
+import { BalanceHomeSection } from '@/components/balance/BalanceHomeSection';
 
 export const dynamic = 'force-dynamic';
 
@@ -279,6 +280,8 @@ export default async function HomePage() {
           </>
         )}
 
+        <BalanceHomeSection />
+
         <section className="homeSubmitStrip">
           <div>
             <h3 style={{ margin: '0 0 6px' }}>Know a night we’re missing?</h3>
@@ -291,7 +294,7 @@ export default async function HomePage() {
 
         <footer className="siteFooter">
           <div>Guestlist — the best events for our community, not every event.</div>
-          <div>info@guestlist.net</div>
+          <div><Link href="/balance">Balance</Link> · info@guestlist.net</div>
         </footer>
       </div>
     </main>
