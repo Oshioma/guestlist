@@ -7,6 +7,7 @@ import { extractVideoMoments, reviewMoment } from '@/lib/videoMomentsAI';
 import { pullYouTubeTranscript, youtubeConnectionStatus } from '@/lib/youtubeOAuth';
 
 async function admin() { const m=await getCurrentMember(); return m?.role==='admin' ? m : null; }
+function artistSlug(name:string){return name.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/&/g,' and ').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,70)||'artist'}
 
 export async function GET() {
   if (!await admin()) return NextResponse.json({error:'Forbidden'},{status:403});
@@ -73,19 +74,27 @@ export async function POST(req: NextRequest) {
   }
   if(body.action==='change-artist' && Array.isArray(body.videoIds) && typeof body.artistName==='string'){
     const ids=[...new Set(body.videoIds.filter((id:unknown)=>typeof id==='string'&&id))];
-    const name=body.artistName.trim();
+    const name=body.artistName.trim().replace(/\s+/g,' ');
     if(!ids.length||!name) return NextResponse.json({error:'Video and artist are required'},{status:400});
     let artists=await query<{id:string;name:string;slug:string}>(`select id,name,slug from artists where lower(name)=lower($1) order by name limit 2`,[name]);
+    let created=false;
     if(!artists.length){
-      artists=await query<{id:string;name:string;slug:string}>(`select id,name,slug from artists where name ilike '%'||$1||'%' order by case when name ilike $1||'%' then 0 else 1 end,length(name),name limit 6`,[name]);
-      if(artists.length!==1) return NextResponse.json({error:artists.length?`More than one artist matches. Enter the exact name: ${artists.map(a=>a.name).join(', ')}`:`No artist found matching “${name}”.`},{status:400});
+      const partial=await query<{id:string;name:string;slug:string}>(`select id,name,slug from artists where name ilike '%'||$1||'%' order by case when name ilike $1||'%' then 0 else 1 end,length(name),name limit 6`,[name]);
+      if(partial.length===1){artists=partial}
+      else if(partial.length>1){return NextResponse.json({error:`More than one artist matches. Enter the exact name: ${partial.map(a=>a.name).join(', ')}`},{status:400})}
+      else {
+        const base=artistSlug(name);let slug=base;let n=2;
+        while((await query<{id:string}>(`select id from artists where slug=$1 limit 1`,[slug])).length){slug=`${base}-${n++}`}
+        artists=await query<{id:string;name:string;slug:string}>(`insert into artists(name,slug) values($1,$2) returning id,name,slug`,[name,slug]);
+        created=true;
+      }
     }
     const artist=artists[0];
     for(const videoId of ids){
-      await query(`delete from artist_video_artists where video_id=$1 and role='interviewee'`,[videoId]);
+      await query(`delete from artist_video_artists where video_id=$1 and role in ('interviewee','featured')`,[videoId]);
       await query(`insert into artist_video_artists(video_id,artist_id,role,confidence,source) values($1,$2,'interviewee',100,'admin') on conflict(video_id,artist_id,role) do update set confidence=100,source='admin'`,[videoId,artist.id]);
     }
-    return NextResponse.json({ok:true,updated:ids.length,artist});
+    return NextResponse.json({ok:true,updated:ids.length,artist,created});
   }
   if(body.action==='match' && body.videoId) {
     const matches=await autoMatchArtists(body.videoId);
