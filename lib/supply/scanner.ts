@@ -23,7 +23,7 @@ export type SourceRow = {
 };
 
 const EVENT_PATH_HINT =
-  /\/(events?|whats?-on|what-s-on|listings?|gigs?|parties|party|nights?|programme|program|lineup|agenda|tickets?|e)\/[^/]/i;
+  /\/(events?|whats?-?on|what-s-on|listings?|gigs?|parties|party|nights?|programme|program|lineup|agenda|tickets?|e)\/[^/]/i;
 const NON_EVENT_PATH =
   /\/(login|signin|signup|register|account|cart|basket|checkout|privacy|terms|cookies|about|contact|jobs|careers|press|faq|search|tag|category|wp-admin|admin)\b/i;
 const DATE_TEXT = /\b(\d{1,2}(st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|(mon|tue|wed|thu|fri|sat|sun)[a-z]*\s+\d{1,2}|\d{1,2}[./]\d{1,2}[./]\d{2,4})\b/i;

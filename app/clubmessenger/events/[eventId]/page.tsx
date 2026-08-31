@@ -34,6 +34,7 @@ type EventRow = {
   city: string | null;
   listing_status: string;
   ticket_url: string | null;
+  source_url: string | null;
   primary_image_url: string | null;
   venue_name: string | null;
 };
@@ -44,7 +45,7 @@ export default async function ClubEventPage({ params }: { params: Promise<{ even
 
   const event = await queryOne<EventRow>(
     `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
-            e.city, e.listing_status, e.ticket_url, e.primary_image_url,
+            e.city, e.listing_status, e.ticket_url, e.source_url, e.primary_image_url,
             v.name as venue_name
        from events e left join venues v on v.id = e.venue_id
       where e.id = $1 and e.status = 'live'`,
@@ -138,7 +139,7 @@ export default async function ClubEventPage({ params }: { params: Promise<{ even
             {hereCount > 0 && <span className="hereBadge">● {hereCount} here now</span>}
             {goingCount > 0 && <span>{goingCount} going</span>}
             <Link href={`/events/${event.slug}`} className="clubDetailLink">Event details →</Link>
-            {event.ticket_url && !cancelled && event.listing_status !== 'sold_out' && (
+            {(event.ticket_url || event.source_url) && !cancelled && event.listing_status !== 'sold_out' && (
               <a href={`/out/${event.id}?src=clubmessenger`} className="clubDetailLink">Tickets →</a>
             )}
           </div>

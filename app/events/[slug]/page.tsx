@@ -248,7 +248,7 @@ export default async function EventDetailPage({ params, searchParams }: {
             )}
             <hr />
             <div className="muted">{price ?? 'Price to be announced'}</div>
-            {event.ticket_url && !past && !cancelled && event.listing_status !== 'sold_out' && (
+            {(event.ticket_url || event.source_url) && !past && !cancelled && event.listing_status !== 'sold_out' && (
               <a className="ctaTickets" href={`/out/${event.id}${src ? `?src=${encodeURIComponent(src)}` : ''}`}>
                 Get Tickets →
               </a>

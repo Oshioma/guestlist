@@ -274,6 +274,7 @@ export type EventDetail = EventCard & {
   latitude: number | null;
   longitude: number | null;
   ticket_url: string | null;
+  source_url: string | null;
   status: string;
   venue: {
     name: string; slug: string; address: string | null; city: string | null;
