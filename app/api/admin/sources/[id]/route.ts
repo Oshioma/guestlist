@@ -69,6 +69,24 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       }
     }
 
+    if (body.name !== undefined) {
+      const name = String(body.name).trim();
+      if (!name) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+      set('name', name.slice(0, 200));
+    }
+    if (body.url !== undefined) {
+      let parsed: URL;
+      try {
+        parsed = new URL(String(body.url).trim());
+        if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+      } catch {
+        return NextResponse.json({ error: 'A valid URL is required' }, { status: 400 });
+      }
+      const clash = await queryOne(
+        `select 1 from event_sources where url = $1 and id <> $2`, [parsed.toString(), id]);
+      if (clash) return NextResponse.json({ error: 'Another source already uses that URL' }, { status: 409 });
+      set('url', parsed.toString());
+    }
     if (body.city !== undefined) set('city', cleanPlace(body.city));
     if (body.country !== undefined) set('country', cleanPlace(body.country));
 
