@@ -3,7 +3,7 @@ import { query, queryOne } from './db';
 
 const SCOPE='https://www.googleapis.com/auth/youtube.force-ssl';
 
-type Connection={encrypted_refresh_token:string;channel_id:string|null;channel_title:string|null;granted_scope:string|null};
+type Connection={refresh_token_encrypted:string;channel_id:string|null;channel_title:string|null;scopes:string[]|null};
 
 function cfg(){
   const clientId=process.env.YOUTUBE_OAUTH_CLIENT_ID;
@@ -22,9 +22,31 @@ export function youtubeAuthUrl(redirectUri:string,state:string){const {clientId}
 async function tokenRequest(params:Record<string,string>){const r=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams(params),cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error_description||j.error||'Google token exchange failed');return j as {access_token:string;refresh_token?:string;expires_in?:number;scope?:string}}
 
 export async function exchangeCode(code:string,redirectUri:string){const {clientId,clientSecret}=cfg();return tokenRequest({code,client_id:clientId,client_secret:clientSecret,redirect_uri:redirectUri,grant_type:'authorization_code'})}
-async function accessToken(){const c=await queryOne<Connection>(`select encrypted_refresh_token,channel_id,channel_title,granted_scope from youtube_oauth_connections where provider='youtube'`);if(!c)throw new Error('YouTube account is not connected');const {clientId,clientSecret}=cfg();const t=await tokenRequest({refresh_token:decryptToken(c.encrypted_refresh_token),client_id:clientId,client_secret:clientSecret,grant_type:'refresh_token'});return t.access_token}
+async function accessToken(){const c=await queryOne<Connection>(`select refresh_token_encrypted,channel_id,channel_title,scopes from youtube_oauth_connections where provider='youtube'`);if(!c)throw new Error('YouTube account is not connected');const {clientId,clientSecret}=cfg();const t=await tokenRequest({refresh_token:decryptToken(c.refresh_token_encrypted),client_id:clientId,client_secret:clientSecret,grant_type:'refresh_token'});return t.access_token}
 
-export async function saveConnection(refreshToken:string,scope:string|undefined){const token=encryptToken(refreshToken);const access=await (async()=>{const {clientId,clientSecret}=cfg();const t=await tokenRequest({refresh_token:refreshToken,client_id:clientId,client_secret:clientSecret,grant_type:'refresh_token'});return t.access_token})();const r=await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',{headers:{authorization:`Bearer ${access}`},cache:'no-store'});const j=await r.json() as {items?:Array<{id:string;snippet?:{title?:string}}>;error?:{message?:string}};if(!r.ok)throw new Error(j.error?.message||'Could not read connected YouTube channel');const ch=j.items?.[0];if(!ch)throw new Error('No YouTube channel found on this Google account');await query(`insert into youtube_oauth_connections(provider,channel_id,channel_title,encrypted_refresh_token,granted_scope) values('youtube',$1,$2,$3,$4) on conflict(provider) do update set channel_id=excluded.channel_id,channel_title=excluded.channel_title,encrypted_refresh_token=excluded.encrypted_refresh_token,granted_scope=excluded.granted_scope,updated_at=now()`,[ch.id,ch.snippet?.title||null,token,scope||SCOPE]);return {channelId:ch.id,channelTitle:ch.snippet?.title||null}}
+export async function saveConnection(refreshToken:string,scope:string|undefined){
+  const token=encryptToken(refreshToken);
+  const {clientId,clientSecret}=cfg();
+  const t=await tokenRequest({refresh_token:refreshToken,client_id:clientId,client_secret:clientSecret,grant_type:'refresh_token'});
+  const r=await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true&maxResults=50',{headers:{authorization:`Bearer ${t.access_token}`},cache:'no-store'});
+  const j=await r.json() as {items?:Array<{id:string;snippet?:{title?:string}}>;error?:{message?:string}};
+  if(!r.ok)throw new Error(j.error?.message||'Could not read connected YouTube channel');
+  const channels=j.items||[];
+  if(!channels.length)throw new Error('No YouTube channel found on this Google account');
+
+  // Prefer the exact channel already resolved by the Guestlist public YouTube sync.
+  const expected=await queryOne<{channel_id:string|null}>(`select channel_id from youtube_channel_imports where channel_key='oshioma' limit 1`);
+  const ch=(expected?.channel_id ? channels.find(x=>x.id===expected.channel_id) : undefined) || channels.find(x=>/guestlist/i.test(x.snippet?.title||'')) || channels[0];
+
+  if(expected?.channel_id && ch.id!==expected.channel_id){
+    const available=channels.map(x=>`${x.snippet?.title||'Untitled'} (${x.id})`).join(', ');
+    throw new Error(`The Google login did not grant access to the Guestlist YouTube channel. Available channel${channels.length===1?'':'s'}: ${available}. Please reconnect using the Google/Brand Account that manages Guestlist.`);
+  }
+
+  const scopes=(scope||SCOPE).split(/\s+/).filter(Boolean);
+  await query(`insert into youtube_oauth_connections(provider,channel_id,channel_title,refresh_token_encrypted,scopes) values('youtube',$1,$2,$3,$4::text[]) on conflict(provider) do update set channel_id=excluded.channel_id,channel_title=excluded.channel_title,refresh_token_encrypted=excluded.refresh_token_encrypted,scopes=excluded.scopes,updated_at=now()`,[ch.id,ch.snippet?.title||null,token,scopes]);
+  return {channelId:ch.id,channelTitle:ch.snippet?.title||null};
+}
 
 export async function youtubeConnectionStatus(){const c=await queryOne<{channel_id:string|null;channel_title:string|null;connected_at:string}>(`select channel_id,channel_title,connected_at::text from youtube_oauth_connections where provider='youtube'`);return c?{connected:true,...c}:{connected:false}}
 
