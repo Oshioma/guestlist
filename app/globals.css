@@ -87,13 +87,13 @@ button { font-family: inherit; }
   display: flex;
   align-items: center;
   gap: 26px;
-  height: 60px;
+  height: 68px;
 }
 
 .brand {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 3px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--text);
   white-space: nowrap;
@@ -102,12 +102,16 @@ button { font-family: inherit; }
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 11px;
   color: var(--accent-ink);
   font-weight: 800;
-  letter-spacing: 1.5px;
+  letter-spacing: 2px;
 }
-.brandMark { width: 26px; height: 26px; display: block; }
+.brandMark { width: 40px; height: 40px; display: block; }
+@media (max-width: 720px) {
+  .brand { font-size: 18px; letter-spacing: 1.4px; }
+  .brandMark { width: 32px; height: 32px; }
+}
 
 .mainNav {
   display: flex;
@@ -2102,6 +2106,20 @@ button { font-family: inherit; }
   font-size: 10.5px;
   letter-spacing: .08em;
   text-transform: uppercase;
+}
+.mixAdminDel {
+  background: none; border: none; cursor: pointer; padding: 0;
+  color: var(--danger); font-size: 11px; font-weight: 650;
+  display: inline-flex; gap: 8px; align-items: baseline;
+}
+.mixAdminDelConfirm {
+  background: var(--danger); border: none; cursor: pointer;
+  color: #fff; font-size: 11px; font-weight: 700;
+  border-radius: 999px; padding: 3px 10px;
+}
+.mixAdminDelCancel {
+  background: none; border: none; cursor: pointer; padding: 0;
+  color: var(--text-muted); font-size: 11px; text-decoration: underline;
 }
 .mixFrame { width: 100%; border: 0; border-radius: 8px; background: #000; }
 .mixFoot {

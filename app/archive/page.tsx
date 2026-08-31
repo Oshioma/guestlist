@@ -135,7 +135,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
         <section>
           <div className="sectionLabel">The mixes</div>
           <div className="mixGrid">
-            {h.mixes.map((x) => <MixCard key={x.id} mix={x} />)}
+            {h.mixes.map((x) => <MixCard key={x.id} mix={x} canDelete={member?.role === 'admin'} />)}
           </div>
         </section>
       )}

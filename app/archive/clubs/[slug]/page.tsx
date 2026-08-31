@@ -197,7 +197,7 @@ export default async function SceneEntityPage({ params }: { params: Promise<{ sl
         <div className="sectionLabel">The mixes</div>
         {mixes.length > 0 ? (
           <div className="mixGrid">
-            {mixes.map((x) => <MixCard key={x.id} mix={x} />)}
+            {mixes.map((x) => <MixCard key={x.id} mix={x} canDelete={member?.role === 'admin'} />)}
           </div>
         ) : (
           <p className="youPanelSub" style={{ marginTop: 0 }}>
