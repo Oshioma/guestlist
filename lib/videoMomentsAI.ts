@@ -34,7 +34,9 @@ export async function extractVideoMoments(videoId: string) {
 
   const prompt = `You are indexing an original Guestlist DJ/artist interview.\n\nVIDEO: ${video.title}\nDURATION_SECONDS: ${video.duration_seconds ?? 'unknown'}\n\nTRANSCRIPT:\n${video.transcript_text.slice(0, 120000)}\n\nReturn ONLY valid JSON: {"moments":[...]}. Identify 4-12 genuinely useful self-contained moments. Each moment must use only facts actually present in the transcript. Fields: startSeconds integer, endSeconds integer|null, title concise, summary 1 sentence, excerpt short verbatim excerpt if useful, topicSlug lowercase-hyphenated, topicLabel human label. If timestamps are absent from the transcript, use startSeconds 0 and do not pretend to know an exact timestamp. Never invent artists, clubs, dates, genres or stories.`;
 
-  const model = process.env.INTERVIEW_AI_MODEL || 'claude-sonnet-4-6';
+  const configuredModel = process.env.INTERVIEW_AI_MODEL?.trim();
+  const retiredModels = new Set(['claude-sonnet-4-20250514','claude-opus-4-20250514','claude-opus-4-1-20250805']);
+  const model = configuredModel && !retiredModels.has(configuredModel) ? configuredModel : 'claude-sonnet-4-6';
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
