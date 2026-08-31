@@ -15,50 +15,61 @@ export async function SiteHeader() {
     : 0;
   return (
     <header className="siteHeader">
-      <div className="wrap inner">
-        <Link href="/" className="brand" aria-label="Guestlist — home">
-          {/* The real wordmark artwork — purple on the light theme, white in the dark. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="brandWordmark brandOnLight" src="/brand/Guestlist_purple_300dpi.png" alt="GUESTLIST" />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="brandWordmark brandOnDark" src="/brand/Guestlist_white_72dpi.png" alt="" aria-hidden />
-        </Link>
-        <nav className="mainNav">
-          <Link href="/events">Events</Link>
-          <Link href="/clubmessenger">Tonight</Link>
-          {member && <Link href="/people">People</Link>}
-          <Link href="/explore">Explore</Link>
-          <Link href="/archive">Archive</Link>
-          <Link href="/promoters">Promoters</Link>
-          {member && <Link href="/you">You</Link>}
-          {promoterships.length > 0 && <Link href="/promoter">Dashboard</Link>}
-          {member?.role === 'admin' && <Link href="/admin/events">Admin</Link>}
-        </nav>
-        <div className="headerRight">
-          <ThemeToggle />
-          {member ? (
-            <>
-              <Link href="/notifications" className="bellLink" title="Notifications">
-                🔔{unread > 0 && <span className="bellBadge">{unread > 99 ? '99+' : unread}</span>}
-              </Link>
-              <span className="avatarChip">
-                {member.avatar_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={member.avatar_url} alt="" />
-                )}
-                {/* First name only — the chip is an identity marker, not a
-                    place to publish someone's full name in every page. */}
-                {member.display_name.split(' ')[0]}
-              </span>
-              <form action="/api/auth/logout" method="post">
-                <button className="btnGhost" type="submit">Sign out</button>
-              </form>
-            </>
-          ) : (
-            <Link href="/login" className="btnGhost">Sign in</Link>
-          )}
+      <div className="headerMain">
+        <div className="wrap inner">
+          <Link href="/" className="brand" aria-label="Guestlist — home">
+            {/* The real wordmark artwork — purple on the light theme, white in the dark. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="brandWordmark brandOnLight" src="/brand/Guestlist_purple_300dpi.png" alt="GUESTLIST" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="brandWordmark brandOnDark" src="/brand/Guestlist_white_72dpi.png" alt="" aria-hidden />
+          </Link>
+          <nav className="mainNav">
+            <Link href="/events">Events</Link>
+            <Link href="/clubmessenger">Tonight</Link>
+            {member && <Link href="/people">People</Link>}
+            <Link href="/explore">Explore</Link>
+            <Link href="/archive">Archive</Link>
+            <Link href="/promoters">Promoters</Link>
+            {member && <Link href="/you">You</Link>}
+            {promoterships.length > 0 && <Link href="/promoter">Dashboard</Link>}
+            {member?.role === 'admin' && <Link href="/admin/events">Admin</Link>}
+          </nav>
+          <div className="headerRight">
+            <ThemeToggle />
+            {member ? (
+              <>
+                <Link href="/notifications" className="bellLink" title="Notifications">
+                  🔔{unread > 0 && <span className="bellBadge">{unread > 99 ? '99+' : unread}</span>}
+                </Link>
+                <span className="avatarChip">
+                  {member.avatar_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={member.avatar_url} alt="" />
+                  )}
+                  {/* First name only — the chip is an identity marker, not a
+                      place to publish someone's full name in every page. */}
+                  {member.display_name.split(' ')[0]}
+                </span>
+              </>
+            ) : (
+              <Link href="/login" className="btnGhost">Sign in</Link>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Account actions live under the nav's line, so the navigation
+          itself gets the room to be read at a proper size. */}
+      {member && (
+        <div className="headerUnderbar">
+          <div className="wrap headerUnderbarInner">
+            <form action="/api/auth/logout" method="post">
+              <button className="signOutLink" type="submit">Sign out</button>
+            </form>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
