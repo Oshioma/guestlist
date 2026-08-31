@@ -13,10 +13,12 @@ type ScanSummary = {
 };
 
 export function SourceControls({
-  id, active, trust, pollingEnabled, pollFrequencyHours,
+  id, name, url, active, trust, pollingEnabled, pollFrequencyHours,
   city, country, genreIds, genres, countries,
 }: {
   id: string;
+  name: string;
+  url: string;
   active: boolean;
   trust: string;
   pollingEnabled: boolean;
@@ -33,6 +35,8 @@ export function SourceControls({
   const [scanResult, setScanResult] = useState<ScanSummary | null>(null);
   const [error, setError] = useState('');
   const [tagOpen, setTagOpen] = useState(false);
+  const [tagName, setTagName] = useState(name);
+  const [tagUrl, setTagUrl] = useState(url);
   const [tagCity, setTagCity] = useState(city ?? '');
   const [tagCountry, setTagCountry] = useState(country ?? '');
   const [tagGenres, setTagGenres] = useState<string[]>(genreIds);
@@ -47,7 +51,7 @@ export function SourceControls({
     else setError((await res.json().catch(() => ({})))?.error ?? 'Failed');
   }
 
-  async function patch(body: Record<string, unknown>) {
+  async function patch(body: Record<string, unknown>): Promise<boolean> {
     setBusy(true);
     setError('');
     const res = await fetch(`/api/admin/sources/${id}`, {
@@ -56,8 +60,9 @@ export function SourceControls({
       body: JSON.stringify(body),
     });
     setBusy(false);
-    if (res.ok) router.refresh();
-    else setError((await res.json().catch(() => ({})))?.error ?? 'Failed');
+    if (res.ok) { router.refresh(); return true; }
+    setError((await res.json().catch(() => ({})))?.error ?? 'Failed');
+    return false;
   }
 
   async function scanNow() {
@@ -142,7 +147,7 @@ export function SourceControls({
           disabled={busy}
           type="button"
         >
-          {tagOpen ? 'Close tags' : 'Tag place/genres'}
+          {tagOpen ? 'Close edit' : 'Edit'}
         </button>
         {/* Permanent — two clicks required. Events found through this
             source survive (their source link just clears). */}
@@ -161,6 +166,14 @@ export function SourceControls({
       {tagOpen && (
         <div style={{ display: 'grid', gap: 6, padding: 8, border: '1px solid var(--border)',
                       borderRadius: 10, minWidth: 230 }}>
+          <input value={tagName} onChange={(e) => setTagName(e.target.value)}
+                 placeholder="Source name" maxLength={200}
+                 style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)',
+                          borderRadius: 8, color: 'var(--text)', padding: '6px 8px', fontSize: 12 }} />
+          <input value={tagUrl} onChange={(e) => setTagUrl(e.target.value)}
+                 placeholder="https://…" type="url"
+                 style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)',
+                          borderRadius: 8, color: 'var(--text)', padding: '6px 8px', fontSize: 12 }} />
           <input value={tagCity} onChange={(e) => setTagCity(e.target.value)}
                  placeholder="City (London)" maxLength={80}
                  style={{ background: 'var(--bg)', border: '1px solid var(--border-strong)',
@@ -179,11 +192,16 @@ export function SourceControls({
             disabled={busy}
             type="button"
             onClick={async () => {
-              await patch({ city: tagCity, country: tagCountry, genreIds: tagGenres });
-              setTagOpen(false);
+              // The panel stays open on failure so a URL clash or typo can
+              // be corrected without losing the edits.
+              const ok = await patch({
+                name: tagName, url: tagUrl,
+                city: tagCity, country: tagCountry, genreIds: tagGenres,
+              });
+              if (ok) setTagOpen(false);
             }}
           >
-            Save tags
+            Save
           </button>
         </div>
       )}

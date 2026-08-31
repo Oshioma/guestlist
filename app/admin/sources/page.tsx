@@ -272,6 +272,8 @@ export default async function SourcesPage({
                       </div>
                       <SourceControls
                         id={s.id}
+                        name={s.name}
+                        url={s.url}
                         active={s.active}
                         trust={s.trust}
                         pollingEnabled={s.polling_enabled}
