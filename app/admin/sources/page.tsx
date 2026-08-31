@@ -274,6 +274,7 @@ export default async function SourcesPage({
                         id={s.id}
                         name={s.name}
                         url={s.url}
+                        feedUrl={s.feed_url}
                         active={s.active}
                         trust={s.trust}
                         pollingEnabled={s.polling_enabled}
