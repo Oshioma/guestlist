@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentMember } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { autoMatchArtists, importYouTubeChannel } from '@/lib/videoArchive';
+import { removeUnsafeAutoArtistMatches } from '@/lib/videoArtistSafety';
 import { extractVideoMoments, reviewMoment } from '@/lib/videoMomentsAI';
 import { pullYouTubeTranscript, youtubeConnectionStatus } from '@/lib/youtubeOAuth';
 
@@ -42,7 +43,11 @@ export async function POST(req: NextRequest) {
   const me=await admin(); if(!me) return NextResponse.json({error:'Forbidden'},{status:403});
   const body=await req.json();
   if(body.action==='sync') {
-    try { return NextResponse.json(await importYouTubeChannel(body.channelKey || 'oshioma', body.reset === true)); }
+    try {
+      const result=await importYouTubeChannel(body.channelKey || 'oshioma', body.reset === true);
+      await removeUnsafeAutoArtistMatches();
+      return NextResponse.json(result);
+    }
     catch(e){ return NextResponse.json({error:e instanceof Error?e.message:'Sync failed'},{status:400}); }
   }
   if(body.action==='pull-transcript' && body.videoId){
@@ -82,7 +87,11 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ok:true,updated:ids.length,artist});
   }
-  if(body.action==='match' && body.videoId) return NextResponse.json({matches:await autoMatchArtists(body.videoId)});
+  if(body.action==='match' && body.videoId) {
+    const matches=await autoMatchArtists(body.videoId);
+    await removeUnsafeAutoArtistMatches([body.videoId]);
+    return NextResponse.json({matches:matches.filter(a=>a.name.trim().length>=6)});
+  }
   if(body.action==='extract' && body.videoId) {try{return NextResponse.json(await extractVideoMoments(body.videoId))}catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Extraction failed'},{status:400})}}
   if(body.action==='stage-moment' && body.momentId){await query(`update artist_video_moments set status='draft',updated_at=now() where id=$1 and status='review'`,[body.momentId]);return NextResponse.json({ok:true})}
   if(body.action==='bulk-stage'){const rows=await query<{id:string}>(`update artist_video_moments set status='draft',updated_at=now() where status='review' returning id`);return NextResponse.json({ok:true,updated:rows.length})}
