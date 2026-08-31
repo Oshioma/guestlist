@@ -3,6 +3,7 @@ import { getCurrentMember } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { autoMatchArtists, importYouTubeChannel } from '@/lib/videoArchive';
 import { extractVideoMoments, reviewMoment } from '@/lib/videoMomentsAI';
+import { pullYouTubeTranscript, youtubeConnectionStatus } from '@/lib/youtubeOAuth';
 
 async function admin() { const m=await getCurrentMember(); return m?.role==='admin' ? m : null; }
 
@@ -16,7 +17,9 @@ export async function GET() {
   const moments=await query(`select m.*,v.title video_title,v.youtube_video_id from artist_video_moments m join artist_videos v on v.id=m.video_id
     where m.status='review' order by m.created_at desc limit 200`);
   const sync=await query(`select * from youtube_channel_imports order by updated_at desc`);
-  return NextResponse.json({videos,moments,sync});
+  let youtubeConnection:{connected:boolean;channel_id?:string|null;channel_title?:string|null;connected_at?:string};
+  try{youtubeConnection=await youtubeConnectionStatus()}catch{youtubeConnection={connected:false}}
+  return NextResponse.json({videos,moments,sync,youtubeConnection});
 }
 
 export async function POST(req: NextRequest) {
@@ -26,10 +29,13 @@ export async function POST(req: NextRequest) {
     try { return NextResponse.json(await importYouTubeChannel(body.channelKey || 'oshioma', body.reset === true)); }
     catch(e){ return NextResponse.json({error:e instanceof Error?e.message:'Sync failed'},{status:400}); }
   }
+  if(body.action==='pull-transcript' && body.videoId){
+    try{return NextResponse.json(await pullYouTubeTranscript(body.videoId))}
+    catch(e){await query(`update artist_videos set transcript_status='failed',updated_at=now() where id=$1`,[body.videoId]);return NextResponse.json({error:e instanceof Error?e.message:'Transcript pull failed'},{status:400})}
+  }
   if(body.action==='delete-videos' && Array.isArray(body.videoIds)) {
     const ids=[...new Set(body.videoIds.filter((id:unknown)=>typeof id==='string' && id))];
     if(!ids.length) return NextResponse.json({error:'No videos selected'},{status:400});
-    // Child records are removed explicitly so this works regardless of FK cascade settings.
     await query(`delete from artist_video_moment_entities where moment_id in (select id from artist_video_moments where video_id=any($1::uuid[]))`,[ids]);
     await query(`delete from artist_video_moments where video_id=any($1::uuid[])`,[ids]);
     await query(`delete from artist_video_artists where video_id=any($1::uuid[])`,[ids]);
@@ -41,9 +47,7 @@ export async function POST(req: NextRequest) {
     try { return NextResponse.json(await extractVideoMoments(body.videoId)); }
     catch(e){ return NextResponse.json({error:e instanceof Error?e.message:'Extraction failed'},{status:400}); }
   }
-  if(body.action==='review' && body.momentId && (body.decision==='publish'||body.decision==='reject')) {
-    return NextResponse.json(await reviewMoment(body.momentId,body.decision));
-  }
+  if(body.action==='review' && body.momentId && (body.decision==='publish'||body.decision==='reject')) return NextResponse.json(await reviewMoment(body.momentId,body.decision));
   if(body.action==='bulk-review' && (body.decision==='publish'||body.decision==='reject')) {
     const status=body.decision==='publish'?'published':'hidden';
     const rows=await query<{id:string}>(`update artist_video_moments set status=$1::artist_video_status,updated_at=now() where status='review' returning id`,[status]);
