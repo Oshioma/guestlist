@@ -1606,23 +1606,32 @@ button { font-family: inherit; }
 
 /* Recommendation shelves */
 .recShelf { margin: 16px 0 10px; }
-.recGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.recGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; }
+/* Recommendation cards are event cards: the flyer leads, same shape as
+   the /events grid, with the reasons and feedback underneath. */
 .recCard {
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--bg-raised);
   border-radius: var(--radius);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  transition: transform 0.25s ease, border-color 0.25s ease;
 }
-.recCard.isExplore { border-color: rgba(242, 201, 76, 0.45); }
-.recCard:hover { border-color: var(--border-strong); }
-.recCardLink { display: flex; gap: 12px; flex: 1; }
-.recCardImg { width: 84px; min-height: 84px; object-fit: cover; flex-shrink: 0; }
-.recCardBody { padding: 11px 12px 8px 0; min-width: 0; }
-.recCardLink > .recCardBody:first-child { padding-left: 12px; }
-.recCardTitle { font-weight: 700; font-size: 14.5px; letter-spacing: -0.2px; }
-.recCardMeta { color: var(--text-muted); font-size: 12px; margin-top: 3px; }
+.recCard.isExplore { border-color: var(--accent-soft); }
+.recCard:hover { transform: translateY(-3px); border-color: var(--border-strong); }
+.recCardLink { display: flex; flex-direction: column; flex: 1; }
+.recCardImg {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+  background: var(--media-ph);
+}
+.recCardArt > * { width: 100%; height: 100%; }
+.recCardBody { padding: 13px 14px 10px; min-width: 0; }
+.recCardTitle { font-weight: 700; font-size: 15.5px; letter-spacing: -0.2px; line-height: 1.25; }
+.recCardMeta { color: var(--text-muted); font-size: 12.5px; margin-top: 5px; }
 .recReasons { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
 .recReason {
   font-size: 10.5px;
@@ -1635,7 +1644,7 @@ button { font-family: inherit; }
   border-radius: 999px;
   padding: 2px 9px;
 }
-.recCardActions { display: flex; gap: 10px; padding: 4px 12px 9px; }
+.recCardActions { display: flex; gap: 10px; padding: 2px 14px 11px; margin-top: auto; }
 .recHide {
   background: none; border: none; cursor: pointer;
   color: var(--text-muted); font-size: 11px; padding: 0;
@@ -1646,34 +1655,36 @@ button { font-family: inherit; }
 .recFeedback { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 4px; }
 
 /* Picks marquee — flyer artwork leads, the way the original site did it.
-   The band is a dark stage in BOTH themes (flyers live on dark), so all
-   type inside is set explicitly, never from theme tokens. */
+   The band sits on the page's own ground (light in the light theme), so
+   the flyers are the only strong colour in it. */
 .picksHero {
   position: relative;
   overflow: hidden;
   border-radius: calc(var(--radius) + 4px);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  background: #0d0c10;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
   margin: 18px 0 22px;
 }
 .picksHeroBg {
   position: absolute; inset: -30px;
   width: calc(100% + 60px); height: calc(100% + 60px);
   object-fit: cover;
-  filter: blur(34px) saturate(1.05) brightness(0.5);
-  opacity: 0.55;
+  filter: blur(40px) saturate(1.1);
+  opacity: 0.22; /* a wash of the featured flyer's colour, nothing more */
   pointer-events: none;
 }
 .picksHero::after {
   content: "";
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(13, 12, 16, 0.55) 0%, rgba(13, 12, 16, 0.35) 40%, rgba(13, 12, 16, 0.92) 100%);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--bg-raised) 72%, transparent) 0%,
+    color-mix(in srgb, var(--bg-raised) 88%, transparent) 100%);
   pointer-events: none;
 }
 .picksHeroInner {
   position: relative; z-index: 2;
   padding: 18px clamp(16px, 3vw, 28px) 16px;
-  color: #f2f1ec;
+  color: var(--text);
 }
 .picksHeroTop {
   display: flex; align-items: center; justify-content: space-between;
@@ -1681,18 +1692,18 @@ button { font-family: inherit; }
 }
 .picksHeroKicker {
   font-size: 12px; letter-spacing: 2.4px; text-transform: uppercase;
-  font-weight: 700; color: #c9a2e8;
+  font-weight: 700; color: var(--accent-ink);
 }
 .picksHeroNav { display: flex; align-items: center; gap: 10px; }
-.picksHeroCount { font-size: 11.5px; letter-spacing: 1px; color: rgba(242, 241, 236, 0.65); }
+.picksHeroCount { font-size: 11.5px; letter-spacing: 1px; color: var(--text-muted); }
 .picksArrow {
   width: 34px; height: 34px; border-radius: 999px; cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  background: rgba(13, 12, 16, 0.4);
-  color: #f2f1ec; font-size: 20px; line-height: 1;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text); font-size: 20px; line-height: 1;
   display: grid; place-items: center; padding-bottom: 3px;
 }
-.picksArrow:hover { background: rgba(255, 255, 255, 0.14); }
+.picksArrow:hover { background: var(--surface-hover); border-color: var(--accent); }
 .picksStrip {
   display: flex; gap: 14px; align-items: center;
   overflow-x: auto; scrollbar-width: none;
@@ -1705,20 +1716,20 @@ button { font-family: inherit; }
   aspect-ratio: 3 / 4;
   border-radius: 10px;
   overflow: hidden;
-  border: 2px solid rgba(255, 255, 255, 0.16);
-  padding: 0; cursor: pointer; background: #1a1922;
+  border: 2px solid var(--border);
+  padding: 0; cursor: pointer; background: var(--media-ph);
   transition: transform 0.25s ease, border-color 0.25s ease, opacity 0.25s ease;
-  opacity: 0.62;
+  opacity: 0.72;
 }
 .picksTile img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .picksTileArt { display: block; width: 100%; height: 100%; }
 .picksTileArt > * { width: 100%; height: 100%; }
-.picksTile:hover { opacity: 0.9; }
+.picksTile:hover { opacity: 0.95; }
 .picksTile.active {
   opacity: 1;
   transform: scale(1.06);
-  border-color: #fff;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
+  border-color: var(--accent);
+  box-shadow: 0 10px 30px rgba(15, 14, 10, 0.18);
 }
 .picksHeroFoot {
   display: flex; align-items: flex-end; justify-content: space-between;
@@ -1732,17 +1743,12 @@ button { font-family: inherit; }
   letter-spacing: 0.4px;
   line-height: 1.08;
   text-transform: uppercase;
-  color: #fff;
+  color: var(--text);
   text-wrap: balance;
 }
-.picksHeroTitle:hover { color: #c9a2e8; }
-.picksHeroMeta { margin-top: 7px; font-size: 13.5px; color: rgba(242, 241, 236, 0.8); }
+.picksHeroTitle:hover { color: var(--accent-ink); }
+.picksHeroMeta { margin-top: 7px; font-size: 13.5px; color: var(--text-muted); }
 .picksHeroReasons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
-.picksHeroReasons .recReason {
-  color: #e6d3f7;
-  background: rgba(124, 74, 158, 0.32);
-  border-color: rgba(201, 162, 232, 0.45);
-}
 .picksHeroActions { display: flex; gap: 10px; flex-wrap: wrap; }
 .picksBtn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1750,18 +1756,17 @@ button { font-family: inherit; }
   font-size: 12.5px; font-weight: 750; letter-spacing: 1.6px; text-transform: uppercase;
   border: 1.5px solid transparent; cursor: pointer;
 }
-.picksBtn.solid { background: #fff; color: #16150f; }
-.picksBtn.solid:hover { background: #e6d3f7; }
-.picksBtn.outline { border-color: rgba(255, 255, 255, 0.55); color: #fff; background: rgba(13, 12, 16, 0.3); }
-.picksBtn.outline:hover { border-color: #fff; background: rgba(255, 255, 255, 0.1); }
+.picksBtn.solid { background: var(--accent); color: var(--on-accent); }
+.picksBtn.solid:hover { filter: brightness(1.08); }
+.picksBtn.outline { border-color: var(--border-strong); color: var(--text); background: transparent; }
+.picksBtn.outline:hover { border-color: var(--accent); color: var(--accent-ink); }
 .picksHeroFeedback { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; align-items: center; }
-.picksHeroFeedback .chip { background: rgba(13, 12, 16, 0.5); color: #f2f1ec; border-color: rgba(255, 255, 255, 0.3); }
 .picksHide {
   background: none; border: none; cursor: pointer;
-  color: rgba(242, 241, 236, 0.6); font-size: 11px; padding: 0;
-  text-decoration: underline; text-decoration-color: rgba(242, 241, 236, 0.35);
+  color: var(--text-muted); font-size: 11px; padding: 0;
+  text-decoration: underline; text-decoration-color: var(--border-strong);
 }
-.picksHide:hover { color: #fff; }
+.picksHide:hover { color: var(--text); }
 @media (max-width: 640px) {
   .picksTile { width: clamp(130px, 38vw, 170px); }
   .picksHeroFoot { align-items: flex-start; flex-direction: column; }
@@ -2202,10 +2207,7 @@ button { font-family: inherit; }
   text-transform: uppercase;
   user-select: none;
 }
-.recCardArt {
-  display: flex;
-  min-height: 96px;
-}
+.recCardArt { display: flex; }
 
 /* --- Ask @guestlist ----------------------------------------------------- */
 .askPanel {
