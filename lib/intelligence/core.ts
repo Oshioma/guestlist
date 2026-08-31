@@ -601,19 +601,54 @@ export async function draftReplyForMention(
   const mention = await queryOne<{
     id: string; text: string; classification: string | null;
     intent: { city?: string | null; genre?: string | null; date?: string | null };
-    external_id: string; status: string;
+    external_id: string; status: string; conversation_id: string | null;
   }>(
-    `select id, text, classification, intent, external_id, status from x_mentions where id = $1`,
+    `select id, text, classification, intent, external_id, status, conversation_id
+       from x_mentions where id = $1`,
     [mentionId]);
   if (!mention) return { ok: false, error: 'Mention not found' };
   if (mention.classification !== 'EVENT_QUESTION') {
     return { ok: false, error: 'Only event questions get grounded reply drafts' };
   }
 
+  // V2H: the SAME Ask brain parses the question, and X threads keep a
+  // bounded conversation state — "Anything smaller?" in a reply inherits
+  // the city and date from the parent question.
+  const { parseAskQuestion, mergeIntent } = await import('../ask/intent');
+  const { resolveDateWindow, cityTimezone } = await import('../ask/tools');
+  const parsed = await parseAskQuestion(mention.text);
+  const externalRef = mention.conversation_id ? `x:${mention.conversation_id}` : null;
+  let askIntent = parsed;
+  if (externalRef) {
+    const conv = await queryOne<{ id: string; state: typeof parsed }>(
+      `select id, state from ask_conversations where external_ref = $1`, [externalRef]);
+    if (conv && conv.state && Object.keys(conv.state).length) {
+      askIntent = mergeIntent(conv.state, parsed, mention.text);
+    }
+    if (conv) {
+      await query(`update ask_conversations set state = $2, updated_at = now() where id = $1`,
+        [conv.id, JSON.stringify(askIntent)]);
+    } else {
+      await query(
+        `insert into ask_conversations (channel, external_ref, state) values ('x', $1, $2)`,
+        [externalRef, JSON.stringify(askIntent)]);
+    }
+  }
+
+  let dateParam: string | null = askIntent.date?.kind === 'weekend' || askIntent.date?.kind === 'next_weekend'
+    ? 'weekend'
+    : askIntent.date?.kind === 'iso' ? askIntent.date.date : 'tonight';
+  if (askIntent.date?.kind === 'day') {
+    const tz = await cityTimezone(askIntent.city);
+    dateParam = resolveDateWindow(askIntent.date, tz).from.toISOString().slice(0, 10);
+  }
+
   const q = await queryGuestlist({
-    city: mention.intent.city ?? null,
-    date: (mention.intent.date as 'tonight' | 'weekend' | null) ?? 'tonight',
-    genre: mention.intent.genre ?? null,
+    city: askIntent.city ?? mention.intent.city ?? null,
+    date: (dateParam as 'tonight' | 'weekend') ?? 'tonight',
+    genre: askIntent.genres[0] ?? mention.intent.genre ?? null,
+    lateNight: askIntent.lateNight ?? undefined,
+    daytime: askIntent.daytime ?? undefined,
     limit: 3,
   });
 
@@ -656,10 +691,41 @@ export async function draftReplyForMention(
     [mentionId, result.body, linkUrl, linkUrl ? src : null, result.model,
      WRITER_META.voiceVersion, WRITER_META.promptVersion,
      JSON.stringify(q.evidence), estimated]);
-  await query(`update x_mentions set status = 'drafted', draft_id = $2, matched_event_ids = $3 where id = $1`,
-    [mentionId, row!.id, q.eventIds]);
+  await query(
+    `update x_mentions set status = 'drafted', draft_id = $2, matched_event_ids = $3,
+            intent = intent || $4 where id = $1`,
+    [mentionId, row!.id, q.eventIds, JSON.stringify({
+      ask: { city: askIntent.city, genres: askIntent.genres, date: askIntent.date,
+             sizePref: askIntent.sizePref ?? null },
+    })]);
   await xAudit('reply_drafted', { actorId: opts.actorId, draftId: row!.id, detail: mention.external_id });
   return { ok: true, draftId: row!.id, body: result.body, matched: q.matched };
+}
+
+// LIMITED AUTOPILOT FOUNDATION (V2H Part 34) — eligibility only, never
+// posting. AUTO_REPLY defaults OFF; the switch ('x_switches'.auto_reply)
+// is experimental and nothing in the codebase acts on eligibility yet:
+// every reply still goes through the human-approval inbox.
+export async function askAutoReplyEligible(mentionId: string): Promise<{ eligible: boolean; reasons: string[] }> {
+  const reasons: string[] = [];
+  const switches = await xSwitches();
+  if (!(switches as Record<string, boolean>).auto_reply) reasons.push('AUTO_REPLY is off (default)');
+  const m = await queryOne<{
+    classification: string | null; intent: { ask?: { city?: string | null; genres?: string[]; date?: { kind?: string } } };
+    matched_event_ids: string[]; status: string;
+  }>(`select classification, intent, matched_event_ids, status from x_mentions where id = $1`, [mentionId]);
+  if (!m) return { eligible: false, reasons: ['mention not found'] };
+  if (m.classification !== 'EVENT_QUESTION') reasons.push('not an event question');
+  const ask = m.intent?.ask;
+  // The narrow future category: TONIGHT + CITY + GENRE with real results.
+  if (!ask?.city || !ask.genres?.length || ask.date?.kind !== 'tonight') {
+    reasons.push('not a high-confidence tonight+city+genre question');
+  }
+  if (!m.matched_event_ids?.length) reasons.push('no real results');
+  if (m.status !== 'drafted') reasons.push('no validated draft yet');
+  const spend = await canSpend(0.02, 'low');
+  if (!spend.ok) reasons.push('budget unavailable');
+  return { eligible: reasons.length === 0, reasons };
 }
 
 // Attribution report: DID @guestlist create useful activity INSIDE Guestlist?

@@ -16,6 +16,7 @@ import { fmtEventDate } from '@/lib/util';
 import { memberPlaces } from '@/lib/locations';
 import { RecShelf } from '@/components/v2c/RecShelf';
 import { GuestlistNow } from '@/components/GuestlistNow';
+import { AskPanel } from '@/components/ask/AskPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,6 +69,8 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
       )}
 
       <GuestlistNow />
+
+      <AskPanel isSignedIn placeholder="What should I actually do?" />
 
       {weekendPicks.length > 0 && (
         <RecShelf title="This weekend" surface="home_weekend" events={toRecCards(weekendPicks)} />

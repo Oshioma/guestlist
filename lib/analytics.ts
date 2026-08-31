@@ -67,7 +67,10 @@ export type AnalyticsEventType =
   | 'announcement_created'
   | 'announcement_sent'
   | 'announcement_clicked'
-  | 'promoter_followers_viewed';
+  | 'promoter_followers_viewed'
+  // V2H
+  | 'ask_question'
+  | 'ask_feedback';
 
 export async function track(
   type: AnalyticsEventType,

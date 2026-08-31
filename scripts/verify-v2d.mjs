@@ -320,8 +320,13 @@ try {
       (await outbox(`member_id = $1 and email_type = 'daily_digest'`, [ids.marcus])).length === 0);
 
     await runJob();
+    // Scoped to the members under test: other seeded members default to
+    // Europe/London and legitimately receive digests whenever the suite
+    // runs during London's 8–11am window, so a global count is flaky.
+    void before;
     check('running the job again sends no second digest (idempotent)',
-      (await outbox(`email_type = 'daily_digest'`)).length === before + 1);
+      (await outbox(`member_id = $1 and email_type = 'daily_digest'`, [ids.steve])).length === 1
+      && (await outbox(`member_id = $1 and email_type = 'daily_digest'`, [ids.marcus])).length === 0);
   }
 
   // -------------------------------------------------------------------------
