@@ -43,7 +43,8 @@ await q(`truncate analytics_events, event_classifications, member_event_actions,
   event_sources, artists, promoters, venues, member_follows, member_genres,
   auth_sessions, members, genres, locations, scene_entities, email_outbox,
   intelligence_opportunities, channel_drafts, x_usage_ledger, x_mentions,
-  content_fingerprints, guestlist_x_audit, x_billing_periods, social_accounts
+  content_fingerprints, guestlist_x_audit, x_billing_periods, social_accounts,
+  ask_conversations, ask_messages, ask_feedback
   restart identity cascade`);
 // V2G desk state lives in system_settings — reset the volatile keys so
 // suites are deterministic (mock config, circuit breaker, switches).

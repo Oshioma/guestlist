@@ -13,6 +13,7 @@ import { RecShelf } from '@/components/v2c/RecShelf';
 import { EventCard } from '@/components/EventCard';
 import { FollowCityButton } from '@/components/v2c/FollowCityButton';
 import { GuestlistNow } from '@/components/GuestlistNow';
+import { AskPanel } from '@/components/ask/AskPanel';
 import type { EventCard as EventCardType } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
@@ -108,6 +109,8 @@ export default async function PlacePage({ params }: { params: Promise<{ place: s
       </div>
 
       <GuestlistNow city={location.name} />
+
+      <AskPanel isSignedIn={!!member} placeholder={`What\u2019s good in ${location.name} tonight?`} />
 
       {events.length === 0 ? (
         <div className="emptyState">

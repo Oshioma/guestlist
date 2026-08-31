@@ -10,6 +10,7 @@ import { FilterControls } from '@/components/FilterControls';
 import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
 import { toRecCards } from '@/lib/recCards';
 import { RecShelf } from '@/components/v2c/RecShelf';
+import { AskPanel } from '@/components/ask/AskPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -140,6 +141,8 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
         Nights, parties, festivals and experiences worth leaving the house for —
         curated for people who were raised on this music.
       </p>
+
+      <AskPanel isSignedIn={!!member} />
 
       <nav className="tabRow" aria-label="Discovery">
         {TABS.map((t) => (
