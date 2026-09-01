@@ -26,7 +26,7 @@ export const dynamic = 'force-dynamic';
 
 // MY GUESTLIST — the logged-in front door: a personalised cultural
 // magazine, not an admin dashboard.
-async function MemberHome({ member }: { member: { id: string; display_name: string } }) {
+async function MemberHome({ member }: { member: { id: string; display_name: string; role: 'member' | 'admin' } }) {
   const weekend = weekendWindow();
   const [weekendPicks, picks, yourPeople, danced, places, travel] = await Promise.all([
     getRecommendedEvents(member.id, { limit: 4, from: weekend.from, to: weekend.to, exploration: false }),
@@ -72,7 +72,7 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
         </div>
       )}
 
-      <GuestlistNow />
+      <GuestlistNow isAdmin={member.role === 'admin'} />
       <HomeTonight />
 
       {weekendPicks.length > 0 && (
@@ -213,7 +213,7 @@ export default async function HomePage() {
       )}
 
       <div className="wrap">
-        {!member && <GuestlistNow />}
+        {!member && <GuestlistNow isAdmin={false} />}
         <div className="chipRow" style={{ padding: '26px 0 10px' }}>
           {genres.map((g) => (
             <Link key={g.slug} href={`/events?genre=${g.slug}`} className="chip">

@@ -2230,8 +2230,13 @@ button { font-family: inherit; }
 .guestlistNowHead { display: flex; gap: 10px; align-items: baseline; }
 .guestlistNowBadge { font-weight: 700; color: var(--accent-ink); font-size: 14px; }
 .guestlistNowSub { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; }
-.guestlistNowItem { display: grid; gap: 6px; font-size: 14px; line-height: 1.5; }
+.guestlistNowItem { position: relative; display: grid; gap: 6px; padding-right: 26px; font-size: 14px; line-height: 1.5; }
 .guestlistNowLink { font-size: 12px; color: var(--accent-ink); text-decoration: none; }
+.guestlistNowSuppress { position: absolute; top: -4px; right: -4px; width: 26px; height: 26px; border: 0; border-radius: 50%; background: transparent; color: var(--text-muted); font: 500 21px/1 inherit; cursor: pointer; }
+.guestlistNowSuppress:hover { background: var(--bg); color: var(--text); }
+.guestlistNowSuppress:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.guestlistNowSuppress:disabled { cursor: wait; opacity: .55; }
+.guestlistNowSuppressError { color: var(--danger, #b42318); font-size: 12px; }
 
 /* Connect button cluster: real layout, never overlapping card content */
 .connectWrap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex-shrink: 0; margin-left: auto; }
