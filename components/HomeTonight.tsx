@@ -48,10 +48,10 @@ export async function HomeTonight() {
          left join venues v on v.id = e.venue_id
         where e.status = 'live'
           and e.listing_status <> 'cancelled'
-          and e.start_at > now()
-          and e.start_at < now() + interval '18 hours'
-        order by e.featured desc, e.start_at asc
-        limit 8`
+          and e.start_at < now() + interval '24 hours'
+          and coalesce(e.end_at, e.start_at + interval '6 hours') > now() - interval '2 hours'
+        order by e.start_at asc
+        limit 40`
     ),
     member
       ? getRecommendedEvents(member.id, { limit: 3, exploration: false })
@@ -93,7 +93,7 @@ export async function HomeTonight() {
     genres: event.genres,
   }));
   const picks = member && personalisedPicks.length ? personalisedPicks : publicPicks;
-  const tonight = events.slice(0, 5);
+  const tonight = events;
   const totalGoing = tonight.reduce((sum, event) => sum + event.going_count, 0);
 
   return (
@@ -116,8 +116,8 @@ export async function HomeTonight() {
         </div>
 
         <div className={styles.listHead}>
-          <span>TONIGHT</span>
-          <Link href="/events" className={styles.allTonight}>See all →</Link>
+          <span>TONIGHT · {tonight.length}</span>
+          <Link href="/clubmessenger" className={styles.allTonight}>See all →</Link>
         </div>
 
         <div className={styles.tonightList}>
