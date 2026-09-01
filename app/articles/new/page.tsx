@@ -12,7 +12,7 @@ export default function AddArticlePage(){
         <div className="homeKicker">Balance</div><h2 style={{fontSize:30,margin:'8px 0'}}>Balance Article</h2><p style={{color:'var(--text-muted)',margin:0}}>Ideas, reflections, guides, interviews and perspectives from the community.</p>
       </Link>
       <Link href="/balance/write?section=events" style={{display:'block',padding:26,border:'1px solid var(--border)',borderRadius:'var(--radius)',background:'var(--bg-raised)',textDecoration:'none'}}>
-        <div className="homeKicker">Events</div><h2 style={{fontSize:30,margin:'8px 0'}}>Event Article</h2><p style={{color:'var(--text-muted)',margin:0}}>Write about a night, festival, venue or event experience — previews, reviews and scene stories.</p>
+        <div className="homeKicker">Events</div><h2 style={{fontSize:30,margin:'8px 0'}}>Event Feature</h2><p style={{color:'var(--text-muted)',margin:0}}>Write about a night, festival, venue or event experience — previews, reviews and scene stories.</p>
       </Link>
     </div>
   </main>;
