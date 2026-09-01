@@ -57,6 +57,9 @@ export type BrowseParams = {
   radiusKm?: number | null;
   sort: 'recommended' | 'soonest' | 'popular' | 'newest';
   member?: { id: string; home_country: string | null } | null;
+  // The member's country as their PLACE knows it, when the text field on
+  // their profile is empty. Resolved by the caller so this stays one query.
+  homeCountry?: string | null;
   limit?: number;
 };
 
@@ -107,10 +110,20 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
       where.push(`e.event_type in ('festival', 'weekender')`);
       break;
     case 'travel': {
-      const home = params.member?.home_country;
+      // Away from home. Two things were quietly making this tab lie:
+      //
+      // 1. It read only members.home_country, a free-text field that is empty
+      //    for anyone who set their city rather than typing a country — so
+      //    the tab fell back to "flagged worth travelling" alone, and a real
+      //    Paris night nobody had flagged was invisible.
+      // 2. `e.country <> home` drops every event with NO country recorded.
+      //    An event whose country we never captured is not thereby at home.
+      const home = params.member?.home_country ?? params.homeCountry ?? null;
+      const eventCountry =
+        `coalesce(e.country, (select l.country_name from locations l where l.id = e.location_id))`;
       where.push(
         home
-          ? `(e.worth_travelling or (e.country is not null and e.country <> ${arg(home)}))`
+          ? `(e.worth_travelling or ${eventCountry} is distinct from ${arg(home)})`
           : `e.worth_travelling`
       );
       break;

@@ -8,6 +8,7 @@ import { query } from '@/lib/db';
 import { EventCard } from '@/components/EventCard';
 import { FilterControls } from '@/components/FilterControls';
 import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
+import { memberPlaceAnchors } from '@/lib/proximity';
 import { toRecCards } from '@/lib/recCards';
 import { PicksHero } from '@/components/PicksHero';
 import { AskPanel } from '@/components/ask/AskPanel';
@@ -66,6 +67,13 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 
   const { from, to } = datePresetRange(datePreset);
 
+  // Where home is, as their PLACE knows it — the profile's country field is
+  // empty for anyone who set a city instead, and Worth Travelling For needs
+  // to know what "away" means.
+  const homeCountry = member
+    ? (await memberPlaceAnchors(member.id)).map((p) => p.country_name).find(Boolean) ?? null
+    : null;
+
   const [events, genres, cities] = await Promise.all([
     browseEvents({
       tab,
@@ -81,6 +89,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
       radiusKm: lat != null && lng != null ? 80 : null,
       sort,
       member: member ? { id: member.id, home_country: member.home_country } : null,
+      homeCountry,
     }),
     getTopLevelGenres(),
     getLiveCities(),
@@ -206,7 +215,11 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
       ) : (
         <div className="emptyState">
           <h3>Nothing matching that yet.</h3>
-          <p>The right night might be one filter away.</p>
+          <p>
+            {city && tab !== 'for-you'
+              ? `${city} has nights on Guestlist — just none under ${TABS.find((t) => t.key === tab)?.label}.`
+              : 'The right night might be one filter away.'}
+          </p>
           <div className="suggestions">
             {genre && (
               <Link href={buildQS({ genre: null })} className="btnGhost">Remove genre</Link>
@@ -216,6 +229,14 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
             )}
             {city && (
               <Link href={buildQS({ city: null })} className="btnGhost">Anywhere</Link>
+            )}
+            {/* Picking a city from the list and getting nothing is a dead end:
+                the city HAS events, this tab just does not have them. Offer
+                the city without the tab rather than leaving them to guess. */}
+            {city && tab !== 'for-you' && (
+              <Link href={buildQS({ tab: null })} className="btnAccent">
+                {`See everything in ${city}`}
+              </Link>
             )}
             {(eventType || price) && (
               <Link href={buildQS({ type: null, price: null })} className="btnGhost">Clear filters</Link>
