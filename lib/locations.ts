@@ -4,6 +4,7 @@
 // events/venues remain as display cache; identity lives here.
 
 import { query, queryOne } from './db';
+import { canonicalCountry, countrySlug } from './countries';
 
 export type Location = {
   id: string;
@@ -170,5 +171,99 @@ export async function liveDestinations(limit = 24): Promise<Destination[]> {
       order by ev.n desc, l.name
       limit $1`,
     [limit]
+  );
+}
+
+// --- Countries as places of their own ---------------------------------------
+// /netherlands, /united-kingdom, /italy. A country is not a row anyone has to
+// create: it is whatever countries the live cities are in, so a country page
+// exists the moment the first event in it goes live and disappears when the
+// last one passes. Names are canonicalised on the way through (see
+// lib/countries), so "UK", "England" and "GB" all land on one page.
+
+export type LiveCountry = {
+  name: string;
+  slug: string;
+  code: string | null;
+  events: number;
+  cities: number;
+};
+
+// The raw country_name values in the database that mean this country. Written
+// values should already be canonical, but a row that predates the cleanup
+// still has to find its way to the right page.
+async function rawNamesForCountry(canonical: string): Promise<string[]> {
+  const rows = await query<{ country_name: string | null }>(
+    `select distinct country_name from locations where country_name is not null`
+  );
+  return rows
+    .map((r) => r.country_name as string)
+    .filter((n) => canonicalCountry(n) === canonical);
+}
+
+export async function liveCountries(): Promise<LiveCountry[]> {
+  const rows = await query<{ country_name: string | null; country_code: string | null; events: number }>(
+    `select l.country_name, l.country_code,
+            (select count(*)::int from events e
+              where e.location_id = l.id and e.status = 'live'
+                and e.listing_status <> 'cancelled' and e.start_at > now()) as events
+       from locations l`
+  );
+  const byCountry = new Map<string, LiveCountry>();
+  for (const r of rows) {
+    if (r.events <= 0) continue;
+    const name = canonicalCountry(r.country_name ?? r.country_code);
+    if (!name) continue;
+    const entry = byCountry.get(name) ?? {
+      name, slug: countrySlug(name), code: countryCodeFor(name), events: 0, cities: 0,
+    };
+    entry.events += r.events;
+    entry.cities += 1;
+    byCountry.set(name, entry);
+  }
+  return [...byCountry.values()].sort((a, b) => b.events - a.events || a.name.localeCompare(b.name));
+}
+
+export type CountryPlace = LiveCountry & { rawNames: string[] };
+
+// A country page is offered for any country we hold cities in, live events or
+// not — a country with nothing on says so, rather than 404ing on a link a
+// member followed yesterday.
+export async function getCountryBySlug(slug: string): Promise<CountryPlace | null> {
+  const wanted = slug.trim().toLowerCase();
+  const rows = await query<{ country_name: string | null; country_code: string | null }>(
+    `select distinct country_name, country_code from locations where country_name is not null`
+  );
+  const names = new Set<string>();
+  for (const r of rows) {
+    const name = canonicalCountry(r.country_name ?? r.country_code);
+    if (name && countrySlug(name) === wanted) names.add(name);
+  }
+  const name = [...names][0];
+  if (!name) return null;
+  const live = (await liveCountries()).find((c) => c.name === name);
+  return {
+    name,
+    slug: countrySlug(name),
+    code: countryCodeFor(name),
+    events: live?.events ?? 0,
+    cities: live?.cities ?? 0,
+    rawNames: await rawNamesForCountry(name),
+  };
+}
+
+// Cities in a country that have something on, busiest first.
+export async function citiesInCountry(rawNames: string[]): Promise<Destination[]> {
+  return query<Destination>(
+    `select l.*, ev.n as upcoming_events, 0 as promoters, 0 as venues, 0 as members
+       from locations l
+       join lateral (
+         select count(*)::int as n from events e
+          where e.location_id = l.id and e.status = 'live'
+            and e.listing_status <> 'cancelled' and e.start_at > now()
+       ) ev on true
+      where l.country_name = any($1::text[]) and ev.n > 0
+      order by ev.n desc, l.name`,
+    [rawNames]
   );
 }
