@@ -2613,3 +2613,129 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
   min-height: 100%;
   background: var(--media-ph);
 }
+
+/* ARTICLES ↔ EVENTS. A piece and the nights it is about point at each other,
+   so both lists are card rows: image, then the one line that tells you what
+   it is. Same shape on both sides, so the relationship reads as one thing. */
+.linkedEvents { margin-top: 34px; }
+.linkedEventList,
+.linkedArticleList { display: grid; gap: 10px; }
+.linkedEventCard,
+.linkedArticleCard {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 13px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color .15s ease, background .15s ease;
+}
+.linkedArticleCard { grid-template-columns: 108px 1fr; align-items: start; }
+.linkedEventCard:hover,
+.linkedArticleCard:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+.linkedEventCard img,
+.linkedEventNoImage,
+.linkedArticleCard img,
+.linkedArticleNoImage {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 10px;
+  background: var(--media-ph);
+  display: block;
+}
+.linkedEventCard > span:last-child,
+.linkedArticleCard > span:last-child { display: grid; gap: 3px; min-width: 0; }
+.linkedEventCard strong,
+.linkedArticleCard strong { font-size: 15px; font-weight: 700; line-height: 1.3; }
+.linkedEventMeta,
+.linkedArticleMeta { font-size: 12px; color: var(--text-muted); line-height: 1.45; }
+.linkedArticleMeta {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.linkedArticleKicker {
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+@media (max-width: 520px) {
+  .linkedEventCard,
+  .linkedArticleCard { grid-template-columns: 64px 1fr; gap: 10px; }
+}
+
+/* The picker inside the article editor. */
+.eventLinker { display: grid; gap: 7px; margin: 16px 0 4px; }
+.eventLinker > label {
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+.eventLinkerNote { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.5; }
+.eventLinker input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.eventLinkerList,
+.eventLinkerResults { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.eventLinkerList li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+}
+.eventLinkerList li > span:first-child,
+.eventLinkerResults button > * { display: block; }
+.eventLinkerList strong,
+.eventLinkerResults strong { font-size: 14px; font-weight: 700; }
+.eventLinkerMeta { font-size: 12px; color: var(--text-muted); }
+.eventLinkerList button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.eventLinkerList button:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text); }
+.eventLinkerResults {
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  overflow: hidden;
+  gap: 0;
+}
+.eventLinkerResults li + li { border-top: 1px solid var(--border); }
+.eventLinkerResults button {
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.eventLinkerResults button:hover:not(:disabled) { background: var(--surface-hover); }

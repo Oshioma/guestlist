@@ -15,6 +15,7 @@ import { query, queryOne } from '@/lib/db';
 import { CLUB_LIMITS, PRESENCE_ACTIVE_SQL, friendPairSql, presenceVisibleSql } from '@/lib/clubmessenger';
 import { eventSocialContext } from '@/lib/scene';
 import { interviewsForEventArtists, youtubeTimestampUrl } from '@/lib/videoArchive';
+import { articlesForEvent } from '@/lib/articles';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +41,9 @@ export default async function EventDetailPage({ params, searchParams }: {params:
   const lineupSlugs=(event.lineup||[]).map(a=>a.slug).filter(Boolean);
   const lineupArtistRows=lineupSlugs.length?await query<{id:string}>(`select id from artists where slug=any($1::text[])`,[lineupSlugs]):[];
   const interviewDiscoveries=await interviewsForEventArtists(lineupArtistRows.map(a=>a.id),4);
+  // Published pieces that name this night. Drafts and submissions stay out —
+  // articlesForEvent only returns published ones.
+  const writtenAbout=await articlesForEvent(event.id);
 
   const nowMs=Date.now(),startMs=new Date(event.start_at).getTime();
   const endMs=event.end_at?new Date(event.end_at).getTime():startMs+6*3600_000;
@@ -60,6 +64,8 @@ export default async function EventDetailPage({ params, searchParams }: {params:
       {event.lineup.length>0&&<><div className="sectionLabel">Lineup</div><div className="lineupList">{event.lineup.map(a=><div className="act" key={a.slug}><Link href={`/artists/${a.slug}`}>{a.name}</Link>{a.billing&&<span className="billing">{a.billing.replace('_',' ')}</span>}</div>)}</div></>}
 
       {interviewDiscoveries.length>0&&<section style={{marginTop:34}}><div className="sectionLabel">From the Guestlist vault</div><p className="adminSub" style={{marginTop:-4}}>Before tonight — hear the artists in their own words.</p><div style={{display:'grid',gap:12}}>{interviewDiscoveries.map(d=><article className="adminCard" key={`${d.artist_id}-${d.video.id}`} style={{display:'grid',gridTemplateColumns:d.video.thumbnail_url?'120px 1fr':'1fr',gap:14,alignItems:'start'}}>{d.video.thumbnail_url&&<img src={d.video.thumbnail_url} alt="" style={{width:120,aspectRatio:'16/9',objectFit:'cover'}}/>}<div><div className="adminSub"><Link href={`/artists/${d.artist_slug}`}>{d.artist_name}</Link> · ORIGINAL GUESTLIST INTERVIEW</div><b>{d.video.title}</b>{d.video.moments.length>0&&<div style={{display:'grid',gap:7,marginTop:10}}>{d.video.moments.map(m=><a key={m.id} href={youtubeTimestampUrl(d.video.youtube_video_id,m.start_seconds)} target="_blank" rel="noreferrer" className="tag" style={{display:'block'}}><b>{clock(m.start_seconds)}</b> — {m.title}</a>)}</div>}<div style={{marginTop:10}}><Link href={`/clips?video=${d.video.id}`}>Discover the interview →</Link></div></div></article>)}</div></section>}
+
+      {writtenAbout.length>0&&<section style={{marginTop:34}}><div className="sectionLabel">Written about this night</div><div className="linkedArticleList">{writtenAbout.map(x=><Link key={x.id} href={`/balance/${x.slug}`} className="linkedArticleCard">{x.hero_image_url?<img src={x.hero_image_url} alt=""/>:<span className="linkedArticleNoImage"/>}<span><span className="linkedArticleKicker">{x.section_name}</span><strong>{x.title}</strong>{x.excerpt&&<span className="linkedArticleMeta">{x.excerpt}</span>}<span className="linkedArticleMeta">{`By ${x.author_name} · ${x.reading_minutes} min read`}</span></span></Link>)}</div></section>}
 
       {event.promoter&&<><div className="sectionLabel">Organiser</div><div className="organiserCard">{event.promoter.image_url?<img className="logo" src={event.promoter.image_url} alt="" style={{width:52,height:52,borderRadius:14,objectFit:'cover'}}/>:<div className="logo" style={{width:52,height:52,borderRadius:14,background:'var(--surface-hover)',border:'1px solid var(--border)',display:'grid',placeItems:'center',fontWeight:750,fontSize:19,color:'var(--text-muted)',flexShrink:0}}>{event.promoter.name[0]}</div>}<div style={{flex:1,minWidth:0}}><div className="big" style={{fontSize:17,fontWeight:700}}>{event.promoter.name} {event.promoter.verified&&<span className="verifiedMark" title="Verified promoter">✓</span>}</div>{event.promoter.verified&&<div style={{fontSize:12,color:'var(--text-muted)'}}>Verified promoter</div>}</div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{promoterSlug&&<Link className="btnGhost" style={{padding:'7px 13px',fontSize:11}} href={`/promoters/${promoterSlug}`}>View promoter</Link>}<FollowButton entityType="promoter" entityId={event.promoter.id} initialFollowing={followingPromoter} isSignedIn={!!member} compact/></div></div></>}
       {claimablePromoters.length>0&&!past&&<ClaimEventPrompt eventId={event.id} promoters={claimablePromoters}/>}</div>
