@@ -151,8 +151,6 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
         />
       )}
 
-      <AskPanel isSignedIn={!!member} />
-
       <nav className="tabRow" aria-label="Discovery">
         {TABS.map((t) => (
           <Link
@@ -229,6 +227,10 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
           </div>
         </div>
       )}
+
+      {/* Ask sits under the listings: browse what's on first, then ask when
+          the list hasn't answered it. */}
+      <AskPanel isSignedIn={!!member} />
 
       <AddEventCta city={city} />
     </main>
