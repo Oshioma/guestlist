@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
 import { AdminNav } from '@/components/admin/AdminNav';
+import { ReviewQueueBar } from '@/components/admin/ReviewQueueBar';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="wrap adminShell">
       <AdminNav />
+      <ReviewQueueBar />
       {children}
     </div>
   );

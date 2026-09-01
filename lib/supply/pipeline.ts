@@ -9,6 +9,7 @@
 // nothing is silently swallowed.
 
 import { onEventPublished } from '../alerts';
+import { refreshAdminReviewDigest } from '../adminNotify';
 import { findOrCreateCity } from '../locations';
 import { query, queryOne } from '@/lib/db';
 import { normalizeTitle, slugify, EVENT_TYPES } from '@/lib/util';
@@ -543,6 +544,13 @@ export async function runExtractionPipeline(
       ]
     );
     eventId = row!.id;
+    if (!ctx.sourceId) {
+      // A member pasted this in and is now waiting on a person, so the admin
+      // review count moves immediately. A SCAN does not do this per event —
+      // it refreshes once for the whole run (see scanDueSources), because
+      // fifty events arriving is still one thing that happened.
+      await refreshAdminReviewDigest();
+    }
     if (ctx.sourceId) {
       // Reflect the source's own type on the event, and attribute the
       // event to the source's promoter when extraction found none — a

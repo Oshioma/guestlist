@@ -8,6 +8,7 @@ import { getCurrentMember } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { alertReasonText, type AlertReason } from '@/lib/alerts';
 import { NotificationList, type NotificationRow } from '@/components/v2d/NotificationList';
+import { reviewQueueSummary, type ReviewQueue } from '@/lib/adminNotify';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,6 +88,20 @@ export default async function NotificationsPage() {
       case 'event_room_message':
         text = `${n.actor_name ?? 'Someone'} messaged the room${n.event_title ? ` at ${n.event_title}` : ''}`;
         href = n.event_id ? `/clubmessenger/events/${n.event_id}` : '/clubmessenger';
+        break;
+      // Admin lines. These are about the site rather than about you, so they
+      // say so and go straight to the desk that fixes them.
+      case 'admin_new_member':
+        text = `New member: ${n.actor_name ?? p.name ?? 'someone'}${p.city ? ` · ${p.city}` : ''}`;
+        href = p.slug ? `/members/${p.slug}` : '/admin/network';
+        break;
+      case 'admin_new_article':
+        text = `New article for review: “${p.title ?? 'Untitled'}” by ${p.author ?? 'a member'}`;
+        href = '/admin/articles';
+        break;
+      case 'admin_review_waiting':
+        text = reviewQueueSummary(p as unknown as ReviewQueue);
+        href = '/admin/events';
         break;
       default:
         text = 'Notification';

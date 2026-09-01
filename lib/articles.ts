@@ -1,4 +1,5 @@
 import { query, queryOne } from './db';
+import { notifyAdminsNewArticle } from './adminNotify';
 
 export type Article = {
   id:string; section_slug:string; section_name:string; author_id:string; author_name:string; author_slug:string|null; author_avatar_url:string|null;
@@ -60,6 +61,9 @@ export async function submitArticle(id:string,authorId:string){
   if(a.body.trim().split(/\s+/).length<80) throw new Error('Article must be at least 80 words');
   if(!a.hero_image_url) throw new Error('Every article needs a hero image');
   await query(`update articles set slug=$3,status='submitted',submitted_at=now(),admin_note=null,updated_at=now() where id=$1 and author_id=$2`,[id,authorId,articleSlug(a.title)]);
+  // The editorial desk hears about it — and the review digest is refreshed
+  // inside that call, so the bell and the queue agree.
+  await notifyAdminsNewArticle(id);
   return getAuthorArticle(id,authorId);
 }
 export async function recordArticleView(articleId:string,memberId:string|null){await query(`insert into article_views(article_id,member_id) values($1,$2)`,[articleId,memberId]);}

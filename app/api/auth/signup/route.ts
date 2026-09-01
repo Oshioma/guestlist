@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/lib/db';
 import { createSession, hashPassword, setSessionCookie } from '@/lib/auth';
 import { memberSlug } from '@/lib/members';
+import { notifyAdminsNewMember } from '@/lib/adminNotify';
 
 export async function POST(req: NextRequest) {
   const data = await req.json().catch(() => ({}));
@@ -34,6 +35,10 @@ export async function POST(req: NextRequest) {
   );
   await query(`update members set slug = $2 where id = $1`,
     [member!.id, memberSlug(displayName, member!.id)]);
+
+  // The admins hear about it. Never blocking: a notification that cannot be
+  // written must not stop somebody joining.
+  await notifyAdminsNewMember(member!.id);
 
   const token = await createSession(member!.id);
   await setSessionCookie(token);
