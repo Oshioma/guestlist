@@ -27,15 +27,25 @@ type Candidate = {
   known: boolean;
 };
 
+type ScanSummary = {
+  status: string; extracted: number; candidatesFound: number;
+  newCandidates: number; duplicates: number; failed: number; error: string | null;
+};
+
 type RowState = {
   testing: boolean;
   result: ProbeResult | null;
   adding: boolean;
   addedId: string | null;
+  scanning: boolean;
+  scan: ScanSummary | null;
   error: string;
 };
 
-const blankRow = (): RowState => ({ testing: false, result: null, adding: false, addedId: null, error: '' });
+const blankRow = (): RowState => ({
+  testing: false, result: null, adding: false, addedId: null,
+  scanning: false, scan: null, error: '',
+});
 
 export function SourceDiscovery({
   genres, countries,
@@ -129,12 +139,15 @@ export function SourceDiscovery({
   async function add(c: Candidate) {
     setRow(c.url, { adding: true, error: '' });
     try {
+      // If the test had to find the real listing page, add THAT — adding the
+      // dead URL we started from would guarantee a source that finds nothing.
+      const url = rows[c.url]?.result?.target ?? c.url;
       const res = await fetch('/api/admin/sources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: c.name,
-          url: c.url,
+          url,
           sourceType: c.kind,
           city: c.city,
           country: c.country,
@@ -151,6 +164,22 @@ export function SourceDiscovery({
       }
     } catch {
       setRow(c.url, { adding: false, error: 'Could not reach the server' });
+    }
+  }
+
+  // Adding a source is not the finish line — scanning it is. Doing it here
+  // means you see how many of those candidate links actually become events
+  // without leaving the search.
+  async function scan(c: Candidate, id: string) {
+    setRow(c.url, { scanning: true, error: '', scan: null });
+    try {
+      const res = await fetch(`/api/admin/sources/${id}/scan`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setRow(c.url, { scanning: false, scan: data });
+      else setRow(c.url, { scanning: false, error: data?.error ?? 'Scan failed' });
+      router.refresh();
+    } catch {
+      setRow(c.url, { scanning: false, error: 'Could not reach the server' });
     }
   }
 
@@ -269,15 +298,43 @@ export function SourceDiscovery({
                           ) : (
                             <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>Not tested</span>
                           )}
+                          {row.scan && (
+                            <div style={{ fontSize: 11.5, lineHeight: 1.5, marginTop: 4,
+                                          color: row.scan.extracted > 0 ? 'var(--text-soft)' : 'var(--danger)' }}>
+                              {row.scan.status === 'succeeded' ? (
+                                <>
+                                  Scanned: {row.scan.candidatesFound} candidate
+                                  {row.scan.candidatesFound === 1 ? '' : 's'} · {row.scan.extracted} extracted ·{' '}
+                                  {row.scan.duplicates} duplicate · {row.scan.failed} failed
+                                  {row.scan.extracted > 0 ? (
+                                    <> — <a href="/admin/events?state=new" style={{ textDecoration: 'underline' }}>review →</a></>
+                                  ) : (
+                                    <> — nothing readable on those pages yet</>
+                                  )}
+                                </>
+                              ) : (row.scan.error ?? 'Scan failed')}
+                            </div>
+                          )}
                           {row.error && (
                             <div style={{ color: 'var(--danger)', fontSize: 11.5 }}>{row.error}</div>
                           )}
                         </td>
                         <td style={{ whiteSpace: 'nowrap' }}>
-                          {c.known || row.addedId ? (
-                            <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>
-                              {row.addedId ? 'Added ✓' : '—'}
-                            </span>
+                          {c.known ? (
+                            <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>—</span>
+                          ) : row.addedId ? (
+                            // Added, but not yet proven: scanning is what turns
+                            // a source into events, so offer it right here.
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                              <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>Added ✓</span>
+                              {row.addedId !== 'added' && (
+                                <button className="btnGhost" type="button"
+                                        style={{ padding: '4px 10px', fontSize: 11 }}
+                                        onClick={() => scan(c, row.addedId!)} disabled={row.scanning}>
+                                  {row.scanning ? 'Scanning…' : row.scan ? 'Scan again' : 'Scan now'}
+                                </button>
+                              )}
+                            </div>
                           ) : (
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                               <button className="btnGhost" type="button"

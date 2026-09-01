@@ -25,9 +25,14 @@ export async function POST(req: NextRequest) {
     const dup = await queryOne('select 1 from event_sources where url = $1', [url]);
     if (dup) return NextResponse.json({ error: 'That URL is already a source' }, { status: 409 });
 
+    // Polling ON from the moment it is added: a source an admin deliberately
+    // added and tested is meant to be watched, and leaving it off was the
+    // reason added sources sat there quietly never scanning. Trust still
+    // starts at 'new', so nothing it finds auto-publishes.
     const row = await queryOne<{ id: string }>(
-      `insert into event_sources (source_type, name, url, promoter_id, venue_id, notes, city, country)
-       values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+      `insert into event_sources (source_type, name, url, promoter_id, venue_id, notes, city, country,
+                                  polling_enabled)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, true) returning id`,
       [sourceType, name, url, body.promoterId || null, body.venueId || null, body.notes || null,
        cleanPlace(body.city), cleanPlace(body.country)]
     );
