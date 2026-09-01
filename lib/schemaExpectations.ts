@@ -26,6 +26,7 @@ export const MIGRATION_FILES: string[] = [
   '019_rename_event_articles_to_event_features.sql',
   '020_homepage_feed_suppressions.sql',
   '021_memory_attendance.sql',
+  '022_sitemap_scan_method.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [

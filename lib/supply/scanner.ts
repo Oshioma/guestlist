@@ -8,6 +8,7 @@ import { query, queryOne } from '@/lib/db';
 import { safeFetch, type SafeFetchOptions, type SafeFetchResult } from './safeFetch';
 import { runExtractionPipeline, type PipelineContext } from './pipeline';
 import { supplyConfig } from './config';
+import type { OutcomeTally } from './outcomes';
 
 export type SourceRow = {
   id: string;
@@ -22,7 +23,7 @@ export type SourceRow = {
   last_checked_at: string | null;
 };
 
-const EVENT_PATH_HINT =
+export const EVENT_PATH_HINT =
   /\/(events?|whats?-?on|what-s-on|listings?|gigs?|parties|party|nights?|programme|program|lineup|agenda|tickets?|e)\/[^/]/i;
 const NON_EVENT_PATH =
   /\/(login|signin|signup|register|account|cart|basket|checkout|privacy|terms|cookies|about|contact|jobs|careers|press|faq|search|tag|category|wp-admin|admin)\b/i;
@@ -121,6 +122,70 @@ export function parseFeedLinks(xml: string, baseUrl: string): string[] {
   return out;
 }
 
+// Sitemaps exist for crawlers, so a site that serves JavaScript to browsers
+// and 403s our bot on its listing page will often still serve a plain list
+// of its event URLs here. It is the one honest way past both failure modes
+// without pretending to be a browser.
+const SITEMAP_PATHS = ['/sitemap.xml', '/sitemap_index.xml'];
+
+export function sitemapEventUrls(xml: string, baseUrl: string, limit: number): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const m of xml.matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/gi)) {
+    const raw = m[1].replace(/^<!\[CDATA\[([\s\S]*?)\]\]>$/, '$1').trim();
+    const canonical = raw && canonicaliseCandidateUrl(raw, baseUrl);
+    if (!canonical || seen.has(canonical)) continue;
+    let url: URL;
+    try { url = new URL(canonical); } catch { continue; }
+    // Only event-shaped paths: a sitemap lists the whole site, and importing
+    // its about page as an event helps nobody.
+    if (!EVENT_PATH_HINT.test(url.pathname)) continue;
+    seen.add(canonical);
+    out.push(canonical);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+// A sitemap index points at other sitemaps rather than pages.
+export function sitemapIndexUrls(xml: string, baseUrl: string, limit: number): string[] {
+  if (!/<sitemapindex[\s>]/i.test(xml)) return [];
+  const out: string[] = [];
+  for (const m of xml.matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/gi)) {
+    const canonical = canonicaliseCandidateUrl(
+      m[1].replace(/^<!\[CDATA\[([\s\S]*?)\]\]>$/, '$1').trim(), baseUrl);
+    if (canonical && !out.includes(canonical)) out.push(canonical);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+export async function findSitemapEvents(
+  origin: string,
+  fetcher: (url: string, options?: SafeFetchOptions) => Promise<SafeFetchResult>,
+  delayMs = supplyConfig.scan.delayBetweenFetchesMs
+): Promise<{ url: string; found: number; urls: string[] } | null> {
+  for (const path of SITEMAP_PATHS) {
+    const target = `${origin}${path}`;
+    const res = await fetcher(target, { accept: 'application/xml,text/xml' });
+    if (!res.ok || !/<(urlset|sitemapindex)[\s>]/i.test(res.body)) continue;
+
+    const direct = sitemapEventUrls(res.body, res.finalUrl, supplyConfig.scan.maxCandidatesPerScan);
+    if (direct.length) return { url: res.finalUrl, found: direct.length, urls: direct };
+
+    // An index: look inside the first couple of child sitemaps, no deeper.
+    for (const child of sitemapIndexUrls(res.body, res.finalUrl, 2)) {
+      await sleep(delayMs);
+      const sub = await fetcher(child, { accept: 'application/xml,text/xml' });
+      if (!sub.ok) continue;
+      const found = sitemapEventUrls(sub.body, sub.finalUrl, supplyConfig.scan.maxCandidatesPerScan);
+      if (found.length) return { url: sub.finalUrl, found: found.length, urls: found };
+    }
+  }
+  return null;
+}
+
+
 export type ScanContext = Pick<PipelineContext, 'ai' | 'fetcher' | 'fetchOptions'> & {
   delayMs?: number;
 };
@@ -128,7 +193,7 @@ export type ScanContext = Pick<PipelineContext, 'ai' | 'fetcher' | 'fetchOptions
 export type ScanResult = {
   scanId: string;
   status: 'succeeded' | 'failed';
-  method: 'rss' | 'html' | null;
+  method: 'rss' | 'html' | 'sitemap' | null;
   candidatesFound: number;
   newCandidates: number;
   extracted: number;
@@ -137,6 +202,9 @@ export type ScanResult = {
   error: string | null;
   // True when this scan is the one that put the source on a schedule.
   startedPolling: boolean;
+  // Every extraction status this scan produced, counted. "0 extracted" is
+  // not a diagnosis; "5 not_an_event" is.
+  outcomes: OutcomeTally;
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -157,7 +225,7 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
   const scanId = scan!.id;
   const fetcher = ctx.fetcher ?? safeFetch;
 
-  const finish = async (r: Omit<ScanResult, 'scanId' | 'startedPolling'>): Promise<ScanResult> => {
+  const finish = async (r: Omit<ScanResult, 'scanId' | 'startedPolling' | 'outcomes'> & { outcomes?: OutcomeTally }): Promise<ScanResult> => {
     await query(
       `update source_scans set status = $2, method = $3, candidates_found = $4,
               new_candidates = $5, extracted = $6, failed = $7, duplicates = $8,
@@ -187,7 +255,7 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
         returning ($2 and $3 > 0 and prev.last_success_at is null) as started`,
       [sourceId, r.status === 'succeeded', r.extracted]
     );
-    return { scanId, ...r, startedPolling: promoted?.started ?? false };
+    return { scanId, ...r, outcomes: r.outcomes ?? {}, startedPolling: promoted?.started ?? false };
   };
 
   if (!source.active || source.trust === 'blocked') {
@@ -204,16 +272,31 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
     ...ctx.fetchOptions,
     accept: 'application/rss+xml,application/atom+xml,text/html,application/xhtml+xml,application/xml;q=0.9',
   });
-  if (!fetched.ok) {
-    return finish({
-      status: 'failed', method: null, candidatesFound: 0, newCandidates: 0,
-      extracted: 0, failed: 0, duplicates: 0,
-      error: `${fetched.code}: ${fetched.detail}`,
-    });
-  }
+  // Sites that refuse our user agent on their listing page usually still
+  // serve their sitemap, which is written for crawlers. Try it before
+  // writing the scan off.
+  const origin = (() => { try { return new URL(target).origin; } catch { return null; } })();
+  const trySitemap = async () => {
+    if (!origin) return null;
+    await sleep(ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
+    return findSitemapEvents(origin, fetcher, ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
+  };
 
-  let method: 'rss' | 'html';
+  let method: 'rss' | 'html' | 'sitemap';
   let candidates: string[];
+
+  if (!fetched.ok) {
+    const sitemap = await trySitemap();
+    if (!sitemap) {
+      return finish({
+        status: 'failed', method: null, candidatesFound: 0, newCandidates: 0,
+        extracted: 0, failed: 0, duplicates: 0,
+        error: `${fetched.code}: ${fetched.detail}`,
+      });
+    }
+    method = 'sitemap';
+    candidates = sitemap.urls;
+  } else
   if (looksLikeFeed(fetched.contentType, fetched.body)) {
     method = 'rss';
     candidates = parseFeedLinks(fetched.body, fetched.finalUrl);
@@ -245,6 +328,15 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
         if (feedCandidates > 0) {
           await query(`update event_sources set feed_url = $2 where id = $1`, [sourceId, feedAbs]);
         }
+      }
+    }
+    // Still nothing on the page — it renders its listings in JavaScript, or
+    // its link shapes are unfamiliar. The sitemap is the honest way in.
+    if (candidates.length === 0) {
+      const sitemap = await trySitemap();
+      if (sitemap) {
+        method = 'sitemap';
+        candidates = sitemap.urls;
       }
     }
   }
@@ -289,6 +381,8 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
   let extracted = 0;
   let failedCount = 0;
   let duplicates = 0;
+  const outcomes: OutcomeTally = {};
+  const tally = (status: string) => { outcomes[status] = (outcomes[status] ?? 0) + 1; };
   const toProcess = pending.slice(0, supplyConfig.scan.maxExtractionsPerScan);
   for (let i = 0; i < toProcess.length; i++) {
     if (i > 0) await sleep(ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
@@ -301,10 +395,12 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
         `update source_seen_urls set extraction_id = $3 where source_id = $1 and url = $2`,
         [sourceId, toProcess[i], outcome.extractionId]
       );
+      tally(outcome.status);
       if (outcome.status === 'succeeded' || outcome.status === 'possible_duplicate') extracted++;
       else if (outcome.status === 'duplicate_linked') duplicates++;
       else failedCount++;
     } catch {
+      tally('failed');
       failedCount++;
     }
   }
@@ -312,7 +408,7 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
   return finish({
     status: 'succeeded', method,
     candidatesFound: candidates.length, newCandidates: newCandidates.length,
-    extracted, failed: failedCount, duplicates, error: null,
+    extracted, failed: failedCount, duplicates, error: null, outcomes,
   });
 }
 
