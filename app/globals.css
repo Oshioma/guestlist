@@ -573,6 +573,12 @@ button { font-family: inherit; }
   margin: 34px 0 12px;
 }
 .sectionLabel:first-child { margin-top: 0; }
+/* ...but a label that OPENS A SECTION still needs air above it. The rule
+   above is about the top of a page; wrapping each band in its own <section>
+   made every label a first-child, which stripped the space and left the
+   labels sitting on the cards above them. */
+section > .sectionLabel:first-child { margin-top: 34px; }
+section:first-child > .sectionLabel:first-child { margin-top: 0; }
 
 .prose {
   font-size: 15.5px;
@@ -972,6 +978,27 @@ button { font-family: inherit; }
   vertical-align: top;
 }
 .adminTableWrap { overflow-x: auto; }
+
+/* Explore, grouped by country: the heading has to separate two scenes
+   without shouting over the cities themselves. */
+.exploreCountryHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 22px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.exploreCountryHead h2 {
+  margin: 0;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+}
+.exploreCountryHead span {
+  color: var(--text-faint);
+  font-size: 12.5px;
+}
 
 /* A quiet aside inside an auth card — the old-Guestlist explanation, and
    anything else that answers "why didn't that work?" without shouting. */
