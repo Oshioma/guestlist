@@ -13,11 +13,11 @@ function ArticleRow({articles}:{articles:Awaited<ReturnType<typeof listPublished
 }
 
 export async function BalanceHomeSection(){
-  const [balance,eventArticles,member]=await Promise.all([listPublishedArticles('balance',3),listPublishedArticles('events',3),getCurrentMember()]);
+  const [balance,eventFeatures,member]=await Promise.all([listPublishedArticles('balance',3),listPublishedArticles('events',3),getCurrentMember()]);
   return <section style={{padding:'34px 0',borderTop:'1px solid var(--border)',marginTop:32}}>
     <div className="homeSectionHead" style={{marginTop:0}}><div><div className="homeKicker">Community editorial</div><h2 className="homeSectionTitle" style={{marginTop:5}}>Balance</h2></div><Link href="/balance" className="btnGhost">Explore Balance →</Link></div>
     {balance.length?<ArticleRow articles={balance}/>:<p style={{color:'var(--text-muted)'}}>Member stories are coming to Balance. Be one of the first contributors.</p>}
-    {eventArticles.length>0&&<><div className="homeSectionHead" style={{marginTop:28}}><div><div className="homeKicker">From the dancefloor</div><h2 className="homeSectionTitle" style={{marginTop:5}}>Event Articles</h2></div></div><ArticleRow articles={eventArticles}/></>}
+    {eventFeatures.length>0&&<><div className="homeSectionHead" style={{marginTop:28}}><div><div className="homeKicker">From the dancefloor</div><h2 className="homeSectionTitle" style={{marginTop:5}}>Event Features</h2></div></div><ArticleRow articles={eventFeatures}/></>}
     <div style={{marginTop:16}}><Link href={member?'/articles/new':'/login?next=/articles/new'} className="btnAccent">Add article →</Link></div>
   </section>;
 }
