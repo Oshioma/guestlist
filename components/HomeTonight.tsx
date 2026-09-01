@@ -1,27 +1,24 @@
+// The homepage's Tonight band.
+//
+// It does NOT ask its own question: the events, and the order they are in,
+// come from lib/tonight — the same place the Tonight page reads them from.
+// This band used to run its own copy of the query, which is how the Tonight
+// page came to show a member their own city first while the homepage
+// carried on showing Spain.
+
 import Link from 'next/link';
-import { query } from '@/lib/db';
 import { optional } from '@/lib/resilient';
 import { getCurrentMember } from '@/lib/auth';
 import { getRecommendedEvents } from '@/lib/recommend';
 import { toRecCards } from '@/lib/recCards';
 import { EventImage } from '@/components/EventImage';
 import { fmtEventDate } from '@/lib/util';
+import { tonightFor, rankTonight, type TonightEvent, type TonightPublicEvent } from '@/lib/tonight';
 import styles from './HomeTonight.module.css';
 
-type HomeTonightEvent = {
-  id: string;
-  title: string;
-  slug: string;
-  start_at: string;
-  end_at: string;
-  timezone: string;
-  city: string | null;
-  primary_image_url: string | null;
-  featured: boolean;
-  venue_name: string | null;
-  going_count: number;
-  genres: { name: string; slug: string }[];
-};
+// Whichever shape lib/tonight hands back — a signed-out visitor gets the
+// listings with nothing about people in them.
+type TonightBand = TonightEvent | TonightPublicEvent;
 
 type HomePick = {
   id: string;
@@ -36,30 +33,15 @@ type HomePick = {
 
 export async function HomeTonight() {
   const member = await getCurrentMember();
-  // Tonight is a band, not the page: if either query fails the homepage
-  // still has everything else on it.
+  // One source of truth for what is on tonight, and for the order it is in.
+  // Tonight is a band, not the page: if either call fails the homepage still
+  // has everything else on it.
   const [events, recommended] = await optional('HomeTonight', () => Promise.all([
-    query<HomeTonightEvent>(
-      `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
-              e.city, e.primary_image_url, e.featured, v.name as venue_name,
-              coalesce((select count(*)::int from member_event_actions mea
-                         where mea.event_id = e.id and mea.rsvp = 'going'), 0) as going_count,
-              coalesce((select json_agg(json_build_object('name', g.name, 'slug', g.slug))
-                          from event_genres eg join genres g on g.id = eg.genre_id
-                         where eg.event_id = e.id), '[]'::json) as genres
-         from events e
-         left join venues v on v.id = e.venue_id
-        where e.status = 'live'
-          and e.listing_status <> 'cancelled'
-          and e.start_at < now() + interval '24 hours'
-          and coalesce(e.end_at, e.start_at + interval '6 hours') > now() - interval '2 hours'
-        order by e.start_at asc
-        limit 40`
-    ),
+    tonightFor(member?.id ?? null).then((list) => rankTonight(list as TonightBand[])),
     member
       ? getRecommendedEvents(member.id, { limit: 3, exploration: false })
       : Promise.resolve([]),
-  ]), [[], []] as [HomeTonightEvent[], Awaited<ReturnType<typeof getRecommendedEvents>>]);
+  ]), [[], []] as [TonightBand[], Awaited<ReturnType<typeof getRecommendedEvents>>]);
 
   if (!events.length) {
     return (

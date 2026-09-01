@@ -17,6 +17,10 @@ export type Member = {
   role: 'member' | 'admin';
   home_city: string | null;
   home_country: string | null;
+  // The resolved place, not the typed text. Everything that puts local events
+  // first reads THIS — see lib/proximity — so a member with a home_city and
+  // no home_location_id is, to Guestlist, nowhere.
+  home_location_id: string | null;
 };
 
 const COOKIE = 'gl_session';
@@ -72,7 +76,8 @@ export async function getCurrentMember(): Promise<Member | null> {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
   return queryOne<Member>(
-    `select m.id, m.email, m.display_name, m.avatar_url, m.role, m.home_city, m.home_country
+    `select m.id, m.email, m.display_name, m.avatar_url, m.role, m.home_city, m.home_country,
+            m.home_location_id
        from auth_sessions s join members m on m.id = s.member_id
       where s.token = $1 and s.expires_at > now()`,
     [hashToken(token)]
