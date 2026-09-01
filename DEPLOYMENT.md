@@ -75,7 +75,7 @@ hosting entirely — the landing page now lives at `/` inside the app.
 
 ## 6. Create your admin account
 
-1. Visit `https://guestlist.net/signup` and register normally.
+1. Visit `https://www.clubguestlists.com/signup` and register normally.
 2. In the SQL editor:
 
 ```sql
@@ -115,7 +115,7 @@ end $$;
 
 select cron.schedule('guestlist-scan-sources', '0 */6 * * *', $job$
   select net.http_post(
-    url := 'https://www.guestlist.net/api/jobs/scan-sources',
+    url := 'https://www.clubguestlists.com/api/jobs/scan-sources',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'Authorization', 'Bearer ' || (
@@ -128,7 +128,7 @@ $job$);
 
 select cron.schedule('guestlist-send-emails', '0 * * * *', $job$
   select net.http_post(
-    url := 'https://www.guestlist.net/api/jobs/send-emails',
+    url := 'https://www.clubguestlists.com/api/jobs/send-emails',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'Authorization', 'Bearer ' || (
@@ -139,6 +139,10 @@ select cron.schedule('guestlist-send-emails', '0 * * * *', $job$
   );
 $job$);
 ```
+
+Keep the token in Vault as above rather than writing it into the job body.
+A token pasted straight into `cron.schedule` sits in plaintext in `cron.job`,
+readable by anyone with database access and easy to copy out by accident.
 
 To check it is running:
 
@@ -159,7 +163,7 @@ Both endpoints accept GET and POST, so any external scheduler (cron-job.org,
 a GitHub Actions schedule, a server crontab) works too:
 
 ```
-*/30 * * * *  curl -s -X POST https://www.guestlist.net/api/jobs/scan-sources \
+*/30 * * * *  curl -s -X POST https://www.clubguestlists.com/api/jobs/scan-sources \
                 -H "Authorization: Bearer $SUPPLY_CRON_SECRET"
 ```
 
