@@ -6,11 +6,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GenrePicker, type GenreOpt } from '@/components/admin/GenrePicker';
 import { probeLabel, testVerdict, type ProbeResult } from '@/lib/supply/verdict';
+import { explainScan, type OutcomeTally } from '@/lib/supply/outcomes';
 
 type ScanSummary = {
   status: string; method: string | null; candidatesFound: number;
   newCandidates: number; extracted: number; failed: number; duplicates: number;
-  error: string | null;
+  error: string | null; outcomes: OutcomeTally;
 };
 
 export function SourceControls({
@@ -255,6 +256,10 @@ export function SourceControls({
               {scanResult.method && <> · via {scanResult.method.toUpperCase()}</>}
               {scanResult.extracted > 0 && (
                 <> — <a href="/admin/events?state=new" style={{ textDecoration: 'underline' }}>review →</a></>
+              )}
+              {/* Why, not just how many. */}
+              {explainScan(scanResult.outcomes, scanResult.extracted) && (
+                <div style={{ marginTop: 3 }}>{explainScan(scanResult.outcomes, scanResult.extracted)}</div>
               )}
             </>
           ) : (

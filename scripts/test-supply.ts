@@ -29,7 +29,8 @@ import { zonedTimeToUtc, parseLocalInTimezone, parseFoundDate, resolveEndCrossin
 import { mapGenreProposals, loadGenres } from '@/lib/supply/genres';
 import { computeOverallConfidence, canAutoPublish } from '@/lib/supply/confidence';
 import { runExtractionPipeline } from '@/lib/supply/pipeline';
-import { scanSource, identifyCandidateLinks, parseFeedLinks, canonicaliseCandidateUrl } from '@/lib/supply/scanner';
+import { scanSource, identifyCandidateLinks, parseFeedLinks, canonicaliseCandidateUrl, sitemapEventUrls, sitemapIndexUrls } from '@/lib/supply/scanner';
+import { explainScan, outcomeLabel } from '@/lib/supply/outcomes';
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
 import { isLiveSource } from '@/lib/supply/health';
@@ -970,6 +971,71 @@ async function main() {
     check('discovery says so when no API key is configured', !unavailable.ok && unavailable.error === 'unavailable');
     const garbled = await discoverSources(req, fake('sorry, I cannot help with that'));
     check('unparseable model output is an error, not a candidate', !garbled.ok);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— sitemaps: the way into a site that blocks us or renders in JS —');
+  {
+    const SITEMAP = `<?xml version="1.0"?><urlset>
+      <url><loc>https://blocked.example/</loc></url>
+      <url><loc>https://blocked.example/about</loc></url>
+      <url><loc>https://blocked.example/events/sitemap-night</loc></url>
+      <url><loc>https://blocked.example/events/sitemap-day</loc></url>
+    </urlset>`;
+
+    check('a sitemap yields only event-shaped URLs',
+      JSON.stringify(sitemapEventUrls(SITEMAP, 'https://blocked.example/sitemap.xml', 40))
+      === JSON.stringify(['https://blocked.example/events/sitemap-night','https://blocked.example/events/sitemap-day']));
+    check('a plain sitemap is not mistaken for an index',
+      sitemapIndexUrls(SITEMAP, 'https://blocked.example/sitemap.xml', 5).length === 0);
+    check('a sitemap index points at its children',
+      sitemapIndexUrls(`<?xml version="1.0"?><sitemapindex>
+        <sitemap><loc>https://x.example/sitemap-events.xml</loc></sitemap>
+      </sitemapindex>`, 'https://x.example/sitemap.xml', 5)[0] === 'https://x.example/sitemap-events.xml');
+
+    // The case that matters: the listing page refuses GuestlistBot, but the
+    // sitemap serves it, and the scan turns that into real events.
+    const src = (await q(
+      `insert into event_sources (source_type, name, url, trust) values ('venue_website', 'Blocked venue', 'https://blocked.example/whats-on', 'trusted') returning id`
+    ))[0] as { id: string };
+    const proposal = (title: string) => ({
+      is_event: true, is_music_event: true, title,
+      start_date: FUTURE.toISOString().slice(0, 10), start_time: '23:00',
+      city: 'Rimini', country: 'Italy',
+      genres: [{ name: 'Techno', confidence: 90 }],
+      field_confidence: { title: 92, date: 90, city: 88, genres: 88 },
+    });
+    const scan = await scanSource(src.id, {
+      fetcher: mockFetcher({
+        // No entry for /whats-on: the mock fetcher reports it unreachable,
+        // which is what a 403 looks like to the scanner.
+        'https://blocked.example/sitemap.xml': { body: SITEMAP, contentType: 'application/xml' },
+        'https://blocked.example/events/sitemap-night': { body: '<html><title>Sitemap Night</title><body><main>n</main></body></html>' },
+        'https://blocked.example/events/sitemap-day': { body: '<html><title>Sitemap Day</title><body><main>d</main></body></html>' },
+      }),
+      ai: mockAI({
+        'https://blocked.example/events/sitemap-night': proposal('Sitemap Night'),
+        'https://blocked.example/events/sitemap-day': proposal('Sitemap Day'),
+      }),
+      delayMs: 1,
+    });
+    check('a blocked listing page falls back to the sitemap',
+      scan.status === 'succeeded' && scan.method === 'sitemap', JSON.stringify(scan));
+    check('and those sitemap URLs become events', scan.extracted === 2, JSON.stringify(scan));
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— a scan says WHY it found nothing —');
+  {
+    check('an outcome tally explains itself',
+      explainScan({ not_an_event: 5 }, 0)?.includes('None of those links were event pages') === true);
+    check('a homepage is named as the likely cause',
+      explainScan({ not_an_event: 5 }, 0)?.includes('homepage') === true);
+    check('a missing AI reader is spelled out',
+      outcomeLabel('ai_extraction_failed').includes('ANTHROPIC_API_KEY'));
+    check('a successful scan needs no excuse', explainScan({ succeeded: 3 }, 3) === null);
+    check('undated event pages are named as such',
+      explainScan({ insufficient_information: 2 }, 0)?.includes('no usable date') === true);
   }
 
   // -------------------------------------------------------------------------

@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation';
 import { GenrePicker, type GenreOpt } from '@/components/admin/GenrePicker';
 import { probeLabel, testVerdict, type ProbeResult } from '@/lib/supply/verdict';
 import { matchGenreIdsByName, sourceTypeLabel } from '@/lib/util';
+import { explainScan, type OutcomeTally } from '@/lib/supply/outcomes';
 
 type Candidate = {
   name: string;
@@ -30,7 +31,7 @@ type Candidate = {
 type ScanSummary = {
   status: string; extracted: number; candidatesFound: number;
   newCandidates: number; duplicates: number; failed: number; error: string | null;
-  startedPolling: boolean;
+  startedPolling: boolean; outcomes: OutcomeTally;
 };
 
 type RowState = {
@@ -315,6 +316,13 @@ export function SourceDiscovery({
                                     </>
                                   ) : (
                                     <> — nothing readable on those pages yet, so it stays off the schedule</>
+                                  )}
+                                  {/* "0 extracted" is a count, not a reason. The
+                                      pipeline knows why each page failed, so say it. */}
+                                  {explainScan(row.scan.outcomes, row.scan.extracted) && (
+                                    <div style={{ marginTop: 3 }}>
+                                      {explainScan(row.scan.outcomes, row.scan.extracted)}
+                                    </div>
                                   )}
                                 </>
                               ) : (row.scan.error ?? 'Scan failed')}

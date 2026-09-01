@@ -8,7 +8,7 @@
 
 import { parse } from 'node-html-parser';
 import { safeFetch, type SafeFetchResult } from './safeFetch';
-import { identifyCandidateLinks, parseFeedLinks, looksLikeFeed, canonicaliseCandidateUrl } from './scanner';
+import { identifyCandidateLinks, parseFeedLinks, looksLikeFeed, canonicaliseCandidateUrl, findSitemapEvents } from './scanner';
 import { supplyConfig } from './config';
 import type { FetchProbe, ProbeResult } from './verdict';
 
@@ -93,6 +93,24 @@ export async function probeTarget(
       if ((retry.candidates ?? 0) > (candidates ?? 0)) {
         return { ...retry, foundVia: { triedFirst: target } };
       }
+    }
+  }
+
+  // Last resort, and the only route into a site that renders its listings in
+  // JavaScript or refuses our user agent: its sitemap.
+  const worthSitemap = !asBot.ok || candidates === 0;
+  if (opts.findListingOnMiss && worthSitemap && origin) {
+    await new Promise((r) => setTimeout(r, supplyConfig.scan.delayBetweenFetchesMs));
+    const sitemap = await findSitemapEvents(origin, safeFetch);
+    if (sitemap) {
+      return {
+        target: sitemap.url,
+        bot: { ok: true, status: 200, code: null, detail: null, ms: 0 },
+        browser: result.browser,
+        method: 'sitemap',
+        candidates: sitemap.found,
+        foundVia: { triedFirst: target, viaSitemap: true },
+      };
     }
   }
   return result;
