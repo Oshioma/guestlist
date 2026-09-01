@@ -18,11 +18,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ eventId: st
 
   const event = await queryOne<{
     id: string; slug: string; ticket_url: string | null; source_url: string | null;
+    listing_status: string;
   }>(
-    `select id, slug, ticket_url, source_url from events where id = $1 and status = 'live'`,
+    `select id, slug, ticket_url, source_url, listing_status
+       from events where id = $1 and status = 'live'`,
     [eventId]
   );
   if (!event) return NextResponse.redirect(home);
+
+  // A cancelled night never forwards ticket traffic — nobody should be sent
+  // off to buy a ticket for something that is not happening.
+  if (event.listing_status === 'cancelled') {
+    return NextResponse.redirect(new URL(`/events/${event.slug}`, req.url));
+  }
 
   const destination = isHttpUrl(event.ticket_url)
     ? event.ticket_url

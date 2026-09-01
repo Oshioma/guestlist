@@ -1,5 +1,6 @@
 // Event performance card in the promoter dashboard.
 
+import { EventImage } from '@/components/EventImage';
 import Link from 'next/link';
 import type { EventPerformance } from '@/lib/promoterAnalytics';
 import { fmtEventDate } from '@/lib/util';
@@ -18,12 +19,7 @@ export function PerfCard({
   const ctr = event.views > 0 ? ((event.ticket_clicks / event.views) * 100).toFixed(1) : null;
   return (
     <div className="perfCard">
-      {event.primary_image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="thumb" src={event.primary_image_url} alt="" />
-      ) : (
-        <div className="thumb" />
-      )}
+      <EventImage className="thumb" src={event.primary_image_url} />
       <div>
         <h3>{event.title}</h3>
         <div className="meta">

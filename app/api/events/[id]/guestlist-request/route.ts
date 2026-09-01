@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentMember } from '@/lib/auth';
 import { db } from '@/lib/db';
 
-export async function POST(req: NextRequest, ctx: { params: Promise<{ eventId: string }> }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const member = await getCurrentMember();
   if (!member) return NextResponse.json({ error:'Sign in to request guestlist' }, { status:401 });
-  const { eventId } = await ctx.params;
+  // The segment is [id] to match the sibling event routes; Next refuses
+  // two different slug names at the same path.
+  const { id: eventId } = await ctx.params;
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   const client = await db.connect();
   try {

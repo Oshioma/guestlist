@@ -344,7 +344,8 @@ button { font-family: inherit; }
   aspect-ratio: 4 / 3;
   overflow: hidden;
 }
-.eventCard .media img {
+/* Covers the fallback tile too, which renders as a <span>. */
+.eventCard .media > :is(img, span) {
   width: 100%; height: 100%;
   object-fit: cover;
   transition: transform 0.6s ease;
@@ -1981,12 +1982,23 @@ button { font-family: inherit; }
 .cityStatus.strong { color: var(--accent-ink); }
 
 /* ── V2D: notification centre ───────────────────────────────────────────── */
-.bellLink { position: relative; font-size: 15px; text-decoration: none; }
+/* Flat single-colour bell, drawn in currentColor so it follows the theme
+   and lights up on hover like the rest of the header. */
+.bellLink {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-soft);
+  text-decoration: none;
+}
+.bellLink:hover { color: var(--accent-ink); }
+.bellIcon { width: 20px; height: 20px; display: block; }
 .bellBadge {
-  position: absolute; top: -6px; right: -10px;
-  background: var(--accent); color: #141005;
+  position: absolute; top: -5px; right: -9px;
+  background: var(--accent); color: var(--on-accent);
   font-size: 9.5px; font-weight: 800; line-height: 1;
   border-radius: 999px; padding: 3px 5px; min-width: 10px; text-align: center;
+  border: 1.5px solid var(--header-bg);
 }
 .notifCentreList { display: grid; gap: 6px; }
 .notifCentreRow {
@@ -2346,3 +2358,12 @@ button { font-family: inherit; }
   line-height: 1;
 }
 .themeToggle:hover { border-color: var(--accent-ink); }
+
+/* Fallback tile for an image that failed to load (or was never there). */
+.imgFallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  background: var(--media-ph);
+}

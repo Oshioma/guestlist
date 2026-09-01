@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { track } from '@/lib/track';
-import { GenreArt } from '@/components/GenreArt';
+import { EventImage } from '@/components/EventImage';
 import type { RecCardData } from '@/components/v2c/RecShelf';
 
 const FEEDBACK_REASONS: { key: string; label: string }[] = [
@@ -78,8 +78,11 @@ export function PicksHero({ events, title, surface }: {
       onMouseLeave={() => setPaused(false)}
     >
       {active.primary_image_url && (
+        // Decorative colour wash only; if it 404s the band simply loses the tint.
         // eslint-disable-next-line @next/next/no-img-element
-        <img className="picksHeroBg" src={active.primary_image_url} alt="" aria-hidden />
+        <img className="picksHeroBg" src={active.primary_image_url} alt="" aria-hidden
+             ref={(n) => { if (n && n.complete && n.naturalWidth === 0) n.style.display = 'none'; }}
+             onError={(ev) => { ev.currentTarget.style.display = 'none'; }} />
       )}
       <div className="picksHeroInner">
         <div className="picksHeroTop">
@@ -105,12 +108,7 @@ export function PicksHero({ events, title, surface }: {
               aria-current={i === cur}
               onClick={() => goTo(i, true)}
             >
-              {e.primary_image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={e.primary_image_url} alt="" loading="lazy" />
-              ) : (
-                <span className="picksTileArt"><GenreArt genres={e.genres} compact /></span>
-              )}
+              <EventImage className="picksTileArt" src={e.primary_image_url} genres={e.genres} compactArt />
             </button>
           ))}
         </div>
