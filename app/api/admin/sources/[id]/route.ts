@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, requireAdmin } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
 import { audit } from '@/lib/audit';
-import { cleanGenreIds, cleanPlace } from '@/lib/util';
+import { cleanGenreIds, cleanPlace, cleanCountry } from '@/lib/util';
 
 const TRUST_VALUES = ['new', 'trusted', 'restricted', 'blocked'];
 
@@ -88,7 +88,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       set('url', parsed.toString());
     }
     if (body.city !== undefined) set('city', cleanPlace(body.city));
-    if (body.country !== undefined) set('country', cleanPlace(body.country));
+    if (body.country !== undefined) set('country', cleanCountry(body.country));
 
     // Genres are replaced as a set (not appended) so the tag editor's state
     // is the whole truth.

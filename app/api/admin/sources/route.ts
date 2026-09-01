@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, requireAdmin } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
-import { SOURCE_TYPES, cleanGenreIds, cleanPlace } from '@/lib/util';
+import { SOURCE_TYPES, cleanGenreIds, cleanPlace, cleanCountry } from '@/lib/util';
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       `insert into event_sources (source_type, name, url, promoter_id, venue_id, notes, city, country)
        values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
       [sourceType, name, url, body.promoterId || null, body.venueId || null, body.notes || null,
-       cleanPlace(body.city), cleanPlace(body.country)]
+       cleanPlace(body.city), cleanCountry(body.country)]
     );
     const genreIds = cleanGenreIds(body.genreIds);
     if (genreIds.length) {

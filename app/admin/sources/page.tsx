@@ -16,6 +16,7 @@ import { AddSourceForm } from '@/components/admin/AddSourceForm';
 import { SourceDiscovery } from '@/components/admin/SourceDiscovery';
 import { SourceControls } from '@/components/admin/SourceControls';
 import { isLiveSource } from '@/lib/supply/health';
+import { canonicalCountry } from '@/lib/countries';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,7 +118,7 @@ export default async function SourcesPage({
   // filter bar stays stable while a filter is applied.
   const countryCounts = new Map<string, number>();
   for (const s of inView) {
-    const key = s.country?.trim() || NO_COUNTRY;
+    const key = canonicalCountry(s.country) || NO_COUNTRY;
     countryCounts.set(key, (countryCounts.get(key) ?? 0) + 1);
   }
   const countryChips = [...countryCounts.entries()].sort((a, b) =>
@@ -133,7 +134,7 @@ export default async function SourcesPage({
   const genreChips = [...genreCounts.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name));
 
   const filtered = inView.filter((s) => {
-    const country = s.country?.trim() || NO_COUNTRY;
+    const country = canonicalCountry(s.country) || NO_COUNTRY;
     if (countryFilter && country !== countryFilter) return false;
     if (genreFilter && !s.genre_slugs.includes(genreFilter)) return false;
     return true;
@@ -143,7 +144,7 @@ export default async function SourcesPage({
   // to-tag pile, not the front page.
   const groups = new Map<string, SourceRow[]>();
   for (const s of filtered) {
-    const key = s.country?.trim() || NO_COUNTRY;
+    const key = canonicalCountry(s.country) || NO_COUNTRY;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(s);
   }

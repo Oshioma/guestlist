@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, requireAdmin } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { cleanPlace } from '@/lib/util';
+import { cleanPlace, cleanCountry } from '@/lib/util';
 import { defaultDiscoveryClient, discoverSources } from '@/lib/supply/discover';
 
 export const maxDuration = 60;
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   try {
     await requireAdmin();
     const body = await req.json().catch(() => ({}));
-    const country = cleanPlace(body.country);
+    const country = cleanCountry(body.country);
     if (!country) return NextResponse.json({ error: 'Choose a country' }, { status: 400 });
     const city = cleanPlace(body.city);
     const limit = Math.min(Math.max(Number(body.limit) || 8, 1), 15);

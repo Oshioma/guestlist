@@ -33,6 +33,7 @@ import { scanSource, identifyCandidateLinks, parseFeedLinks, canonicaliseCandida
 import { explainScan, outcomeLabel } from '@/lib/supply/outcomes';
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
+import { canonicalCountry } from '@/lib/countries';
 import { isLiveSource } from '@/lib/supply/health';
 import { findListingLink } from '@/lib/supply/probe';
 import { testVerdict } from '@/lib/supply/verdict';
@@ -971,6 +972,31 @@ async function main() {
     check('discovery says so when no API key is configured', !unavailable.ok && unavailable.error === 'unavailable');
     const garbled = await discoverSources(req, fake('sorry, I cannot help with that'));
     check('unparseable model output is an error, not a candidate', !garbled.ok);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— one country, one name —');
+  {
+    check('UK spellings all become United Kingdom',
+      ['UK', 'u.k.', 'England', 'Scotland', 'Great Britain', 'GB', 'united kingdom']
+        .every((v) => canonicalCountry(v) === 'United Kingdom'));
+    check('US spellings all become United States',
+      ['US', 'USA', 'u.s.a.', 'America', 'United States of America']
+        .every((v) => canonicalCountry(v) === 'United States'));
+    check('case alone never makes a second country',
+      canonicalCountry('ITALY') === 'Italy' && canonicalCountry('italy') === 'Italy'
+      && canonicalCountry('Italy') === 'Italy' && canonicalCountry('italia') === 'Italy');
+    check('small words inside a name stay small',
+      canonicalCountry('trinidad and tobago') === 'Trinidad and Tobago');
+    check('a country we have no alias for is left as written, just tidied',
+      canonicalCountry('   greece ') === 'Greece');
+    // A general title-casing rule cannot get these right, so they are named.
+    check('awkward casing is handled by name, not by cleverness',
+      canonicalCountry("cote d'ivoire") === "Côte d'Ivoire"
+      && canonicalCountry('ivory coast') === "Côte d'Ivoire"
+      && canonicalCountry('UAE') === 'United Arab Emirates');
+    check('blank is null, not an empty country',
+      canonicalCountry('   ') === null && canonicalCountry(null) === null);
   }
 
   // -------------------------------------------------------------------------
