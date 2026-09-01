@@ -6,15 +6,23 @@
 export type GenreOpt = { id: string; name: string; slug: string; parent_genre_id: string | null };
 
 export function GenrePicker({
-  genres, selected, onChange,
+  genres, selected, onChange, wrap = false,
 }: {
   genres: GenreOpt[];
   selected: string[];
   onChange: (ids: string[]) => void;
+  // Where the genres ARE the query — the discovery search — they all have to
+  // be on screen; a hidden horizontal scroll would bury half the taxonomy.
+  wrap?: boolean;
 }) {
   const chosen = new Set(selected);
   return (
-    <div className="chipRow" style={{ maxHeight: 132, overflowY: 'auto', padding: '2px 0' }}>
+    <div
+      className="chipRow"
+      style={wrap
+        ? { flexWrap: 'wrap', overflowX: 'visible', padding: '2px 0' }
+        : { maxHeight: 132, overflowY: 'auto', padding: '2px 0' }}
+    >
       {genres.map((g) => (
         <button
           key={g.id}

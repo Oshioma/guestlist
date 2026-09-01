@@ -5,44 +5,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GenrePicker, type GenreOpt } from '@/components/admin/GenrePicker';
+import { probeLabel, testVerdict, type ProbeResult } from '@/lib/supply/verdict';
 
 type ScanSummary = {
   status: string; method: string | null; candidatesFound: number;
   newCandidates: number; extracted: number; failed: number; duplicates: number;
   error: string | null;
 };
-
-type FetchProbe = {
-  ok: boolean; status: number | null; code: string | null; detail: string | null; ms: number;
-};
-type TestFetchResult = {
-  target: string; bot: FetchProbe; browser: FetchProbe;
-  method: 'rss' | 'html' | null; candidates: number | null;
-};
-
-const probeLabel = (p: FetchProbe) =>
-  p.ok ? `HTTP ${p.status}` : `${p.code}${p.detail ? ` (${p.detail})` : ''}`;
-
-// Turn the two probes into the sentence an admin actually needs.
-function testVerdict(t: TestFetchResult): { text: string; bad: boolean } {
-  if (t.bot.ok && (t.candidates ?? 0) > 0) {
-    return { text: `OK — ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'} via ${t.method?.toUpperCase()}`, bad: false };
-  }
-  if (t.bot.ok) {
-    // Naming the method matters: a zero-candidate RSS result means the saved
-    // feed is the problem, not the listing page's markup.
-    return {
-      text: t.method === 'rss'
-        ? 'Reachable, but this feed contains no event links — it is probably a generic blog or news feed. Clear the feed URL below so scans use the listing page again.'
-        : 'Reachable, but no event links found in the raw HTML — the page may render its listings with JavaScript, or its link paths are unrecognised',
-      bad: true,
-    };
-  }
-  if (t.browser.ok) {
-    return { text: `The site filters by user agent: GuestlistBot got ${probeLabel(t.bot)} while a browser user agent got ${probeLabel(t.browser)}`, bad: true };
-  }
-  return { text: `Unreachable with both user agents (bot: ${probeLabel(t.bot)}, browser: ${probeLabel(t.browser)}) — wrong URL, or the site blocks this server's IP`, bad: true };
-}
 
 export function SourceControls({
   id, name, url, feedUrl, active, trust, pollingEnabled, pollFrequencyHours,
@@ -67,7 +36,7 @@ export function SourceControls({
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanSummary | null>(null);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<TestFetchResult | null>(null);
+  const [testResult, setTestResult] = useState<ProbeResult | null>(null);
   const [error, setError] = useState('');
   const [tagOpen, setTagOpen] = useState(false);
   const [tagName, setTagName] = useState(name);
