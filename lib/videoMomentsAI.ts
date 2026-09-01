@@ -63,7 +63,13 @@ export async function extractVideoMoments(videoId: string) {
 
 export async function reviewMoment(momentId: string, decision: 'publish'|'reject') {
   if (decision === 'publish') {
-    await query(`update artist_video_moments set status='published',updated_at=now() where id=$1`, [momentId]);
+    const rows = await query<{video_id:string}>(
+      `update artist_video_moments set status='published',updated_at=now() where id=$1 returning video_id`,
+      [momentId]
+    );
+    if (rows[0]?.video_id) {
+      await query(`update artist_videos set status='published',updated_at=now() where id=$1`, [rows[0].video_id]);
+    }
   } else {
     await query(`update artist_video_moments set status='hidden',updated_at=now() where id=$1`, [momentId]);
   }
