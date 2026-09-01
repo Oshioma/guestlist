@@ -11,6 +11,14 @@ function artistSlug(name:string){return name.toLowerCase().normalize('NFKD').rep
 
 export async function GET() {
   if (!await admin()) return NextResponse.json({error:'Forbidden'},{status:403});
+
+  // A published clip is public content, so its parent interview must also be public.
+  // This also repairs clips approved before this rule existed.
+  await query(`update artist_videos v set status='published',updated_at=now()
+    where v.status<>'published' and exists(
+      select 1 from artist_video_moments m where m.video_id=v.id and m.status='published'
+    )`);
+
   const videos=await query(`select v.*, coalesce(json_agg(distinct jsonb_build_object('id',a.id,'name',a.name,'slug',a.slug)) filter(where a.id is not null),'[]') artists,
     (select count(*)::int from artist_video_moments m where m.video_id=v.id) moment_count,
     (select count(*)::int from artist_video_moments m where m.video_id=v.id and m.status='review') review_count,
@@ -76,6 +84,7 @@ export async function POST(req: NextRequest) {
     const ids=[...new Set(body.videoIds.filter((id:unknown)=>typeof id==='string'&&id))];
     const name=body.artistName.trim().replace(/\s+/g,' ');
     if(!ids.length||!name) return NextResponse.json({error:'Video and artist are required'},{status:400});
+    if(ids.length!==1) return NextResponse.json({error:'Change the artist one interview at a time.'},{status:400});
     let artists=await query<{id:string;name:string;slug:string}>(`select id,name,slug from artists where lower(name)=lower($1) order by name limit 2`,[name]);
     let created=false;
     if(!artists.length){
@@ -90,11 +99,10 @@ export async function POST(req: NextRequest) {
       }
     }
     const artist=artists[0];
-    for(const videoId of ids){
-      await query(`delete from artist_video_artists where video_id=$1 and role in ('interviewee','featured')`,[videoId]);
-      await query(`insert into artist_video_artists(video_id,artist_id,role,confidence,source) values($1,$2,'interviewee',100,'admin') on conflict(video_id,artist_id,role) do update set confidence=100,source='admin'`,[videoId,artist.id]);
-    }
-    return NextResponse.json({ok:true,updated:ids.length,artist,created});
+    const videoId=ids[0];
+    await query(`delete from artist_video_artists where video_id=$1 and role in ('interviewee','featured')`,[videoId]);
+    await query(`insert into artist_video_artists(video_id,artist_id,role,confidence,source) values($1,$2,'interviewee',100,'admin') on conflict(video_id,artist_id,role) do update set confidence=100,source='admin'`,[videoId,artist.id]);
+    return NextResponse.json({ok:true,updated:1,artist,created});
   }
   if(body.action==='match' && body.videoId) {
     const matches=await autoMatchArtists(body.videoId);
@@ -107,7 +115,11 @@ export async function POST(req: NextRequest) {
   if(body.action==='review' && body.momentId && (body.decision==='publish'||body.decision==='reject')) return NextResponse.json(await reviewMoment(body.momentId,body.decision));
   if(body.action==='bulk-review' && (body.decision==='publish'||body.decision==='reject')) {
     const status=body.decision==='publish'?'published':'hidden';
-    const rows=await query<{id:string}>(`update artist_video_moments set status=$1::artist_video_status,updated_at=now() where status='draft' returning id`,[status]);
+    const rows=await query<{id:string;video_id:string}>(`update artist_video_moments set status=$1::artist_video_status,updated_at=now() where status='draft' returning id,video_id`,[status]);
+    if(body.decision==='publish'&&rows.length){
+      const videoIds=[...new Set(rows.map(r=>r.video_id))];
+      await query(`update artist_videos set status='published',updated_at=now() where id=any($1::uuid[])`,[videoIds]);
+    }
     return NextResponse.json({ok:true,updated:rows.length,decision:body.decision});
   }
   if(body.action==='hide-moment' && body.momentId) {const rows=await query<{id:string}>(`update artist_video_moments set status='hidden',updated_at=now() where id=$1 returning id`,[body.momentId]);if(!rows.length)return NextResponse.json({error:'Moment not found'},{status:404});return NextResponse.json({ok:true,hidden:1})}
@@ -116,6 +128,6 @@ export async function POST(req: NextRequest) {
     if(body.isInterview===true&&body.transcript==null){try{const transcriptResult=await pullYouTubeTranscript(body.videoId);return NextResponse.json({ok:true,autoTranscript:transcriptResult})}catch(e){await query(`update artist_videos set transcript_status='failed',updated_at=now() where id=$1`,[body.videoId]);return NextResponse.json({ok:true,autoTranscript:{found:false,error:e instanceof Error?e.message:'Transcript pull failed'}})}}
     return NextResponse.json({ok:true});
   }
-  if(body.action==='moment' && body.videoId && body.title && Number.isFinite(body.startSeconds)) {const rows=await query(`insert into artist_video_moments(video_id,start_seconds,end_seconds,title,summary,topic_slug,topic_label,status,source) values($1,$2,$3,$4,$5,$6,$7,$8::artist_video_status,'admin') returning *`,[body.videoId,body.startSeconds,body.endSeconds??null,body.title,body.summary??null,body.topicSlug??null,body.topicLabel??null,body.status||'published']);return NextResponse.json({moment:rows[0]})}
+  if(body.action==='moment' && body.videoId && body.title && Number.isFinite(body.startSeconds)) {const rows=await query(`insert into artist_video_moments(video_id,start_seconds,end_seconds,title,summary,topic_slug,topic_label,status,source) values($1,$2,$3,$4,$5,$6,$7,$8::artist_video_status,'admin') returning *`,[body.videoId,body.startSeconds,body.endSeconds??null,body.title,body.summary??null,body.topicSlug??null,body.topicLabel??null,body.status||'published']);if((body.status||'published')==='published')await query(`update artist_videos set status='published',updated_at=now() where id=$1`,[body.videoId]);return NextResponse.json({moment:rows[0]})}
   return NextResponse.json({error:'Unknown action'},{status:400});
 }
