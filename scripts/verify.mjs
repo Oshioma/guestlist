@@ -1038,6 +1038,119 @@ console.log('\n— Admin notifications —');
     !(await (await boss.fetch('/admin/events')).text()).includes('Waiting for you'));
 }
 
+
+// ---------------------------------------------------------------------------
+// Most promoter sites never declare an og:image, so an event arrives with
+// everything except its flyer. Going back to the page and reading the artwork
+// off it is what fixes the ones already imported.
+console.log('\n— Finding missing flyers —');
+{
+  const { createServer } = await import('node:http');
+  // A page in the shape the real world keeps producing: no og:image, a logo
+  // in the header, and the actual flyer lazy-loaded inside the article.
+  const flyerDate = new Date(Date.now() + 28 * 86400_000).toISOString().slice(0, 10);
+  // JSON-LD with the facts but NO image — exactly the shape that was arriving
+  // with events and no artwork.
+  const noMetadataPage = `<!doctype html><html><head><title>Nilipe Night</title>
+<script type="application/ld+json">${JSON.stringify({
+    '@context': 'https://schema.org', '@type': 'MusicEvent', name: 'Nilipe Night',
+    startDate: `${flyerDate}T21:00:00+03:00`,
+    location: { '@type': 'Place', name: 'Nilipe', address: { '@type': 'PostalAddress', addressLocality: 'Dar es Salaam', addressCountry: 'Tanzania' } },
+  })}</script></head>
+<body>
+  <header><img src="/wp-content/uploads/logo.png" width="300" height="300"></header>
+  <article>
+    <img src="data:image/gif;base64,R0lGOD" data-src="/wp-content/uploads/2026/03/nilipe-flyer.jpg"
+         width="1080" height="1080" alt="Nilipe Night">
+  </article>
+</body></html>`;
+  const fixtures = createServer((req, res) => {
+    if (req.url?.startsWith('/event/')) {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(noMetadataPage);
+    } else {
+      res.writeHead(404).end();
+    }
+  });
+  await new Promise((r) => fixtures.listen(4586, '127.0.0.1', r));
+  const sourcePage = 'http://127.0.0.1:4586/event/nilipe-night';
+
+  const [blank] = await q(
+    `insert into events (slug, title, title_normalized, start_at, timezone, status, city, country, source_url)
+     values ('flyerless-night', 'Flyerless Night', 'flyerless night', now() + interval '25 days',
+             'Africa/Dar_es_Salaam', 'new', 'Dar es Salaam', 'Tanzania', $1)
+     returning id`, [sourcePage]
+  );
+
+  const boss2 = client();
+  await boss2.login('oshi@guestlist.net');
+
+  check('the queue offers to find the missing flyers',
+    (await (await boss2.fetch('/admin/events?state=new')).text()).includes('Find missing images'));
+  check('a member cannot make Guestlist fetch pages',
+    (await nadia.fetch(`/api/admin/events/${blank.id}/image`, { method: 'POST' })).status === 403);
+
+  const one = await boss2.fetch(`/api/admin/events/${blank.id}/image`, { method: 'POST' });
+  const found = await one.json();
+  check('the flyer is read off a page that declares nothing',
+    one.status === 200 && found.url === 'http://127.0.0.1:4586/wp-content/uploads/2026/03/nilipe-flyer.jpg');
+  check('it is the flyer, not the logo in the header',
+    !String(found.url).includes('logo'));
+  check('the event now carries it',
+    (await q(`select primary_image_url from events where id = $1`, [blank.id]))[0].primary_image_url
+      === 'http://127.0.0.1:4586/wp-content/uploads/2026/03/nilipe-flyer.jpg');
+  check('and it is kept in the event image list too',
+    (await q(`select count(*)::int as n from event_images where event_id = $1`, [blank.id]))[0].n === 1);
+
+  check('an image already chosen is never overwritten by a later guess',
+    (await boss2.fetch(`/api/admin/events/${blank.id}/image`, { method: 'POST' })).status === 409);
+  check('unless a person asks for another look',
+    (await boss2.fetch(`/api/admin/events/${blank.id}/image`, {
+      method: 'POST', body: JSON.stringify({ replace: true }),
+    })).status === 200);
+
+  // An event with no source page cannot be helped, and says so plainly.
+  const [orphan] = await q(
+    `insert into events (slug, title, title_normalized, start_at, timezone, status, city)
+     values ('flyerless-orphan', 'Flyerless Orphan', 'flyerless orphan', now() + interval '26 days',
+             'Europe/London', 'new', 'Leeds')
+     returning id`
+  );
+  check('an event with no source page says so rather than failing quietly',
+    (await boss2.fetch(`/api/admin/events/${orphan.id}/image`, { method: 'POST' })).status === 422);
+
+  // And the whole queue at once.
+  await q(`update events set primary_image_url = null where id = $1`, [blank.id]);
+  const bulk = await boss2.fetch('/api/admin/events/find-images', {
+    method: 'POST', body: JSON.stringify({ state: 'new' }),
+  });
+  const bulkOut = await bulk.json();
+  check('the queue can be swept in one press',
+    bulk.status === 200 && bulkOut.found >= 1);
+  check('an unknown queue is refused',
+    (await boss2.fetch('/api/admin/events/find-images', {
+      method: 'POST', body: JSON.stringify({ state: 'rejected' }),
+    })).status === 400);
+
+  // A new import from the same shape of page now arrives WITH its flyer.
+  // A member who has not spent their submission allowance earlier in this
+  // suite — the paste-link rate limit is per member, and it works.
+  const fresh = client();
+  await fresh.login('dev-priya@example.com');
+  const submitted = await (await fresh.fetch('/api/submissions', {
+    method: 'POST', body: JSON.stringify({ url: 'http://127.0.0.1:4586/event/another-night' }),
+  })).json();
+  check('a fresh import brings the flyer with it',
+    submitted.ok !== false &&
+    (await q(`select primary_image_url from events where source_url = $1`,
+      ['http://127.0.0.1:4586/event/another-night']))[0]?.primary_image_url
+      === 'http://127.0.0.1:4586/wp-content/uploads/2026/03/nilipe-flyer.jpg');
+
+  await q(`delete from events where slug in ('flyerless-night', 'flyerless-orphan')`);
+  await q(`delete from events where source_url like 'http://127.0.0.1:4586/%'`);
+  await new Promise((r) => fixtures.close(r));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

@@ -34,6 +34,7 @@ import { explainScan, outcomeLabel } from '@/lib/supply/outcomes';
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
 import { canonicalCountry, countrySlug } from '@/lib/countries';
+import { pickPageImage, findPageImages, largestInSrcset, backgroundImageUrl } from '@/lib/supply/images';
 import { isLiveSource } from '@/lib/supply/health';
 import { findListingLink } from '@/lib/supply/probe';
 import { testVerdict } from '@/lib/supply/verdict';
@@ -972,6 +973,86 @@ async function main() {
     check('discovery says so when no API key is configured', !unavailable.ok && unavailable.error === 'unavailable');
     const garbled = await discoverSources(req, fake('sorry, I cannot help with that'));
     check('unparseable model output is an error, not a candidate', !garbled.ok);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— finding the flyer —');
+  {
+    const page = (body: string, head = '') =>
+      `<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
+    const at = 'https://club.example/event/tonight';
+
+    check('a declared social image still wins',
+      pickPageImage(page('<img src="/random.jpg" width="900" height="900">',
+        '<meta property="og:image" content="/flyer.jpg">'), at)?.url
+        === 'https://club.example/flyer.jpg');
+
+    check('a page with no metadata still gives up its artwork',
+      pickPageImage(page('<article><img src="/uploads/flyer-night.jpg" width="1080" height="1080" alt="Tonight"></article>'), at)?.url
+        === 'https://club.example/uploads/flyer-night.jpg');
+
+    check('the logo in the header never wins over the flyer in the article',
+      pickPageImage(page(
+        '<header><img src="/logo.png" width="400" height="400"></header>' +
+        '<article><img src="/uploads/tonight.jpg" width="900" height="1200"></article>'
+      ), at)?.url === 'https://club.example/uploads/tonight.jpg');
+
+    check('a lazy-loaded image gives its real URL, not the placeholder',
+      pickPageImage(page(
+        '<article><img src="data:image/gif;base64,R0lGOD" data-src="/uploads/real-flyer.jpg" width="800" height="800"></article>'
+      ), at)?.url === 'https://club.example/uploads/real-flyer.jpg');
+
+    check('srcset picks the largest, not the first',
+      largestInSrcset('/f-480.jpg 480w, /f-1200.jpg 1200w, /f-800.jpg 800w') === '/f-1200.jpg');
+
+    check('a CSS background is artwork when there is no img at all',
+      pickPageImage(page(
+        '<div class="hero" style="background-image:url(\'/uploads/hero-flyer.jpg\')"></div>'
+      ), at)?.url === 'https://club.example/uploads/hero-flyer.jpg');
+
+    check('background-image is read whether or not it is quoted',
+      backgroundImageUrl('background-image: url(/a.jpg)') === '/a.jpg'
+      && backgroundImageUrl("background: #000 url('/b.jpg') no-repeat") === '/b.jpg');
+
+    check('icons, avatars and social buttons are never the flyer',
+      pickPageImage(page(
+        '<article><img src="/icons/facebook.png" width="600" height="600">' +
+        '<img src="/uploads/the-night.jpg" width="600" height="600"></article>'
+      ), at)?.url === 'https://club.example/uploads/the-night.jpg');
+
+    check('a WordPress thumbnail crop is not mistaken for the full image',
+      pickPageImage(page('<article><img src="/uploads/flyer-150x150.jpg"></article>'), at) === null);
+
+    check('a declared thumbnail is a thumbnail whatever it is called',
+      pickPageImage(page('<article><img src="/uploads/art.jpg" width="80" height="80"></article>'), at) === null);
+
+    check('relative and protocol-relative URLs are made absolute',
+      pickPageImage(page('<article><img src="//cdn.example/uploads/x.jpg" width="900" height="900"></article>'), at)?.url
+        === 'https://cdn.example/uploads/x.jpg');
+
+    check('an SVG is a graphic, not a flyer',
+      pickPageImage(page('<article><img src="/uploads/shape.svg" width="900" height="900"></article>'), at) === null);
+
+    check('a page with nothing on it says nothing rather than guessing',
+      pickPageImage(page('<article><p>No pictures here.</p></article>'), at) === null);
+
+    check('the alternatives are offered in order, best first',
+      findPageImages(page(
+        '<article><img src="/uploads/main.jpg" width="1200" height="1200">' +
+        '<img src="/uploads/second.jpg" width="400" height="400"></article>'
+      ), at).map((i) => i.url).join(',')
+        === 'https://club.example/uploads/main.jpg,https://club.example/uploads/second.jpg');
+
+    // The whole point: a page that declares nothing still yields its picture
+    // through the normal extractor, not only through the image helper.
+    check('the extractor itself now falls back to the page',
+      inspectPage(page(
+        '<article><img src="/uploads/inspected.jpg" width="1000" height="1000"></article>'
+      ), at).imageUrl?.value === 'https://club.example/uploads/inspected.jpg');
+    check('and marks where it came from, so the desk can see it was a guess',
+      inspectPage(page(
+        '<article><img src="/uploads/inspected.jpg" width="1000" height="1000"></article>'
+      ), at).imageUrl?.source === 'page');
   }
 
   // -------------------------------------------------------------------------

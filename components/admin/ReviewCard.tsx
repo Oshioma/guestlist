@@ -238,6 +238,22 @@ export function ReviewCard({ event }: { event: AdminEventRow }) {
             URL is not a loss: the event falls back to our genre artwork, which
             is better than a broken frame — and the flyer is still on the
             source page if it is ever worth re-adding by hand. */}
+        {/* Most promoter sites never set an og:image, so an event can arrive
+            with everything except its flyer. This goes back to the page and
+            reads the artwork off it — and offers to try again when the
+            picture we did find turns out to be the site's logo. */}
+        {event.source_url && (!event.primary_image_url || imageBroken) && (
+          <button
+            className="btnGhost"
+            onClick={() => call('findImage', `/api/admin/events/${event.id}/image`,
+              { replace: !!event.primary_image_url })}
+            disabled={!!busy}
+            type="button"
+            title="Look at the event's own page for its artwork"
+          >
+            {busy === 'findImage' ? 'Looking…' : 'Find image'}
+          </button>
+        )}
         {event.primary_image_url && (
           <button
             className="btnGhost"
