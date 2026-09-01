@@ -28,6 +28,7 @@ export const MIGRATION_FILES: string[] = [
   '021_memory_attendance.sql',
   '022_sitemap_scan_method.sql',
   '023_password_resets.sql',
+  '024_article_events.sql',
   '025_canonical_country_names.sql',
 ];
 
@@ -45,6 +46,7 @@ export const EXPECTED_TABLES: string[] = [
   'archive_memories',
   'archive_memory_reports',
   'archive_mixes',
+  'article_events',
   'article_revisions',
   'article_views',
   'articles',

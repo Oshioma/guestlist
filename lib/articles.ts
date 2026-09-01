@@ -80,3 +80,82 @@ export async function adminReviewArticle(id:string,adminId:string,action:'reques
   else if(action==='archive') await query(`update articles set status='archived',featured=false,admin_note=$2,updated_at=now() where id=$1`,[id,note||null]);
   return queryOne<Article>(`${SELECT} where a.id=$1`,[id]);
 }
+
+// --- Articles ↔ events -------------------------------------------------------
+// Many-to-many on purpose: a festival preview covers several nights, and a
+// night can have both a preview and a review.
+
+export type LinkedEvent = {
+  id: string; slug: string; title: string; start_at: string; end_at: string | null;
+  timezone: string; city: string | null; primary_image_url: string | null; status: string;
+};
+
+export type LinkedArticle = {
+  id: string; slug: string; title: string; subtitle: string | null; excerpt: string | null;
+  article_type: string; hero_image_url: string | null; reading_minutes: number;
+  published_at: string | null; author_name: string; section_name: string;
+};
+
+export async function eventsForArticle(articleId: string): Promise<LinkedEvent[]> {
+  return query<LinkedEvent>(
+    `select e.id, e.slug, e.title, e.start_at::text, e.end_at::text, e.timezone,
+            e.city, e.primary_image_url, e.status
+       from article_events ae join events e on e.id = ae.event_id
+      where ae.article_id = $1
+      order by e.start_at`,
+    [articleId]
+  );
+}
+
+// Only PUBLISHED articles surface on an event page — a draft about tonight is
+// not something the public should discover through the event.
+export async function articlesForEvent(eventId: string): Promise<LinkedArticle[]> {
+  return query<LinkedArticle>(
+    `select a.id, a.slug, a.title, a.subtitle, a.excerpt, a.article_type,
+            a.hero_image_url, a.reading_minutes, a.published_at::text,
+            m.display_name as author_name, s.name as section_name
+       from article_events ae
+       join articles a on a.id = ae.article_id
+       join members m on m.id = a.author_id
+       join editorial_sections s on s.id = a.section_id
+      where ae.event_id = $1 and a.status = 'published'
+      order by a.published_at desc nulls last`,
+    [eventId]
+  );
+}
+
+// The whole set is replaced in one go: the editor sends what the article is
+// about now, not a diff, so an event removed in the UI really is unlinked.
+export async function setArticleEvents(
+  articleId: string, eventIds: string[], linkedBy: string | null
+): Promise<number> {
+  const ids = [...new Set(eventIds.filter((id) => /^[0-9a-f-]{36}$/.test(id)))].slice(0, 30);
+  await query(
+    `delete from article_events where article_id = $1 and not (event_id = any($2::uuid[]))`,
+    [articleId, ids]
+  );
+  if (ids.length) {
+    await query(
+      `insert into article_events (article_id, event_id, linked_by)
+       select $1, e.id, $3 from events e where e.id = any($2::uuid[])
+       on conflict do nothing`,
+      [articleId, ids, linkedBy]
+    );
+  }
+  return ids.length;
+}
+
+// Event picker for the editor: title search, soonest first, upcoming before
+// past so tonight is not buried under a decade of archive.
+export async function searchLinkableEvents(q: string, limit = 12): Promise<LinkedEvent[]> {
+  const term = `%${q.trim().toLowerCase()}%`;
+  return query<LinkedEvent>(
+    `select e.id, e.slug, e.title, e.start_at::text, e.end_at::text, e.timezone,
+            e.city, e.primary_image_url, e.status
+       from events e
+      where lower(e.title) like $1 and e.status in ('live', 'new', 'needs_review')
+      order by (e.start_at < now()), e.start_at
+      limit $2`,
+    [term, limit]
+  );
+}

@@ -753,6 +753,84 @@ console.log('\n— Signup flow —');
     header.includes('addEventCta') && header.includes('+ Add an event'));
 }
 
+
+// ---------------------------------------------------------------------------
+// Articles and events point at each other. The link is many-to-many, only the
+// author or an admin may set it, and it never leaks: an unpublished article
+// stays off the event page, an unpublished event stays off the article.
+console.log('\n— Articles ↔ events —');
+{
+  const author = client();
+  check('author login', (await author.login('dev-nadia@example.com')) === 200);
+  const draft = await (await author.fetch('/api/articles', { method: 'POST' })).json();
+
+  const [live] = await q(`select id, slug, title from events where status = 'live' order by start_at limit 1`);
+  const [hidden] = await q(
+    `insert into events (slug, title, start_at, timezone, status, city)
+     values ('verify-unpublished-night', 'Verify Unpublished Night', now() + interval '10 days', 'Europe/London', 'needs_review', 'Lisbon')
+     returning id, slug, title`
+  );
+
+  check('the picker finds a live event by name',
+    (await (await author.fetch(`/api/articles/${draft.id}/events?q=${encodeURIComponent(live.title.slice(0, 6))}`)).json())
+      .results.some((r) => r.id === live.id));
+
+  check('someone else cannot link events on an article that is not theirs',
+    (await (async () => {
+      const other = client();
+      await other.login('dev-jules@example.com');
+      return other.fetch(`/api/articles/${draft.id}/events`, {
+        method: 'PUT', body: JSON.stringify({ eventIds: [live.id] }),
+      });
+    })()).status === 403);
+
+  const put = await author.fetch(`/api/articles/${draft.id}/events`, {
+    method: 'PUT', body: JSON.stringify({ eventIds: [live.id, hidden.id] }),
+  });
+  check('the author links two nights in one call',
+    put.status === 200 && (await put.json()).linked.length === 2);
+
+  // Give the draft what publishing requires, then take it through review.
+  await author.fetch(`/api/articles/${draft.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      title: 'Two nights in one piece',
+      body: 'A preview of the weekend, written for the verify suite. '.repeat(20),
+      hero_image_url: 'https://images.example.com/hero.jpg',
+    }),
+  });
+  await author.fetch(`/api/articles/${draft.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'submit' }) });
+  const editor = client();
+  await editor.login('oshi@guestlist.net');
+  const published = await (await editor.fetch(`/api/admin/articles/${draft.id}`, {
+    method: 'PATCH', body: JSON.stringify({ action: 'publish' }),
+  })).json();
+  check('admin publishes the piece', published.article?.status === 'published');
+
+  const articlePage = await (await anon.fetch(`/balance/${published.article.slug}`)).text();
+  check('the article shows the night it is about', articlePage.includes(live.title));
+  check('an unpublished night never surfaces through the article',
+    !articlePage.includes(hidden.title));
+
+  const eventPage = await (await anon.fetch(`/events/${live.slug}`)).text();
+  check('the night shows the piece written about it',
+    eventPage.includes('Written about this night') && eventPage.includes('Two nights in one piece'));
+
+  // Replacing the set is a replacement, not a merge.
+  await author.fetch(`/api/articles/${draft.id}/events`, {
+    method: 'PUT', body: JSON.stringify({ eventIds: [hidden.id] }),
+  });
+  check('unlinking really unlinks',
+    (await q(`select event_id from article_events where article_id = $1`, [draft.id]))
+      .every((r) => r.event_id === hidden.id));
+  check('the night no longer claims the piece',
+    !(await (await anon.fetch(`/events/${live.slug}`)).text()).includes('Two nights in one piece'));
+
+  await q(`delete from events where id = $1`, [hidden.id]);
+  check('deleting an event takes its links with it',
+    (await q(`select count(*)::int as n from article_events where event_id = $1`, [hidden.id]))[0].n === 0);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));
