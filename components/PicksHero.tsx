@@ -108,7 +108,8 @@ export function PicksHero({ events, title, surface }: {
               aria-current={i === cur}
               onClick={() => goTo(i, true)}
             >
-              <EventImage className="picksTileArt" src={e.primary_image_url} genres={e.genres} compactArt />
+              <EventImage className="picksTileArt" src={e.primary_image_url} genres={e.genres}
+                          label={e.typeLabel} compactArt />
             </button>
           ))}
         </div>

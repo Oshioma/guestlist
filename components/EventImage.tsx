@@ -9,7 +9,7 @@ import { useCallback, useState } from 'react';
 import { GenreArt } from '@/components/GenreArt';
 
 export function EventImage({
-  src, alt = '', className, style, loading = 'lazy', genres = [], compactArt = false,
+  src, alt = '', className, style, loading = 'lazy', genres = [], label, compactArt = false,
 }: {
   src: string | null | undefined;
   alt?: string;
@@ -17,6 +17,7 @@ export function EventImage({
   style?: React.CSSProperties;
   loading?: 'lazy' | 'eager';
   genres?: string[];
+  label?: string | null;
   compactArt?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
@@ -31,8 +32,8 @@ export function EventImage({
   if (!src || broken) {
     return (
       <span className={className} style={{ display: 'block', ...style }}>
-        {genres.length > 0
-          ? <GenreArt genres={genres} compact={compactArt} />
+        {genres.length > 0 || label
+          ? <GenreArt genres={genres} label={label} compact={compactArt} />
           : <span className="imgFallback" />}
       </span>
     );

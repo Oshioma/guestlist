@@ -21,10 +21,14 @@ export function pickGenreLabel(genres: string[]): string | null {
   return clean[0].split(/\s+/)[0].slice(0, 12).toUpperCase();
 }
 
-export function GenreArt({ genres, compact = false }: { genres: string[]; compact?: boolean }) {
-  const label = pickGenreLabel(genres);
+// `label` is the fallback when an event has no genres at all — the event
+// type ("FESTIVAL", "CLUB NIGHT") still says more than an empty box.
+export function GenreArt({ genres, label: fallback, compact = false }: {
+  genres: string[]; label?: string | null; compact?: boolean;
+}) {
+  const label = pickGenreLabel(genres) ?? (fallback ? fallback.toUpperCase().slice(0, 14) : null);
   if (!label) return null;
-  const base = label.length <= 4 ? 46 : label.length <= 7 ? 36 : 26;
+  const base = label.length <= 4 ? 46 : label.length <= 7 ? 36 : label.length <= 10 ? 26 : 21;
   return (
     <div className="genreArt" style={{ fontSize: compact ? base * 0.7 : base }}>
       {label}

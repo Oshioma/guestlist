@@ -488,6 +488,14 @@ console.log('\n— Signup flow —');
     const none = await (await anon.fetch('/events?genre=jungle')).text();
     check('an event with no image falls back to genre art',
       none.includes('Rewind Sessions presents Jungle Mania') && none.includes('genreArt'));
+
+    // No image and no genre either: the event type still beats a blank box.
+    await q(`update events set primary_image_url = null where slug = 'the-garden-weekender'`);
+    await q(`delete from event_genres
+              where event_id = (select id from events where slug = 'the-garden-weekender')`);
+    const typed = await (await anon.fetch('/events?tab=festivals')).text();
+    check('an event with no image and no genre falls back to its type',
+      typed.includes('The Garden Weekender') && typed.includes('WEEKENDER'));
   }
 
   // Admin can drop optional sections out of the nav without a deploy; the
