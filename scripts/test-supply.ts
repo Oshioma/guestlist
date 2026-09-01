@@ -974,6 +974,39 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  console.log('\n— event links are not only written in English —');
+  {
+    // Straight from a real search: an Italian club whose listing page is
+    // /eventi. Every one of its links used to be discarded as navigation.
+    const italian = identifyCandidateLinks(`<html><body><main>
+      <a href="/eventi/notte-techno">Notte Techno</a>
+      <a href="/serate/capodanno">Capodanno</a>
+      <a href="/chi-siamo">Chi siamo</a>
+      <a href="/contatti">Contatti</a>
+    </main></body></html>`, 'https://cocorico.example/eventi');
+    check('Italian event paths are found',
+      italian.includes('https://cocorico.example/eventi/notte-techno')
+      && italian.includes('https://cocorico.example/serate/capodanno'), JSON.stringify(italian));
+    check('and Italian about/contact pages still are not',
+      !italian.some((u) => /chi-siamo|contatti/.test(u)), JSON.stringify(italian));
+
+    const others = identifyCandidateLinks(`<html><body><main>
+      <a href="/eventos/fiesta-house">Fiesta</a>
+      <a href="/veranstaltungen/nacht">Nacht</a>
+      <a href="/evenements/soiree-techno">Soirée</a>
+      <a href="/agenda/nacht-twee">Agenda</a>
+      <a href="/impressum">Impressum</a>
+    </main></body></html>`, 'https://euro.example/');
+    check('Spanish, German, French and Dutch paths are found', others.length === 4, JSON.stringify(others));
+    check('and their legal pages are not', !others.some((u) => /impressum/.test(u)));
+
+    // The homepage listing-link finder speaks them too.
+    check('a listing link in Italian is found on the homepage',
+      findListingLink('<html><body><a href="/eventi">Eventi</a></body></html>',
+        'https://cocorico.example/') === 'https://cocorico.example/eventi');
+  }
+
+  // -------------------------------------------------------------------------
   console.log('\n— sitemaps: the way into a site that blocks us or renders in JS —');
   {
     const SITEMAP = `<?xml version="1.0"?><urlset>

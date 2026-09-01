@@ -27,7 +27,7 @@ const toProbe = (r: SafeFetchResult): FetchProbe =>
 // A suggested listing path is often a near miss — /en/agenda when the site
 // uses /agenda. Rather than write the whole venue off on a 404, look at its
 // homepage for the link a person would click.
-const LISTING_TEXT = /\b(agenda|programma|programme|program|events?|what['\u2019]?s[ -]?on|line[ -]?up|kalender|calendar|shows|gigs|tickets)\b/i;
+const LISTING_TEXT = /\b(agenda|programma|programme|program|programm|events?|eventi|eventos|evenements?|evenementen|veranstaltungen|serate|soirees?|fiestas|festas|what['\u2019]?s[ -]?on|line[ -]?up|kalender|calendar|shows?|gigs|tickets|biglietti|entradas)\b/i;
 
 export function findListingLink(html: string, baseUrl: string): string | null {
   const root = parse(html);

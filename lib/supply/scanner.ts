@@ -23,10 +23,40 @@ export type SourceRow = {
   last_checked_at: string | null;
 };
 
-export const EVENT_PATH_HINT =
-  /\/(events?|whats?-?on|what-s-on|listings?|gigs?|parties|party|nights?|programme|program|lineup|agenda|tickets?|e)\/[^/]/i;
-const NON_EVENT_PATH =
-  /\/(login|signin|signup|register|account|cart|basket|checkout|privacy|terms|cookies|about|contact|jobs|careers|press|faq|search|tag|category|wp-admin|admin)\b/i;
+// Guestlist is not an English-language platform, and these paths are how the
+// rest of the world writes "events". Missing them meant an Italian club's
+// /eventi/... links were discarded as though they were navigation — the site
+// looked empty when it was full.
+export const EVENT_PATH_HINT = new RegExp(
+  '\\/(' + [
+    // English
+    'events?', 'whats?-?on', 'what-s-on', 'listings?', 'gigs?', 'parties', 'party',
+    'nights?', 'programme', 'program', 'lineup', 'agenda', 'tickets?', 'shows?', 'e',
+    // Italian
+    'eventi', 'evento', 'serate', 'serata', 'concerti', 'biglietti',
+    // Spanish / Portuguese
+    'eventos', 'fiestas', 'festas', 'conciertos', 'entradas', 'ingressos',
+    // French
+    'evenements?', 'soirees?', 'billetterie', 'concerts',
+    // German
+    'veranstaltungen', 'veranstaltung', 'termine', 'programm', 'konzerte',
+    // Dutch
+    'evenementen', 'programma',
+  ].join('|') + ')\\/[^/]',
+  'i'
+);
+const NON_EVENT_PATH = new RegExp(
+  '\\/(' + [
+    'login', 'signin', 'signup', 'register', 'account', 'cart', 'basket', 'checkout',
+    'privacy', 'terms', 'cookies', 'about', 'contact', 'jobs', 'careers', 'press',
+    'faq', 'search', 'tag', 'category', 'wp-admin', 'admin',
+    // The same dead ends in the languages above.
+    'chi-siamo', 'contatti', 'informativa', 'contacto', 'sobre', 'quienes-somos',
+    'a-propos', 'mentions-legales', 'impressum', 'datenschutz', 'kontakt',
+    'ueber-uns', 'over-ons', 'privacybeleid',
+  ].join('|') + ')\\b',
+  'i'
+);
 const DATE_TEXT = /\b(\d{1,2}(st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|(mon|tue|wed|thu|fri|sat|sun)[a-z]*\s+\d{1,2}|\d{1,2}[./]\d{1,2}[./]\d{2,4})\b/i;
 
 export function canonicaliseCandidateUrl(raw: string, baseUrl: string): string | null {
