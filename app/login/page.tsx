@@ -42,6 +42,25 @@ function LoginForm() {
       <button className="btnAccent" style={{ width: '100%', marginTop: 6 }} disabled={busy}>
         {busy ? '…' : 'Sign in'}
       </button>
+      <div className="sub" style={{ marginTop: 14, marginBottom: 0 }}>
+        <Link href="/forgot" style={{ color: 'var(--accent-ink, var(--accent))' }}>
+          Forgotten your password?
+        </Link>
+      </div>
+      {/* A failed sign-in is the moment people from the old site get stuck,
+          so the explanation belongs here and not only behind the reset flow. */}
+      {error && (
+        <div className="authNote">
+          <strong>Were you a member of the old Guestlist?</strong>
+          <p>
+            Those accounts did not carry over to this site. If you have not joined here
+            yet, create an account — you can use the same email address.
+          </p>
+          <Link href={`/signup?next=${encodeURIComponent(next)}`} className="btnGhost">
+            Create an account
+          </Link>
+        </div>
+      )}
       <div className="sub" style={{ marginTop: 18, marginBottom: 0 }}>
         New here? <Link href={`/signup?next=${encodeURIComponent(next)}`} style={{ color: 'var(--accent-ink, var(--accent))' }}>Join Guestlist</Link>
       </div>
