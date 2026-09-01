@@ -3,10 +3,12 @@ import { getCurrentMember } from '@/lib/auth';
 import { getMemberPromoters } from '@/lib/promoterAuth';
 import { queryOne } from '@/lib/db';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { getNavVisibility } from '@/lib/settings';
 
 export async function SiteHeader() {
   const member = await getCurrentMember();
   const promoterships = member ? await getMemberPromoters(member.id) : [];
+  const nav = await getNavVisibility();
   const unread = member
     ? (await queryOne<{ n: number }>(
         `select count(*)::int as n from notifications where member_id = $1 and read_at is null`,
@@ -26,8 +28,8 @@ export async function SiteHeader() {
           <nav className="mainNav">
             <Link href="/events">Events</Link>
             <Link href="/clubmessenger">Tonight</Link>
-            {member && <Link href="/people">People</Link>}
-            <Link href="/explore">Explore</Link>
+            {member && nav.people && <Link href="/people">People</Link>}
+            {nav.explore && <Link href="/explore">Explore</Link>}
             <Link href="/archive">Archive</Link>
             <Link href="/balance">Balance</Link>
             <Link href="/promoters">Promoters</Link>
