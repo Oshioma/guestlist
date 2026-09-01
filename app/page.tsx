@@ -17,6 +17,7 @@ import { memberPlaces } from '@/lib/locations';
 import { RecShelf } from '@/components/v2c/RecShelf';
 import { GuestlistNow } from '@/components/GuestlistNow';
 import { EventImage } from '@/components/EventImage';
+import { HomeTonight } from '@/components/HomeTonight';
 import { AskPanel } from '@/components/ask/AskPanel';
 
 export const dynamic = 'force-dynamic';
@@ -217,6 +218,8 @@ export default async function HomePage() {
             </Link>
           ))}
         </div>
+
+        {!member && <HomeTonight />}
 
         {events.length > 0 && (
           <>
