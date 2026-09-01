@@ -36,6 +36,7 @@ import { matchGenreIdsByName } from '@/lib/util';
 import { canonicalCountry, countrySlug } from '@/lib/countries';
 import { pickPageImage, findPageImages, largestInSrcset, backgroundImageUrl } from '@/lib/supply/images';
 import { canonicalCity, isCanonicalCity } from '@/lib/cityNames';
+import { looksClientRendered } from '@/lib/supply/scanner';
 import { isLiveSource } from '@/lib/supply/health';
 import { findListingLink } from '@/lib/supply/probe';
 import { testVerdict } from '@/lib/supply/verdict';
@@ -977,6 +978,45 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  console.log('\n— a page that builds itself in the browser —');
+  {
+    // The exact shape Amsterdam Dance Event's programme filter ships: an empty
+    // results list, a loading placeholder, a client-side row template and the
+    // module that will fetch them. Nothing in it to read.
+    const adeShape = `<!doctype html><html><body>
+      <header><a href="/en/program/">Program</a></header>
+      <div class="ade-container" id="results" data-continue="true" data-module="filter-page/lazy-loading">
+        <div class="ade-filter-page__results-container"><ul id="results__list"></ul></div>
+        <div id="results-loading" class="ade-filter-page__loader">Loading...</div>
+        <script id="template-list-event" type="text/template">
+          <a href="!!url!!" class="item-events__link">!!title!!</a>
+        </script>
+      </div></body></html>`;
+    check('an empty list plus a client template is not a guess',
+      looksClientRendered(adeShape) === true);
+
+    // A page that simply has its events in it is never mistaken for one.
+    const served = `<!doctype html><html><body><main>
+      <ul id="results__list">
+        <li><a href="/events/one">One night</a></li>
+        <li><a href="/events/two">Another night</a></li>
+      </ul></main></body></html>`;
+    check('a page that ships its listings is left alone',
+      looksClientRendered(served) === false);
+
+    // One weak signal on its own is not enough to accuse a page.
+    check('a lone template tag is not enough to call it client-rendered',
+      looksClientRendered('<html><body><script type="text/template">x</script></body></html>') === false);
+    check('nor is an empty container on its own',
+      looksClientRendered('<html><body><ul id="results"></ul></body></html>') === false);
+
+    // And the four links such a page does give us are its own navigation.
+    check('the links found on a client-rendered page are its chrome',
+      identifyCandidateLinks(adeShape, 'https://ade.example/en/program/filter/')
+        .every((u) => !/\/events?\//.test(u)));
+  }
+
+  // -------------------------------------------------------------------------
   console.log('\n— one city, one spelling —');
   {
     check('the name off the members page is fixed',
@@ -1206,6 +1246,58 @@ async function main() {
     check('a blocked listing page falls back to the sitemap',
       scan.status === 'succeeded' && scan.method === 'sitemap', JSON.stringify(scan));
     check('and those sitemap URLs become events', scan.extracted === 2, JSON.stringify(scan));
+
+    // And the other way round: an admin who already knows the sitemap sets it
+    // as the source URL directly. That used to come back "0 candidate URLs via
+    // HTML" — XML has no <a href> in it, so the HTML reader found nothing and
+    // the scan looked like the site was empty. The scanner reads a sitemap as
+    // a sitemap wherever it arrives from.
+    const direct = (await q(
+      `insert into event_sources (source_type, name, url, trust) values ('venue_website', 'Sitemap as source', 'https://directmap.example/sitemap.xml', 'trusted') returning id`
+    ))[0] as { id: string };
+    const directScan = await scanSource(direct.id, {
+      fetcher: mockFetcher({
+        'https://directmap.example/sitemap.xml': {
+          body: `<?xml version="1.0"?><urlset>
+            <url><loc>https://directmap.example/about</loc></url>
+            <url><loc>https://directmap.example/events/direct-one</loc></url>
+          </urlset>`,
+          contentType: 'application/xml',
+        },
+        'https://directmap.example/events/direct-one': { body: '<html><title>Direct One</title><body><main>d</main></body></html>' },
+      }),
+      ai: mockAI({ 'https://directmap.example/events/direct-one': proposal('Direct One') }),
+      delayMs: 1,
+    });
+    check('a sitemap set as the source URL is read as a sitemap, not as HTML',
+      directScan.method === 'sitemap' && directScan.extracted === 1, JSON.stringify(directScan));
+
+    // A site whose sitemap.xml is only an index of other sitemaps. Pointing at
+    // it should step through to the child rather than report nothing.
+    const indexed = (await q(
+      `insert into event_sources (source_type, name, url, trust) values ('venue_website', 'Sitemap index as source', 'https://indexmap.example/sitemap.xml', 'trusted') returning id`
+    ))[0] as { id: string };
+    const indexedScan = await scanSource(indexed.id, {
+      fetcher: mockFetcher({
+        'https://indexmap.example/sitemap.xml': {
+          body: `<?xml version="1.0"?><sitemapindex>
+            <sitemap><loc>https://indexmap.example/sitemap-events.xml</loc></sitemap>
+          </sitemapindex>`,
+          contentType: 'application/xml',
+        },
+        'https://indexmap.example/sitemap-events.xml': {
+          body: `<?xml version="1.0"?><urlset>
+            <url><loc>https://indexmap.example/events/indexed-one</loc></url>
+          </urlset>`,
+          contentType: 'application/xml',
+        },
+        'https://indexmap.example/events/indexed-one': { body: '<html><title>Indexed One</title><body><main>i</main></body></html>' },
+      }),
+      ai: mockAI({ 'https://indexmap.example/events/indexed-one': proposal('Indexed One') }),
+      delayMs: 1,
+    });
+    check('a sitemap INDEX set as the source URL steps through to its children',
+      indexedScan.method === 'sitemap' && indexedScan.extracted === 1, JSON.stringify(indexedScan));
   }
 
   // -------------------------------------------------------------------------
@@ -1365,6 +1457,17 @@ async function main() {
     check('a candidate with event links reads as OK', !testVerdict(probe(true, 3)).bad);
     check('a reachable page with no event links reads as a problem', testVerdict(probe(true, 0)).bad);
     check('an unreachable candidate reads as a problem', testVerdict(probe(false, null)).bad);
+
+    // A sitemap that reads fine but has nothing event-shaped in it must not be
+    // told it "renders its listings with JavaScript". XML does not render.
+    const emptySitemap = { ...probe(true, 0), method: 'sitemap' as const };
+    check('an empty sitemap is not blamed on JavaScript',
+      testVerdict(emptySitemap).bad
+      && testVerdict(emptySitemap).text.includes('sitemap')
+      && !testVerdict(emptySitemap).text.includes('JavaScript'),
+      testVerdict(emptySitemap).text);
+    check('a sitemap full of event pages reads as OK',
+      !testVerdict({ ...probe(true, 40), method: 'sitemap' as const }).bad);
   }
 
   // -------------------------------------------------------------------------

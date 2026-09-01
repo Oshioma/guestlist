@@ -283,6 +283,21 @@ export function SourceControls({
               bot: {probeLabel(testResult.bot)} ({testResult.bot.ms}ms) · browser:{' '}
               {probeLabel(testResult.browser)} ({testResult.browser.ms}ms)
             </div>
+            {/* The links themselves. "4 candidates" on a page full of events is
+                a mystery until you can see that all four are the site's own
+                navigation — at which point the answer is obvious. */}
+            {!!testResult.candidateUrls?.length && (
+              <details style={{ marginTop: 4 }}>
+                <summary style={{ cursor: 'pointer', color: 'var(--text-faint)', fontSize: 11 }}>
+                  {`the ${testResult.candidateUrls.length} link${testResult.candidateUrls.length === 1 ? '' : 's'} we took`}
+                </summary>
+                <ul style={{ margin: '4px 0 0 14px', padding: 0, color: 'var(--text-faint)', fontSize: 11 }}>
+                  {testResult.candidateUrls.map((u) => (
+                    <li key={u} style={{ wordBreak: 'break-all' }}>{u}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
         );
       })()}
