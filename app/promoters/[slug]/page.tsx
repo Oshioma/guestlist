@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
 import { getPromoterBySlug, isFollowing } from '@/lib/profiles';
+import { getMemberPromoters } from '@/lib/promoterAuth';
 import { eventsForEntity } from '@/lib/events';
 import { EventCard } from '@/components/EventCard';
 import { FollowButton } from '@/components/FollowButton';
@@ -23,7 +24,7 @@ export default async function PromoterPage({ params }: { params: Promise<{ slug:
   const [promoter, member] = await Promise.all([getPromoterBySlug(slug), getCurrentMember()]);
   if (!promoter) notFound();
 
-  const [upcoming, past, following, savedIds] = await Promise.all([
+  const [upcoming, past, following, savedIds, promoterships] = await Promise.all([
     eventsForEntity({ promoterId: promoter.id }, 'upcoming'),
     eventsForEntity({ promoterId: promoter.id }, 'past', 8),
     isFollowing(member?.id, 'promoter', promoter.id),
@@ -33,8 +34,11 @@ export default async function PromoterPage({ params }: { params: Promise<{ slug:
           [member.id]
         ).then((r) => new Set(r.map((x) => x.event_id)))
       : Promise.resolve(new Set<string>()),
+    member ? getMemberPromoters(member.id) : Promise.resolve([]),
   ]);
 
+  const managedPromoter = promoterships.find((p) => p.id === promoter.id && p.claim_status === 'verified');
+  const manageQuery = managedPromoter ? `?p=${promoter.id}` : '';
   const location = [promoter.city, promoter.country].filter(Boolean).join(', ');
   const socials = Object.entries(promoter.socials ?? {}).filter(([k]) => SOCIAL_LABEL[k]);
 
@@ -76,6 +80,12 @@ export default async function PromoterPage({ params }: { params: Promise<{ slug:
             </div>
           )}
           <div className="profileActions">
+            {managedPromoter && (
+              <>
+                <Link className="btnAccent" href={`/promoter${manageQuery}`}>Manage</Link>
+                <Link className="btnGhost" href={`/promoter/guestlists${manageQuery}`}>Guestlists</Link>
+              </>
+            )}
             <FollowButton
               entityType="promoter"
               entityId={promoter.id}
@@ -123,7 +133,18 @@ export default async function PromoterPage({ params }: { params: Promise<{ slug:
       {upcoming.length ? (
         <div className="cardGrid" style={{ paddingBottom: 30 }}>
           {upcoming.map((e) => (
-            <EventCard key={e.id} event={e} saved={savedIds.has(e.id)} isSignedIn={!!member} />
+            <div key={e.id}>
+              <EventCard event={e} saved={savedIds.has(e.id)} isSignedIn={!!member} />
+              {managedPromoter && (
+                <Link
+                  href={`/promoter/guestlists/${e.id}${manageQuery}`}
+                  className="btnGhost"
+                  style={{ marginTop: 8, display: 'inline-flex' }}
+                >
+                  Manage guestlist →
+                </Link>
+              )}
+            </div>
           ))}
         </div>
       ) : (
