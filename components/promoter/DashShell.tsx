@@ -7,6 +7,7 @@ import type { DashContext } from '@/lib/promoterDash';
 const TABS = [
   ['', 'Overview'],
   ['/events', 'Events'],
+  ['/guestlists', 'Guestlists'],
   ['/followers', 'Followers'],
   ['/announce', 'Announce'],
   ['/sources', 'Sources'],
