@@ -9,6 +9,7 @@ import { safeFetch, type SafeFetchOptions, type SafeFetchResult } from './safeFe
 import { runExtractionPipeline, type PipelineContext } from './pipeline';
 import { supplyConfig } from './config';
 import type { OutcomeTally } from './outcomes';
+import { refreshAdminReviewDigest } from '@/lib/adminNotify';
 
 export type SourceRow = {
   id: string;
@@ -460,5 +461,8 @@ export async function scanDueSources(ctx: ScanContext = {}): Promise<{ scanned: 
       /* per-source failures are recorded on the scan rows */
     }
   }
+  // ONE refresh for the whole run, not one per event. A scan that brings in
+  // fifty nights should move the admin's review count once.
+  if (results.some((r) => r.extracted > 0)) await refreshAdminReviewDigest();
   return { scanned: due.length, results };
 }

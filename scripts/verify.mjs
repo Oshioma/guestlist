@@ -897,6 +897,100 @@ console.log('\n— Publish all —');
   await q(`delete from events where slug like 'bulk-%'`);
 }
 
+
+// ---------------------------------------------------------------------------
+// Admins hear about the site: who joined, what was written, and what is
+// waiting. One line per rare happening; one rolling digest for the queues.
+console.log('\n— Admin notifications —');
+{
+  const boss = client();
+  check('admin login', (await boss.login('oshi@guestlist.net')) === 200);
+  const [me] = await q(`select id from members where email = 'oshi@guestlist.net'`);
+
+  // A member joins.
+  const joinEmail = `verify-joiner-${Date.now()}@example.com`;
+  check('somebody joins',
+    (await client().fetch('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ email: joinEmail, password: 'a-brand-new-password', displayName: 'Verify Joiner', homeCity: 'Leeds' }),
+    })).status === 200);
+  const [joiner] = await q(`select id from members where email = $1`, [joinEmail]);
+  check('the admin is told a member joined',
+    (await q(`select count(*)::int as n from notifications
+               where member_id = $1 and type = 'admin_new_member' and actor_member_id = $2`,
+      [me.id, joiner.id]))[0].n === 1);
+  check('the notification centre names them',
+    (await (await boss.fetch('/notifications')).text()).includes('New member: Verify Joiner'));
+
+  // An article is submitted for review.
+  const author = client();
+  await author.login('dev-jules@example.com');
+  const draft = await (await author.fetch('/api/articles', { method: 'POST' })).json();
+  await author.fetch(`/api/articles/${draft.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      title: 'A night worth writing about',
+      body: 'Words for the verify suite, enough of them to pass the length check. '.repeat(15),
+      hero_image_url: 'https://images.example.com/hero.jpg',
+    }),
+  });
+  const submitted = await author.fetch(`/api/articles/${draft.id}`, {
+    method: 'PATCH', body: JSON.stringify({ action: 'submit' }),
+  });
+  check('the article submits', submitted.status === 200);
+  check('the admin is told an article is waiting',
+    (await q(`select count(*)::int as n from notifications
+               where member_id = $1 and type = 'admin_new_article' and article_id = $2`,
+      [me.id, draft.id]))[0].n === 1);
+
+  // The rolling digest: one unread, refreshed rather than repeated.
+  await q(`insert into events (slug, title, title_normalized, start_at, timezone, status, city, country)
+           values ('notify-waiting', 'Notify Waiting', 'notify waiting', now() + interval '30 days', 'Europe/London', 'new', 'Leeds', 'United Kingdom')`);
+  const job = await boss.fetch('/api/jobs/send-emails', { method: 'POST' });
+  check('the hourly job refreshes the review digest', job.status === 200);
+  const digests = await q(
+    `select payload from notifications
+      where member_id = $1 and type = 'admin_review_waiting' and read_at is null`, [me.id]
+  );
+  check('exactly one unread digest, never one per event', digests.length === 1);
+  check('the digest counts what is actually waiting',
+    digests[0].payload.events >= 1 && digests[0].payload.articles >= 1
+    && digests[0].payload.total >= 2);
+
+  await boss.fetch('/api/jobs/send-emails', { method: 'POST' });
+  check('running it again refreshes rather than stacks',
+    (await q(`select count(*)::int as n from notifications
+               where member_id = $1 and type = 'admin_review_waiting' and read_at is null`,
+      [me.id]))[0].n === 1);
+
+  // A member pasting a link is one person waiting on one person, so the
+  // count moves without waiting for the hourly job.
+  check('a member submission refreshes the digest on its own',
+    (await q(`select count(*)::int as n from notifications
+               where type = 'admin_review_waiting' and read_at is null`))[0].n >= 1);
+
+  check('the digest reads as a sentence, not a payload',
+    (await (await boss.fetch('/notifications')).text()).includes('waiting for review'));
+  check('the admin pages show what is waiting',
+    (await (await boss.fetch('/admin/events')).text()).includes('Waiting for you'));
+
+  // Clearing the queues clears the standing digest.
+  await q(`delete from events where slug = 'notify-waiting'`);
+  await q(`update events set status = 'live' where status in ('new', 'needs_review')`);
+  await q(`update articles set status = 'draft' where status = 'submitted'`);
+  await q(`update promoter_claims set status = 'approved' where status = 'pending'`);
+  await q(`update genre_suggestions set status = 'dismissed' where status = 'pending'`);
+  await q(`update archive_corrections set status = 'rejected' where status = 'open'`);
+  await q(`update member_reports set status = 'resolved' where status = 'open'`);
+  await q(`update archive_memories set report_count = 0 where report_count > 0`);
+  await boss.fetch('/api/jobs/send-emails', { method: 'POST' });
+  check('an empty desk clears the standing digest',
+    (await q(`select count(*)::int as n from notifications
+               where type = 'admin_review_waiting' and read_at is null`))[0].n === 0);
+  check('and the bar disappears with it',
+    !(await (await boss.fetch('/admin/events')).text()).includes('Waiting for you'));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

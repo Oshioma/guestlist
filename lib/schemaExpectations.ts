@@ -30,6 +30,7 @@ export const MIGRATION_FILES: string[] = [
   '023_password_resets.sql',
   '024_article_events.sql',
   '025_canonical_country_names.sql',
+  '027_admin_notifications.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
@@ -165,6 +166,7 @@ export const EXPECTED_COLUMNS: string[] = [
   'members.slug',
   'notifications.announcement_id',
   'notifications.archive_event_id',
+  'notifications.article_id',
   'notifications.emailed_at',
   'notifications.promoter_id',
   'promoters.announcements_paused',

@@ -22,6 +22,7 @@ import {
 } from '@/lib/alerts';
 import { getSafetySwitches } from '@/lib/settings';
 import { processAnnouncements } from '@/lib/announcements';
+import { refreshAdminReviewDigest } from '@/lib/adminNotify';
 
 export const maxDuration = 300;
 
@@ -46,6 +47,11 @@ async function run(req: NextRequest) {
   }
   const now = new Date();
   const switches = await getSafetySwitches();
+
+  // What is waiting on an admin, refreshed hourly. The per-happening hooks
+  // keep it live during the day; this is the safety net for anything that
+  // reached a queue by another route.
+  const adminDigests = await refreshAdminReviewDigest();
 
   const notificationEmails = await queuePromoterNotificationEmails();
   const promoterReview = await queuePromoterReviewNotifications();
@@ -104,7 +110,7 @@ async function run(req: NextRequest) {
     isoWeek: isoWeek(now),
     announcements,
     notificationEmails, promoterReview, reminders, travelDigests,
-    dailyDigests, weeklyDigests, memberDigests, promoterDigests,
+    dailyDigests, weeklyDigests, memberDigests, promoterDigests, adminDigests,
     ...delivery,
   });
 }
