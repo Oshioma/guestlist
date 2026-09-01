@@ -5,6 +5,7 @@
 
 import { query, queryOne } from './db';
 import { canonicalCountry, countrySlug } from './countries';
+import { canonicalCity } from './cityNames';
 
 export type Location = {
   id: string;
@@ -75,7 +76,9 @@ export async function findOrCreateCity(opts: {
   longitude?: number | null;
   kind?: Location['kind'];
 }): Promise<Location> {
-  const name = opts.name.trim();
+  // "dar es salaam" and "Dar es salaam" are the same place written carelessly.
+  // Fixing the casing here means it is fixed everywhere a city is created.
+  const name = canonicalCity(opts.name) ?? opts.name.trim();
   const code = opts.countryCode?.toUpperCase() ?? countryCodeFor(opts.countryName);
   const normalized = normalizePlaceName(name);
   const kind = opts.kind ?? 'city';

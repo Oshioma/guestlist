@@ -35,6 +35,7 @@ import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDisco
 import { matchGenreIdsByName } from '@/lib/util';
 import { canonicalCountry, countrySlug } from '@/lib/countries';
 import { pickPageImage, findPageImages, largestInSrcset, backgroundImageUrl } from '@/lib/supply/images';
+import { canonicalCity, isCanonicalCity } from '@/lib/cityNames';
 import { isLiveSource } from '@/lib/supply/health';
 import { findListingLink } from '@/lib/supply/probe';
 import { testVerdict } from '@/lib/supply/verdict';
@@ -973,6 +974,35 @@ async function main() {
     check('discovery says so when no API key is configured', !unavailable.ok && unavailable.error === 'unavailable');
     const garbled = await discoverSources(req, fake('sorry, I cannot help with that'));
     check('unparseable model output is an error, not a candidate', !garbled.ok);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— one city, one spelling —');
+  {
+    check('the name off the members page is fixed',
+      canonicalCity('Dar es salaam') === 'Dar es Salaam'
+      && canonicalCity('dar es salaam') === 'Dar es Salaam'
+      && canonicalCity('DAR ES SALAAM') === 'Dar es Salaam');
+    check('shouting and whispering both become a name',
+      canonicalCity('LONDON') === 'London' && canonicalCity('london') === 'London'
+      && canonicalCity('  zanzibar  ') === 'Zanzibar');
+    check('small words inside a city stay small',
+      canonicalCity('rio de janeiro') === 'Rio de Janeiro'
+      && canonicalCity('stoke-on-trent') === 'Stoke-on-Trent'
+      && canonicalCity('newcastle upon tyne') === 'Newcastle upon Tyne');
+    check('but a small word first is still a capital',
+      canonicalCity('den haag') === 'Den Haag' && canonicalCity('la paz') === 'La Paz');
+    check('deliberate inner capitals are somebody’s home town, not a mistake',
+      canonicalCity('DeSoto') === 'DeSoto' && canonicalCity("O'Fallon") === "O'Fallon");
+    check('names no rule gets right are named',
+      canonicalCity('sao paulo') === 'São Paulo' && canonicalCity('zurich') === 'Zürich');
+    check('nothing is guessed at — a nickname stays a nickname',
+      canonicalCity('LA') === 'La' && canonicalCity('NYC') === 'Nyc');
+    check('blank is null, not an empty city',
+      canonicalCity('  ') === null && canonicalCity(null) === null);
+    check('a name already right is left exactly alone',
+      ['London', 'Dar es Salaam', 'Rio de Janeiro', 'Zanzibar', 'Cape Town']
+        .every((n) => canonicalCity(n) === n && isCanonicalCity(n)));
   }
 
   // -------------------------------------------------------------------------
