@@ -1246,6 +1246,58 @@ async function main() {
     check('a blocked listing page falls back to the sitemap',
       scan.status === 'succeeded' && scan.method === 'sitemap', JSON.stringify(scan));
     check('and those sitemap URLs become events', scan.extracted === 2, JSON.stringify(scan));
+
+    // And the other way round: an admin who already knows the sitemap sets it
+    // as the source URL directly. That used to come back "0 candidate URLs via
+    // HTML" — XML has no <a href> in it, so the HTML reader found nothing and
+    // the scan looked like the site was empty. The scanner reads a sitemap as
+    // a sitemap wherever it arrives from.
+    const direct = (await q(
+      `insert into event_sources (source_type, name, url, trust) values ('venue_website', 'Sitemap as source', 'https://directmap.example/sitemap.xml', 'trusted') returning id`
+    ))[0] as { id: string };
+    const directScan = await scanSource(direct.id, {
+      fetcher: mockFetcher({
+        'https://directmap.example/sitemap.xml': {
+          body: `<?xml version="1.0"?><urlset>
+            <url><loc>https://directmap.example/about</loc></url>
+            <url><loc>https://directmap.example/events/direct-one</loc></url>
+          </urlset>`,
+          contentType: 'application/xml',
+        },
+        'https://directmap.example/events/direct-one': { body: '<html><title>Direct One</title><body><main>d</main></body></html>' },
+      }),
+      ai: mockAI({ 'https://directmap.example/events/direct-one': proposal('Direct One') }),
+      delayMs: 1,
+    });
+    check('a sitemap set as the source URL is read as a sitemap, not as HTML',
+      directScan.method === 'sitemap' && directScan.extracted === 1, JSON.stringify(directScan));
+
+    // A site whose sitemap.xml is only an index of other sitemaps. Pointing at
+    // it should step through to the child rather than report nothing.
+    const indexed = (await q(
+      `insert into event_sources (source_type, name, url, trust) values ('venue_website', 'Sitemap index as source', 'https://indexmap.example/sitemap.xml', 'trusted') returning id`
+    ))[0] as { id: string };
+    const indexedScan = await scanSource(indexed.id, {
+      fetcher: mockFetcher({
+        'https://indexmap.example/sitemap.xml': {
+          body: `<?xml version="1.0"?><sitemapindex>
+            <sitemap><loc>https://indexmap.example/sitemap-events.xml</loc></sitemap>
+          </sitemapindex>`,
+          contentType: 'application/xml',
+        },
+        'https://indexmap.example/sitemap-events.xml': {
+          body: `<?xml version="1.0"?><urlset>
+            <url><loc>https://indexmap.example/events/indexed-one</loc></url>
+          </urlset>`,
+          contentType: 'application/xml',
+        },
+        'https://indexmap.example/events/indexed-one': { body: '<html><title>Indexed One</title><body><main>i</main></body></html>' },
+      }),
+      ai: mockAI({ 'https://indexmap.example/events/indexed-one': proposal('Indexed One') }),
+      delayMs: 1,
+    });
+    check('a sitemap INDEX set as the source URL steps through to its children',
+      indexedScan.method === 'sitemap' && indexedScan.extracted === 1, JSON.stringify(indexedScan));
   }
 
   // -------------------------------------------------------------------------
@@ -1405,6 +1457,17 @@ async function main() {
     check('a candidate with event links reads as OK', !testVerdict(probe(true, 3)).bad);
     check('a reachable page with no event links reads as a problem', testVerdict(probe(true, 0)).bad);
     check('an unreachable candidate reads as a problem', testVerdict(probe(false, null)).bad);
+
+    // A sitemap that reads fine but has nothing event-shaped in it must not be
+    // told it "renders its listings with JavaScript". XML does not render.
+    const emptySitemap = { ...probe(true, 0), method: 'sitemap' as const };
+    check('an empty sitemap is not blamed on JavaScript',
+      testVerdict(emptySitemap).bad
+      && testVerdict(emptySitemap).text.includes('sitemap')
+      && !testVerdict(emptySitemap).text.includes('JavaScript'),
+      testVerdict(emptySitemap).text);
+    check('a sitemap full of event pages reads as OK',
+      !testVerdict({ ...probe(true, 40), method: 'sitemap' as const }).bad);
   }
 
   // -------------------------------------------------------------------------

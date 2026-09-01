@@ -61,6 +61,8 @@ export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
       text:
         t.method === 'rss'
           ? 'Reachable, but this feed contains no event links — it is probably a generic blog or news feed. Clear the feed URL below so scans use the listing page again.'
+          : t.method === 'sitemap'
+          ? 'This is a sitemap, and we read it as one, but none of the URLs in it look like event pages. Try the site\u2019s other sitemaps — a big site often has one per section.'
           : t.clientRendered
             ? 'Reachable, but this page builds its listings in the browser — the event list is empty in the HTML we are served. Use the site\u2019s sitemap, or a page that lists events without filtering.'
             : 'Reachable, but no event links found in the raw HTML — the page may render its listings with JavaScript, or its link paths are unrecognised',

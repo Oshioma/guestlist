@@ -115,6 +115,15 @@ export function identifyCandidateLinks(html: string, pageUrl: string): string[] 
   return out;
 }
 
+// A sitemap is not a feed and is not a page. It gets recognised on its own,
+// because an admin whose listing page renders in the browser is told to point
+// the source AT the sitemap — and that advice only works if a sitemap given as
+// the source URL is read as one instead of parsed as HTML (which finds
+// nothing, because a sitemap has no <a href> in it).
+export function looksLikeSitemap(body: string): boolean {
+  return /<(urlset|sitemapindex)[\s>]/i.test(body);
+}
+
 export function looksLikeFeed(contentType: string, body: string): boolean {
   if (/rss|atom|xml/i.test(contentType) && /<(rss|feed)[\s>]/i.test(body)) return true;
   return /^\s*(<\?xml[^>]*\?>)?\s*<(rss|feed)[\s>]/i.test(body);
@@ -328,6 +337,21 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
     }
     method = 'sitemap';
     candidates = sitemap.urls;
+  } else
+  if (looksLikeSitemap(fetched.body)) {
+    // The source URL IS a sitemap. Read the event pages straight out of it,
+    // and step once into a sitemap index if that is what we were given.
+    method = 'sitemap';
+    candidates = sitemapEventUrls(fetched.body, fetched.finalUrl, supplyConfig.scan.maxCandidatesPerScan);
+    if (!candidates.length) {
+      for (const child of sitemapIndexUrls(fetched.body, fetched.finalUrl, 2)) {
+        await sleep(ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
+        const sub = await fetcher(child, { accept: 'application/xml,text/xml' });
+        if (!sub.ok) continue;
+        const found = sitemapEventUrls(sub.body, sub.finalUrl, supplyConfig.scan.maxCandidatesPerScan);
+        if (found.length) { candidates = found; break; }
+      }
+    }
   } else
   if (looksLikeFeed(fetched.contentType, fetched.body)) {
     method = 'rss';
