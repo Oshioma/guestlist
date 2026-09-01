@@ -8,7 +8,7 @@
 
 import { parse } from 'node-html-parser';
 import { safeFetch, type SafeFetchResult } from './safeFetch';
-import { identifyCandidateLinks, parseFeedLinks, looksLikeFeed, canonicaliseCandidateUrl, findSitemapEvents } from './scanner';
+import { identifyCandidateLinks, parseFeedLinks, looksLikeFeed, canonicaliseCandidateUrl, findSitemapEvents, looksClientRendered } from './scanner';
 import { supplyConfig } from './config';
 import type { FetchProbe, ProbeResult } from './verdict';
 
@@ -74,8 +74,22 @@ export async function probeTarget(
     }
   }
 
+  // The URLs themselves, not just how many. Four candidates on a page full of
+  // events is a mystery until you can see that all four are the site's own
+  // navigation — at which point the answer is obvious.
+  let candidateUrls: string[] = [];
+  if (asBot.ok) {
+    candidateUrls = (looksLikeFeed(asBot.contentType, asBot.body)
+      ? parseFeedLinks(asBot.body, asBot.finalUrl)
+      : identifyCandidateLinks(asBot.body, asBot.finalUrl)
+    ).slice(0, 8);
+  }
+
+  const clientRendered = asBot.ok && looksClientRendered(asBot.body);
+
   const result: ProbeResult = {
     target, bot: toProbe(asBot), browser: toProbe(asBrowser), method, candidates,
+    candidateUrls, clientRendered,
   };
 
   // The page is missing, or it loads but has no event links on it: in both
@@ -98,19 +112,36 @@ export async function probeTarget(
 
   // Last resort, and the only route into a site that renders its listings in
   // JavaScript or refuses our user agent: its sitemap.
-  const worthSitemap = !asBot.ok || candidates === 0;
+  //
+  // A HANDFUL of candidates counts as none here. A big listing page that
+  // yields four links has not given us its listings — it has given us its
+  // navigation, and the four look like events only because "programme" is in
+  // the path. Checking the sitemap in that case is what turns "4 candidates,
+  // 0 events" from a dead end into an answer.
+  const FEW = 5;
+  const worthSitemap = !asBot.ok || (candidates ?? 0) < FEW || clientRendered;
   if (opts.findListingOnMiss && worthSitemap && origin) {
     await new Promise((r) => setTimeout(r, supplyConfig.scan.delayBetweenFetchesMs));
     const sitemap = await findSitemapEvents(origin, safeFetch);
     if (sitemap) {
-      return {
-        target: sitemap.url,
-        bot: { ok: true, status: 200, code: null, detail: null, ms: 0 },
-        browser: result.browser,
-        method: 'sitemap',
-        candidates: sitemap.found,
-        foundVia: { triedFirst: target, viaSitemap: true },
-      };
+      // Nothing readable on the page: the sitemap IS the source.
+      if ((candidates ?? 0) === 0) {
+        return {
+          target: sitemap.url,
+          bot: { ok: true, status: 200, code: null, detail: null, ms: 0 },
+          browser: result.browser,
+          method: 'sitemap',
+          candidates: sitemap.found,
+          candidateUrls: sitemap.urls?.slice(0, 8) ?? [],
+          foundVia: { triedFirst: target, viaSitemap: true },
+        };
+      }
+      // A few candidates and a much richer sitemap: offer it, do not swap it
+      // in. The admin was looking at a filtered view; the sitemap is the whole
+      // site, and that is their call to make.
+      if (sitemap.found > (candidates ?? 0)) {
+        return { ...result, sitemapAlternative: { url: sitemap.url, found: sitemap.found } };
+      }
     }
   }
   return result;

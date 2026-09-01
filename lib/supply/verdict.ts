@@ -16,6 +16,19 @@ export type ProbeResult = {
   browser: FetchProbe;
   method: 'rss' | 'html' | 'sitemap' | null;
   candidates: number | null;
+  // The first few links we actually took as candidates. "4 candidates" on a
+  // page full of events is a mystery; the four URLs are the answer — they are
+  // usually the site's own navigation, which says the listings are not in the
+  // HTML at all.
+  candidateUrls?: string[];
+  // The page ships an empty results container and a client-side template: its
+  // listings are fetched by JavaScript and are not in the HTML at all. Not a
+  // guess — see looksClientRendered in lib/supply/scanner.
+  clientRendered?: boolean;
+  // A sitemap with more event pages than the listing page gave us. Offered
+  // rather than substituted: the admin was looking at a filtered view, and the
+  // sitemap is the whole site.
+  sitemapAlternative?: { url: string; found: number };
   // Set when the URL we were given was a miss and we found the real listing
   // page from the site's homepage instead. `target` is then the page that
   // worked, and this records the one that did not.
@@ -33,8 +46,12 @@ export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
         ? `OK via the sitemap — the listing page gave us nothing (JavaScript, or it blocks our bot), but ${t.target} lists ${t.candidates} event page${t.candidates === 1 ? '' : 's'}. Scans will use it.`
         : t.foundVia
           ? `OK — that URL was a dead end, but the site's listing page is ${t.target}, with ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'}. Add uses the working one.`
-          : `OK — ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'} via ${t.method?.toUpperCase()}. Scan it to see how many become events.`,
-      bad: false,
+          : t.clientRendered
+            ? `This page builds its listings in the browser — the event list is empty in the HTML we are served, so the ${t.candidates} link${t.candidates === 1 ? '' : 's'} we found ${t.candidates === 1 ? 'is' : 'are'} its own navigation.${t.sitemapAlternative ? ` Its sitemap lists ${t.sitemapAlternative.found} event pages: use ${t.sitemapAlternative.url} instead.` : ' Try the site\u2019s sitemap, or a page that lists events without filtering.'}`
+            : t.sitemapAlternative
+            ? `Only ${t.candidates} candidate link${t.candidates === 1 ? '' : 's'} in the raw HTML — this page builds its listings in the browser, so most of what you can see is not in what we can read. Its sitemap lists ${t.sitemapAlternative.found} event pages: use ${t.sitemapAlternative.url} instead.`
+            : `OK — ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'} via ${t.method?.toUpperCase()}. Scan it to see how many become events.`,
+      bad: !!t.sitemapAlternative || !!t.clientRendered,
     };
   }
   if (t.bot.ok) {
@@ -44,7 +61,9 @@ export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
       text:
         t.method === 'rss'
           ? 'Reachable, but this feed contains no event links — it is probably a generic blog or news feed. Clear the feed URL below so scans use the listing page again.'
-          : 'Reachable, but no event links found in the raw HTML — the page may render its listings with JavaScript, or its link paths are unrecognised',
+          : t.clientRendered
+            ? 'Reachable, but this page builds its listings in the browser — the event list is empty in the HTML we are served. Use the site\u2019s sitemap, or a page that lists events without filtering.'
+            : 'Reachable, but no event links found in the raw HTML — the page may render its listings with JavaScript, or its link paths are unrecognised',
       bad: true,
     };
   }

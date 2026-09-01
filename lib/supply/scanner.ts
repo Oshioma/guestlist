@@ -467,3 +467,30 @@ export async function scanDueSources(ctx: ScanContext = {}): Promise<{ scanned: 
   if (results.some((r) => r.extracted > 0)) await refreshAdminReviewDigest();
   return { scanned: due.length, results };
 }
+
+// A PAGE THAT BUILDS ITSELF IN THE BROWSER.
+//
+// "No event links found" is a guess. This is evidence. A client-rendered
+// listing ships a recognisable skeleton:
+//
+//   <ul id="results__list"></ul>            an empty container for the results
+//   <div>Loading...</div>                   a placeholder the JS replaces
+//   <script type="text/template">            the row template, with !!url!!
+//   data-module="…lazy-loading"              the module that fetches them
+//
+// Amsterdam Dance Event's programme filter has all four. Telling an admin
+// "this page loads its listings in the browser" is worth more than telling
+// them we found nothing, because it points at the only routes that work: the
+// site's sitemap, or a page that renders server-side.
+export function looksClientRendered(html: string): boolean {
+  let score = 0;
+  // A results container that is empty in the HTML we were served.
+  if (/<(ul|ol|div)[^>]*\bid=["'][^"']*(results|list|items|events)[^"']*["'][^>]*>\s*<\/(ul|ol|div)>/i.test(html)) score += 2;
+  // A template the browser fills in, rather than filled-in markup.
+  if (/<script[^>]+type=["']text\/(template|x-template|html)["']/i.test(html)) score += 2;
+  // The loader that sits where the results will go.
+  if (/\b(id|class)=["'][^"']*(loader|loading|placeholder|skeleton)[^"']*["'][^>]*>\s*(loading|laden|chargement|caricamento)[\s.…]*</i.test(html)) score += 1;
+  // The module that will do the fetching.
+  if (/data-module=["'][^"']*(lazy|infinite|load-more|filter-page)[^"']*["']/i.test(html)) score += 1;
+  return score >= 3;
+}

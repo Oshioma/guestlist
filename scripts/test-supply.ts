@@ -36,6 +36,7 @@ import { matchGenreIdsByName } from '@/lib/util';
 import { canonicalCountry, countrySlug } from '@/lib/countries';
 import { pickPageImage, findPageImages, largestInSrcset, backgroundImageUrl } from '@/lib/supply/images';
 import { canonicalCity, isCanonicalCity } from '@/lib/cityNames';
+import { looksClientRendered } from '@/lib/supply/scanner';
 import { isLiveSource } from '@/lib/supply/health';
 import { findListingLink } from '@/lib/supply/probe';
 import { testVerdict } from '@/lib/supply/verdict';
@@ -974,6 +975,45 @@ async function main() {
     check('discovery says so when no API key is configured', !unavailable.ok && unavailable.error === 'unavailable');
     const garbled = await discoverSources(req, fake('sorry, I cannot help with that'));
     check('unparseable model output is an error, not a candidate', !garbled.ok);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— a page that builds itself in the browser —');
+  {
+    // The exact shape Amsterdam Dance Event's programme filter ships: an empty
+    // results list, a loading placeholder, a client-side row template and the
+    // module that will fetch them. Nothing in it to read.
+    const adeShape = `<!doctype html><html><body>
+      <header><a href="/en/program/">Program</a></header>
+      <div class="ade-container" id="results" data-continue="true" data-module="filter-page/lazy-loading">
+        <div class="ade-filter-page__results-container"><ul id="results__list"></ul></div>
+        <div id="results-loading" class="ade-filter-page__loader">Loading...</div>
+        <script id="template-list-event" type="text/template">
+          <a href="!!url!!" class="item-events__link">!!title!!</a>
+        </script>
+      </div></body></html>`;
+    check('an empty list plus a client template is not a guess',
+      looksClientRendered(adeShape) === true);
+
+    // A page that simply has its events in it is never mistaken for one.
+    const served = `<!doctype html><html><body><main>
+      <ul id="results__list">
+        <li><a href="/events/one">One night</a></li>
+        <li><a href="/events/two">Another night</a></li>
+      </ul></main></body></html>`;
+    check('a page that ships its listings is left alone',
+      looksClientRendered(served) === false);
+
+    // One weak signal on its own is not enough to accuse a page.
+    check('a lone template tag is not enough to call it client-rendered',
+      looksClientRendered('<html><body><script type="text/template">x</script></body></html>') === false);
+    check('nor is an empty container on its own',
+      looksClientRendered('<html><body><ul id="results"></ul></body></html>') === false);
+
+    // And the four links such a page does give us are its own navigation.
+    check('the links found on a client-rendered page are its chrome',
+      identifyCandidateLinks(adeShape, 'https://ade.example/en/program/filter/')
+        .every((u) => !/\/events?\//.test(u)));
   }
 
   // -------------------------------------------------------------------------
