@@ -1,3 +1,4 @@
+import { EventImage } from '@/components/EventImage';
 import Link from 'next/link';
 import type { ArtistVideo } from '@/lib/videoArchive';
 import { youtubeTimestampUrl } from '@/lib/videoArchive';
@@ -17,7 +18,7 @@ export function VideoArchive({ videos }: { videos: ArtistVideo[] }) {
         {videos.map((video) => (
           <article key={video.id} className="card" style={{ overflow: 'hidden' }}>
             <a href={video.source_url} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
-              {video.thumbnail_url && <img src={video.thumbnail_url} alt="" style={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover' }} />}
+              {video.thumbnail_url && <EventImage src={video.thumbnail_url} style={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover' }} />}
             </a>
             <div style={{ padding: 16 }}>
               <div className="adminSub" style={{ marginBottom: 6 }}>GUESTLIST INTERVIEW</div>

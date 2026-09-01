@@ -1,3 +1,4 @@
+import { EventImage } from '@/components/EventImage';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
@@ -30,7 +31,7 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
   return (
     <main className="wrap">
       <section className="profileHero" style={{ minHeight: 220 }}>
-        {artist.image_url && <img className="bg" src={artist.image_url} alt="" />}
+        {artist.image_url && <EventImage className="bg" src={artist.image_url} />}
         <div className="profileHeroInner">
           <h1 className="profileName">{artist.name}</h1>
           <div className="profileFacts"><span><b>{artist.follower_count}</b> follower{artist.follower_count === 1 ? '' : 's'}</span></div>

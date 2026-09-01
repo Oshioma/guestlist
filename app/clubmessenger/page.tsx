@@ -20,6 +20,7 @@ import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
 import { NotificationsPanel } from '@/components/clubmessenger/NotificationsPanel';
 import { HeatCardLink } from '@/components/clubmessenger/HeatCardLink';
 import { AddEventCta } from '@/components/AddEventCta';
+import { EventImage } from '@/components/EventImage';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,10 +67,7 @@ export default async function ClubMessengerPage() {
           {publicEvents.map((e) => (
             <Link href={`/events/${e.slug}`} className="clubEventCardLink" key={e.id}>
               <div className="clubEventCard">
-                {e.primary_image_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img className="clubEventImg" src={e.primary_image_url} alt="" />
-                )}
+                <EventImage className="clubEventImg" src={e.primary_image_url} />
                 <div className="clubEventBody">
                   <div className="clubEventTitleRow">
                     <span className="clubEventTitle">{e.title}</span>
@@ -197,10 +195,7 @@ export default async function ClubMessengerPage() {
           return (
             <HeatCardLink eventId={e.id} key={e.id}>
               <div className="clubEventCard">
-                {e.primary_image_url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img className="clubEventImg" src={e.primary_image_url} alt="" />
-                )}
+                <EventImage className="clubEventImg" src={e.primary_image_url} />
                 <div className="clubEventBody">
                   <div className="clubEventTitleRow">
                     <span className="clubEventTitle">{e.title}</span>

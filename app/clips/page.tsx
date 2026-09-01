@@ -1,3 +1,4 @@
+import { EventImage } from '@/components/EventImage';
 import Link from 'next/link';
 import { query } from '@/lib/db';
 import { youtubeTimestampUrl } from '@/lib/videoArchive';
@@ -21,7 +22,7 @@ export default async function ClipsPage({ searchParams }: { searchParams: Promis
     <p className="pageIntro">The moments buried inside years of Guestlist conversations with DJs and artists.</p>
     <form style={{display:'flex',gap:8,maxWidth:680,margin:'26px 0 32px'}}><input name="q" defaultValue={q} placeholder="Search jungle, Ibiza, Metalheadz, The End…" style={{flex:1,padding:'13px 14px'}}/><button className="btn" type="submit">Search</button></form>
     {moments.length ? <div className="cardGrid">{moments.map(m=><article className="card" key={m.id} style={{overflow:'hidden'}}>
-      {m.thumbnail_url && <img src={m.thumbnail_url} alt="" style={{width:'100%',aspectRatio:'16/9',objectFit:'cover'}}/>}
+      {m.thumbnail_url && <EventImage src={m.thumbnail_url} style={{width:'100%',aspectRatio:'16/9',objectFit:'cover'}}/>}
       <div style={{padding:16}}><div className="adminSub">{m.artist_slug?<Link href={`/artists/${m.artist_slug}`}>{m.artist_name}</Link>:m.video_title}</div><h3>{m.title}</h3>{m.summary&&<p>{m.summary}</p>}
       <a className="btn" target="_blank" rel="noreferrer" href={youtubeTimestampUrl(m.youtube_video_id,m.start_seconds)}>Watch from {Math.floor(m.start_seconds/60)}:{String(m.start_seconds%60).padStart(2,'0')} →</a></div>
     </article>)}</div>:<p className="adminSub">No published moments yet.</p>}

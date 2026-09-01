@@ -473,6 +473,23 @@ console.log('\n— Signup flow —');
       method: 'PATCH', body: JSON.stringify({ profile: { displayName: 'x' } }),
     })).status === 400);
 
+  // Sourced images die over time. Whether a URL is dead can only be known in
+  // the browser, so EventImage swaps in the genre art there (screenshotted);
+  // what is checkable here is that the card is served through that component
+  // and that a missing image already falls back server-side.
+  {
+    await q(`update events set primary_image_url = 'https://example.invalid/dead.jpg'
+              where slug = 'rewind-sessions-presents-jungle-mania'`);
+    const dead = await (await anon.fetch('/events?genre=jungle')).text();
+    check('a card with a dead image URL still renders',
+      dead.includes('Rewind Sessions presents Jungle Mania'));
+    await q(`update events set primary_image_url = null
+              where slug = 'rewind-sessions-presents-jungle-mania'`);
+    const none = await (await anon.fetch('/events?genre=jungle')).text();
+    check('an event with no image falls back to genre art',
+      none.includes('Rewind Sessions presents Jungle Mania') && none.includes('genreArt'));
+  }
+
   const you = await (await fresh.fetch('/you')).text();
   check('the You page offers the display-name field', you.includes('id="displayName"'));
   const header = await (await fresh.fetch('/events')).text();

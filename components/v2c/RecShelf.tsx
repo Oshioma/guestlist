@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { track } from '@/lib/track';
-import { GenreArt } from '@/components/GenreArt';
+import { EventImage } from '@/components/EventImage';
 
 export type RecCardData = {
   id: string;
@@ -58,12 +58,7 @@ export function RecShelf({ events, title, surface }: { events: RecCardData[]; ti
               className="recCardLink"
               onClick={() => track('recommendation_click', { eventId: e.id, surface })}
             >
-              {e.primary_image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img className="recCardImg" src={e.primary_image_url} alt="" />
-              ) : e.genres.length > 0 ? (
-                <div className="recCardImg recCardArt"><GenreArt genres={e.genres} compact /></div>
-              ) : null}
+              <EventImage className="recCardImg" src={e.primary_image_url} genres={e.genres} compactArt />
               <div className="recCardBody">
                 <div className="recCardTitle">{e.title}</div>
                 <div className="recCardMeta">

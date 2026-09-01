@@ -67,6 +67,21 @@ function Evidence({ field, label, conf, src }: {
   );
 }
 
+// A sourced image that 404s must never show as a broken-image icon — the
+// desk falls back to the same "no image" tile it uses when there is none.
+function AdminThumb({ src }: { src: string | null }) {
+  const [broken, setBroken] = useState(false);
+  // Images that 404 before hydration never fire onError — catch them on mount.
+  const ref = (node: HTMLImageElement | null) => {
+    if (node && node.complete && node.naturalWidth === 0) setBroken(true);
+  };
+  if (!src || broken) return <div className="thumb empty">no image</div>;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img ref={ref} className="thumb" src={src} alt="" onError={() => setBroken(true)} />
+  );
+}
+
 export function ReviewCard({ event }: { event: AdminEventRow }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -97,12 +112,7 @@ export function ReviewCard({ event }: { event: AdminEventRow }) {
 
   return (
     <div className="reviewCard">
-      {event.primary_image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="thumb" src={event.primary_image_url} alt="" />
-      ) : (
-        <div className="thumb empty">no image</div>
-      )}
+      <AdminThumb src={event.primary_image_url} />
 
       <div>
         {event.possible_duplicate_of && (

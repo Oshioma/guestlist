@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { EventCard as EventCardData } from '@/lib/events';
 import { eventTypeLabel, fmtDate, fmtEventTime, formatPrice } from '@/lib/util';
 import { SaveButton } from './SaveButton';
-import { GenreArt } from './GenreArt';
+import { EventImage } from './EventImage';
 
 export function EventCard({
   event,
@@ -22,14 +22,11 @@ export function EventCard({
   return (
     <article className="eventCard">
       <div className="media">
-        {event.primary_image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={event.primary_image_url} alt={event.title} loading="lazy" />
-        ) : event.genres.length > 0 ? (
-          <GenreArt genres={event.genres.map((g) => g.name)} />
-        ) : (
-          <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#141414,#1e1a10)' }} />
-        )}
+        <EventImage
+          src={event.primary_image_url}
+          alt={event.title}
+          genres={event.genres.map((g) => g.name)}
+        />
         <div className="dateBadge">
           <div className="d">{day}</div>
           <div className="m">{month}</div>

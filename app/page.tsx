@@ -16,6 +16,7 @@ import { fmtEventDate } from '@/lib/util';
 import { memberPlaces } from '@/lib/locations';
 import { RecShelf } from '@/components/v2c/RecShelf';
 import { GuestlistNow } from '@/components/GuestlistNow';
+import { EventImage } from '@/components/EventImage';
 import { AskPanel } from '@/components/ask/AskPanel';
 
 export const dynamic = 'force-dynamic';
@@ -264,8 +265,7 @@ export default async function HomePage() {
               {promoters.map((p) => (
                 <Link key={p.id} href={`/promoters/${p.slug}`} className="homePromoterChip">
                   {p.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.image_url} alt="" />
+                    <EventImage src={p.image_url} />
                   ) : (
                     <span className="mono">{p.name[0]}</span>
                   )}
