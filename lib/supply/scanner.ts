@@ -112,6 +112,71 @@ export function identifyCandidateLinks(html: string, pageUrl: string): string[] 
       if (out.length >= supplyConfig.scan.maxCandidatesPerScan) break;
     }
   }
+
+  // Nothing in the markup, or barely anything. Before writing the page off as
+  // "renders in the browser", look at the data it was served WITH.
+  if (out.length < EMBEDDED_FLOOR) {
+    for (const url of identifyEmbeddedLinks(html, pageUrl)) {
+      if (seen.has(url)) continue;
+      seen.add(url);
+      out.push(url);
+      if (out.length >= supplyConfig.scan.maxCandidatesPerScan) break;
+    }
+  }
+  return out;
+}
+
+// Below this many links in the markup, a page is worth reading twice. A page
+// that already gave us a proper list is left alone — no point rummaging
+// through its scripts for links we have.
+const EMBEDDED_FLOOR = 5;
+
+// Paths that are plumbing, not pages. An embedded payload is full of them.
+const NOT_A_PAGE = /\/(api|wp-json|graphql|_next|_nuxt|static|assets|cdn-cgi)\//i;
+const A_FILE = /\.(json|jsonp|js|mjs|css|map|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|eot|xml|txt|pdf|zip|mp4|webm|mp3)$/i;
+
+// EVENT LINKS THAT ARE IN THE PAGE BUT NOT IN ITS MARKUP.
+//
+// A modern listing page is often server-rendered as an empty shell plus the
+// data to fill it: Next.js parks it in __NEXT_DATA__, Nuxt in window.__NUXT__,
+// others in a plain <script type="application/json">. There is no API call to
+// find in the network panel, because the answer travelled with the document —
+// which is exactly why such a page looks empty to a reader that only knows
+// about <a href>, and why "check the network tab" comes back with nothing.
+//
+// The rule is the same one the markup pass uses: a same-site path that looks
+// like an event page. Nothing here trusts the JSON's shape, because every site
+// invents its own — it only trusts the URLs, which are the site's own.
+export function identifyEmbeddedLinks(html: string, pageUrl: string): string[] {
+  const root = parse(html);
+  const base = new URL(pageUrl);
+  const pageCanonical = canonicaliseCandidateUrl(pageUrl, pageUrl);
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const script of root.querySelectorAll('script')) {
+    const raw = script.rawText;
+    if (!raw || raw.length < 32) continue;
+    // JSON embedded in JS escapes its slashes, and Next.js flight payloads
+    // escape them twice over. Undo that before looking for paths.
+    const text = raw.replace(/\\u002[fF]/g, '/').replace(/\\\//g, '/');
+
+    for (const m of text.matchAll(/["'`\\](https?:\/\/[^"'`\\\s<>]{6,300}|\/[a-z0-9][^"'`\\\s<>]{4,300})["'`\\]/gi)) {
+      const canonical = canonicaliseCandidateUrl(m[1], pageUrl);
+      if (!canonical || canonical === pageCanonical || seen.has(canonical)) continue;
+      let url: URL;
+      try { url = new URL(canonical); } catch { continue; }
+      // Same site only. An embedded payload carries every CDN, analytics and
+      // font host the page uses, and none of those are event pages.
+      if (url.hostname.replace(/^www\./, '') !== base.hostname.replace(/^www\./, '')) continue;
+      if (NOT_A_PAGE.test(url.pathname) || A_FILE.test(url.pathname)) continue;
+      if (NON_EVENT_PATH.test(url.pathname)) continue;
+      if (!EVENT_PATH_HINT.test(url.pathname)) continue;
+      seen.add(canonical);
+      out.push(canonical);
+      if (out.length >= supplyConfig.scan.maxCandidatesPerScan) return out;
+    }
+  }
   return out;
 }
 
@@ -187,9 +252,11 @@ export function sitemapEventUrls(xml: string, baseUrl: string, limit: number): s
   return out;
 }
 
-// A sitemap index points at other sitemaps rather than pages.
-export function sitemapIndexUrls(xml: string, baseUrl: string, limit: number): string[] {
-  if (!/<sitemapindex[\s>]/i.test(xml)) return [];
+// Every <loc> in a sitemap, event-shaped or not. Nothing imports these — they
+// exist so a sitemap that yields no events can SHOW what it does contain
+// instead of reporting an empty site. A dead end that shows its work is a
+// clue; one that says \"no event links found\" is a shrug.
+export function sitemapAllUrls(xml: string, baseUrl: string, limit: number): string[] {
   const out: string[] = [];
   for (const m of xml.matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/gi)) {
     const canonical = canonicaliseCandidateUrl(
@@ -200,29 +267,77 @@ export function sitemapIndexUrls(xml: string, baseUrl: string, limit: number): s
   return out;
 }
 
+// A big site splits its sitemap by section, and the events are never in the
+// first one — ADE's index lists news, pages, artists and then the programme.
+// Reading two children and giving up is how a site with 900 event URLs came
+// back empty.
+const EVENTY_SITEMAP = /(event|program|agenda|what-?s-?on|listing|show|part(y|ies)|gig|concert|serat|evenement|veranstaltung)/i;
+
+// A sitemap index points at other sitemaps rather than pages. Ordered so the
+// ones named after events are opened first: same budget, far better odds.
+export function sitemapIndexUrls(xml: string, baseUrl: string, limit: number): string[] {
+  if (!/<sitemapindex[\s>]/i.test(xml)) return [];
+  const all = sitemapAllUrls(xml, baseUrl, SITEMAP_INDEX_SCAN);
+  const eventy = all.filter((u) => EVENTY_SITEMAP.test(u));
+  const rest = all.filter((u) => !EVENTY_SITEMAP.test(u));
+  return [...eventy, ...rest].slice(0, limit);
+}
+
+// How many children of an index we are willing to consider, and how many we
+// will actually fetch. Ordered eventy-first, so the fetch budget is spent on
+// the ones that can plausibly answer.
+const SITEMAP_INDEX_SCAN = 200;
+export const SITEMAP_CHILDREN_TO_FETCH = 8;
+
 export async function findSitemapEvents(
   origin: string,
   fetcher: (url: string, options?: SafeFetchOptions) => Promise<SafeFetchResult>,
   delayMs = supplyConfig.scan.delayBetweenFetchesMs
-): Promise<{ url: string; found: number; urls: string[] } | null> {
+): Promise<{ url: string; found: number; urls: string[]; sample?: string[] } | null> {
+  let sample: string[] = [];
   for (const path of SITEMAP_PATHS) {
     const target = `${origin}${path}`;
     const res = await fetcher(target, { accept: 'application/xml,text/xml' });
     if (!res.ok || !/<(urlset|sitemapindex)[\s>]/i.test(res.body)) continue;
 
-    const direct = sitemapEventUrls(res.body, res.finalUrl, supplyConfig.scan.maxCandidatesPerScan);
-    if (direct.length) return { url: res.finalUrl, found: direct.length, urls: direct };
-
-    // An index: look inside the first couple of child sitemaps, no deeper.
-    for (const child of sitemapIndexUrls(res.body, res.finalUrl, 2)) {
-      await sleep(delayMs);
-      const sub = await fetcher(child, { accept: 'application/xml,text/xml' });
-      if (!sub.ok) continue;
-      const found = sitemapEventUrls(sub.body, sub.finalUrl, supplyConfig.scan.maxCandidatesPerScan);
-      if (found.length) return { url: sub.finalUrl, found: found.length, urls: found };
+    const walked = await walkSitemap(res, fetcher, delayMs);
+    if (walked.found.length) {
+      return { url: walked.url, found: walked.found.length, urls: walked.found, sample: walked.sample };
     }
+    if (walked.sample.length) sample = walked.sample;
   }
-  return null;
+  return sample.length ? { url: `${origin}${SITEMAP_PATHS[0]}`, found: 0, urls: [], sample } : null;
+}
+
+// Read one sitemap response for event URLs, stepping into an index when the
+// top level has none. Shared by the scan and the probe so a \"test fetch\"
+// cannot report something the scan would not do.
+export async function walkSitemap(
+  res: { body: string; finalUrl: string },
+  fetcher: (url: string, options?: SafeFetchOptions) => Promise<SafeFetchResult>,
+  delayMs = supplyConfig.scan.delayBetweenFetchesMs
+): Promise<{ url: string; found: string[]; sample: string[] }> {
+  const cap = supplyConfig.scan.maxCandidatesPerScan;
+  const direct = sitemapEventUrls(res.body, res.finalUrl, cap);
+  if (direct.length) return { url: res.finalUrl, found: direct, sample: [] };
+
+  const children = sitemapIndexUrls(res.body, res.finalUrl, SITEMAP_CHILDREN_TO_FETCH);
+  // Not an index, just a sitemap with nothing event-shaped in it. Report what
+  // it DOES list, so the shape of the site's URLs is visible.
+  if (!children.length) {
+    return { url: res.finalUrl, found: [], sample: sitemapAllUrls(res.body, res.finalUrl, 5) };
+  }
+
+  let sample: string[] = [];
+  for (const child of children) {
+    await sleep(delayMs);
+    const sub = await fetcher(child, { accept: 'application/xml,text/xml' });
+    if (!sub.ok) continue;
+    const found = sitemapEventUrls(sub.body, sub.finalUrl, cap);
+    if (found.length) return { url: sub.finalUrl, found, sample: [] };
+    if (!sample.length) sample = sitemapAllUrls(sub.body, sub.finalUrl, 5);
+  }
+  return { url: res.finalUrl, found: [], sample };
 }
 
 
@@ -340,18 +455,9 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
   } else
   if (looksLikeSitemap(fetched.body)) {
     // The source URL IS a sitemap. Read the event pages straight out of it,
-    // and step once into a sitemap index if that is what we were given.
+    // stepping into a sitemap index if that is what we were given.
     method = 'sitemap';
-    candidates = sitemapEventUrls(fetched.body, fetched.finalUrl, supplyConfig.scan.maxCandidatesPerScan);
-    if (!candidates.length) {
-      for (const child of sitemapIndexUrls(fetched.body, fetched.finalUrl, 2)) {
-        await sleep(ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
-        const sub = await fetcher(child, { accept: 'application/xml,text/xml' });
-        if (!sub.ok) continue;
-        const found = sitemapEventUrls(sub.body, sub.finalUrl, supplyConfig.scan.maxCandidatesPerScan);
-        if (found.length) { candidates = found; break; }
-      }
-    }
+    candidates = (await walkSitemap(fetched, fetcher, ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs)).found;
   } else
   if (looksLikeFeed(fetched.contentType, fetched.body)) {
     method = 'rss';

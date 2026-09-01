@@ -8,7 +8,7 @@
 
 import { parse } from 'node-html-parser';
 import { safeFetch, type SafeFetchResult } from './safeFetch';
-import { identifyCandidateLinks, parseFeedLinks, looksLikeFeed, looksLikeSitemap, sitemapEventUrls, sitemapIndexUrls, canonicaliseCandidateUrl, findSitemapEvents, looksClientRendered } from './scanner';
+import { identifyCandidateLinks, identifyEmbeddedLinks, parseFeedLinks, looksLikeFeed, looksLikeSitemap, walkSitemap, canonicaliseCandidateUrl, findSitemapEvents, looksClientRendered } from './scanner';
 import { supplyConfig } from './config';
 import type { FetchProbe, ProbeResult } from './verdict';
 
@@ -67,30 +67,30 @@ export async function probeTarget(
   // of the same URL has been told a lie by a diagnostic.
   let method: 'rss' | 'html' | 'sitemap' | null = null;
   let found: string[] = [];
+  let embedded = 0;
+  let sampleUrls: string[] = [];
   if (asBot.ok) {
     if (looksLikeSitemap(asBot.body)) {
       // Somebody pointed the source straight at a sitemap. Read it as one:
       // XML has no <a href> in it, so the HTML reader finds nothing and the
       // site looks empty when in fact it handed us its whole event list.
+      // walkSitemap is what the scan uses, index-stepping included, so the
+      // two cannot disagree.
       method = 'sitemap';
-      found = sitemapEventUrls(asBot.body, asBot.finalUrl, supplyConfig.scan.maxCandidatesPerScan);
-      // A sitemap index lists other sitemaps, not pages. Step through it once,
-      // the same depth the scanner uses.
-      if (!found.length) {
-        for (const child of sitemapIndexUrls(asBot.body, asBot.finalUrl, 2)) {
-          await new Promise((r) => setTimeout(r, supplyConfig.scan.delayBetweenFetchesMs));
-          const sub = await safeFetch(child, { accept: 'application/xml,text/xml' });
-          if (!sub.ok) continue;
-          found = sitemapEventUrls(sub.body, sub.finalUrl, supplyConfig.scan.maxCandidatesPerScan);
-          if (found.length) break;
-        }
-      }
+      const walked = await walkSitemap(asBot, safeFetch, supplyConfig.scan.delayBetweenFetchesMs);
+      found = walked.found;
+      sampleUrls = walked.sample;
     } else if (looksLikeFeed(asBot.contentType, asBot.body)) {
       method = 'rss';
       found = parseFeedLinks(asBot.body, asBot.finalUrl);
     } else {
       method = 'html';
       found = identifyCandidateLinks(asBot.body, asBot.finalUrl);
+      // How much of that came from the page's embedded data rather than its
+      // markup — the difference between "this page hides its listings" and
+      // "this page shipped them, just not as links".
+      const inMarkup = new Set(found);
+      embedded = identifyEmbeddedLinks(asBot.body, asBot.finalUrl).filter((u) => inMarkup.has(u)).length;
     }
   }
   const candidates: number | null = asBot.ok ? found.length : null;
@@ -105,7 +105,7 @@ export async function probeTarget(
 
   const result: ProbeResult = {
     target, bot: toProbe(asBot), browser: toProbe(asBrowser), method, candidates,
-    candidateUrls, clientRendered,
+    candidateUrls, clientRendered, embedded, sampleUrls,
   };
 
   // The page is missing, or it loads but has no event links on it: in both
@@ -137,10 +137,15 @@ export async function probeTarget(
   const FEW = 5;
   // Nothing to offer when the target already IS a sitemap — pointing an admin
   // at the sitemap of the sitemap they just gave us is not help.
-  const worthSitemap = method !== 'sitemap' && (!asBot.ok || (candidates ?? 0) < FEW || clientRendered);
+  const worthSitemap = method !== 'sitemap' && !embedded && (!asBot.ok || (candidates ?? 0) < FEW || clientRendered);
   if (opts.findListingOnMiss && worthSitemap && origin) {
     await new Promise((r) => setTimeout(r, supplyConfig.scan.delayBetweenFetchesMs));
     const sitemap = await findSitemapEvents(origin, safeFetch);
+    // A sitemap we could read but which held no event pages is not a rescue.
+    // Keep what it listed, though — it says more about the site than silence.
+    if (sitemap && !sitemap.found) {
+      return { ...result, sampleUrls: sitemap.sample ?? sampleUrls };
+    }
     if (sitemap) {
       // Nothing readable on the page: the sitemap IS the source.
       if ((candidates ?? 0) === 0) {

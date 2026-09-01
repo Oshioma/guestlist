@@ -25,6 +25,13 @@ export type ProbeResult = {
   // listings are fetched by JavaScript and are not in the HTML at all. Not a
   // guess — see looksClientRendered in lib/supply/scanner.
   clientRendered?: boolean;
+  // How many of the candidates were read out of the page's embedded data
+  // rather than its markup. A client-rendered page that still handed us its
+  // event list is a success, not a warning.
+  embedded?: number;
+  // What a sitemap DID contain, when none of it looked like event pages.
+  // Shown so the shape of the site's URLs is visible instead of guessed at.
+  sampleUrls?: string[];
   // A sitemap with more event pages than the listing page gave us. Offered
   // rather than substituted: the admin was looking at a filtered view, and the
   // sitemap is the whole site.
@@ -46,12 +53,14 @@ export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
         ? `OK via the sitemap — the listing page gave us nothing (JavaScript, or it blocks our bot), but ${t.target} lists ${t.candidates} event page${t.candidates === 1 ? '' : 's'}. Scans will use it.`
         : t.foundVia
           ? `OK — that URL was a dead end, but the site's listing page is ${t.target}, with ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'}. Add uses the working one.`
+          : t.embedded
+            ? `OK — ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'}, ${t.embedded} of them read out of the data the page ships with rather than its markup. This page builds its listings in the browser, but it was served the answer alongside the shell, so there is nothing to chase. Scan it to see how many become events.`
           : t.clientRendered
             ? `This page builds its listings in the browser — the event list is empty in the HTML we are served, so the ${t.candidates} link${t.candidates === 1 ? '' : 's'} we found ${t.candidates === 1 ? 'is' : 'are'} its own navigation.${t.sitemapAlternative ? ` Its sitemap lists ${t.sitemapAlternative.found} event pages: use ${t.sitemapAlternative.url} instead.` : ' Try the site\u2019s sitemap, or a page that lists events without filtering.'}`
             : t.sitemapAlternative
             ? `Only ${t.candidates} candidate link${t.candidates === 1 ? '' : 's'} in the raw HTML — this page builds its listings in the browser, so most of what you can see is not in what we can read. Its sitemap lists ${t.sitemapAlternative.found} event pages: use ${t.sitemapAlternative.url} instead.`
             : `OK — ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'} via ${t.method?.toUpperCase()}. Scan it to see how many become events.`,
-      bad: !!t.sitemapAlternative || !!t.clientRendered,
+      bad: !t.embedded && (!!t.sitemapAlternative || !!t.clientRendered),
     };
   }
   if (t.bot.ok) {
@@ -62,7 +71,7 @@ export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
         t.method === 'rss'
           ? 'Reachable, but this feed contains no event links — it is probably a generic blog or news feed. Clear the feed URL below so scans use the listing page again.'
           : t.method === 'sitemap'
-          ? 'This is a sitemap, and we read it as one, but none of the URLs in it look like event pages. Try the site\u2019s other sitemaps — a big site often has one per section.'
+          ? `This is a sitemap, and we read it as one — including the section sitemaps it points at — but none of the URLs in it look like event pages.${t.sampleUrls?.length ? ` It lists things like ${t.sampleUrls.slice(0, 3).join(', ')}.` : ''} Point the source at the sitemap for the programme section, if the site has one.`
           : t.clientRendered
             ? 'Reachable, but this page builds its listings in the browser — the event list is empty in the HTML we are served. Use the site\u2019s sitemap, or a page that lists events without filtering.'
             : 'Reachable, but no event links found in the raw HTML — the page may render its listings with JavaScript, or its link paths are unrecognised',

@@ -29,7 +29,7 @@ import { zonedTimeToUtc, parseLocalInTimezone, parseFoundDate, resolveEndCrossin
 import { mapGenreProposals, loadGenres } from '@/lib/supply/genres';
 import { computeOverallConfidence, canAutoPublish } from '@/lib/supply/confidence';
 import { runExtractionPipeline } from '@/lib/supply/pipeline';
-import { scanSource, identifyCandidateLinks, parseFeedLinks, canonicaliseCandidateUrl, sitemapEventUrls, sitemapIndexUrls } from '@/lib/supply/scanner';
+import { scanSource, identifyCandidateLinks, identifyEmbeddedLinks, parseFeedLinks, canonicaliseCandidateUrl, sitemapEventUrls, sitemapIndexUrls } from '@/lib/supply/scanner';
 import { explainScan, outcomeLabel } from '@/lib/supply/outcomes';
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
@@ -1298,6 +1298,108 @@ async function main() {
     });
     check('a sitemap INDEX set as the source URL steps through to its children',
       indexedScan.method === 'sitemap' && indexedScan.extracted === 1, JSON.stringify(indexedScan));
+
+    // A big site splits its sitemap by section and the programme is never
+    // first. Reading two children and giving up is how a site with hundreds of
+    // event URLs came back empty.
+    const INDEX_OF_MANY = `<?xml version="1.0"?><sitemapindex>
+      <sitemap><loc>https://deep.example/sitemap-news.xml</loc></sitemap>
+      <sitemap><loc>https://deep.example/sitemap-pages.xml</loc></sitemap>
+      <sitemap><loc>https://deep.example/sitemap-artists.xml</loc></sitemap>
+      <sitemap><loc>https://deep.example/sitemap-program.xml</loc></sitemap>
+    </sitemapindex>`;
+    check('the section sitemap named after events is opened first',
+      sitemapIndexUrls(INDEX_OF_MANY, 'https://deep.example/sitemap.xml', 8)[0]
+        === 'https://deep.example/sitemap-program.xml');
+
+    const deep = (await q(
+      `insert into event_sources (source_type, name, url, trust) values ('venue_website', 'Deep index', 'https://deep.example/sitemap.xml', 'trusted') returning id`
+    ))[0] as { id: string };
+    const deepScan = await scanSource(deep.id, {
+      fetcher: mockFetcher({
+        'https://deep.example/sitemap.xml': { body: INDEX_OF_MANY, contentType: 'application/xml' },
+        'https://deep.example/sitemap-news.xml': { body: '<?xml version="1.0"?><urlset><url><loc>https://deep.example/news/hello</loc></url></urlset>', contentType: 'application/xml' },
+        'https://deep.example/sitemap-pages.xml': { body: '<?xml version="1.0"?><urlset><url><loc>https://deep.example/visit</loc></url></urlset>', contentType: 'application/xml' },
+        'https://deep.example/sitemap-artists.xml': { body: '<?xml version="1.0"?><urlset><url><loc>https://deep.example/artist/x</loc></url></urlset>', contentType: 'application/xml' },
+        'https://deep.example/sitemap-program.xml': { body: '<?xml version="1.0"?><urlset><url><loc>https://deep.example/program/deep-night</loc></url></urlset>', contentType: 'application/xml' },
+        'https://deep.example/program/deep-night': { body: '<html><title>Deep Night</title><body><main>x</main></body></html>' },
+      }),
+      ai: mockAI({ 'https://deep.example/program/deep-night': proposal('Deep Night') }),
+      delayMs: 1,
+    });
+    check('an index four sections deep still reaches the programme',
+      deepScan.method === 'sitemap' && deepScan.extracted === 1, JSON.stringify(deepScan));
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— event links that are in the page but not in its markup —');
+  {
+    // The case that sends people to the network panel and finds nothing there:
+    // the listing is built in the browser, but from data that came WITH the
+    // document. There is no API call to catch, because there was no API call.
+    const EMBEDDED = `<html><body>
+      <ul id="event-results"></ul>
+      <script id="__NEXT_DATA__" type="application/json">
+      {"props":{"events":[
+        {"id":1,"url":"\\u002Fen\\u002Fprogram\\u002Fevent\\u002F123\\u002Foliver-heldens\\u002F"},
+        {"id":2,"url":"/en/program/event/456/dirty-workz/"}
+      ],"endpoint":"/api/events/list","logo":"/assets/img/logo.png",
+       "partner":"https://cdn.elsewhere.example/program/event/9/x/"}}
+      </script>
+    </body></html>`;
+    const PAGE_URL = 'https://payload.example/en/program/filter/?page=1';
+    const proposal = (title: string) => ({
+      is_event: true, is_music_event: true, title,
+      start_date: FUTURE.toISOString().slice(0, 10), start_time: '23:00',
+      city: 'Amsterdam', country: 'Netherlands',
+      genres: [{ name: 'Techno', confidence: 90 }],
+      field_confidence: { title: 92, date: 90, city: 88, genres: 88 },
+    });
+
+    const links = identifyEmbeddedLinks(EMBEDDED, PAGE_URL);
+    check('event links are read out of the data the page ships with',
+      links.length === 2
+      && links[0] === 'https://payload.example/en/program/event/123/oliver-heldens/',
+      JSON.stringify(links));
+    check('escaped slashes in a JSON payload are still a path',
+      links.includes('https://payload.example/en/program/event/123/oliver-heldens/'));
+    check('an API path in the payload is not offered as an event',
+      !links.some((u) => u.includes('/api/')));
+    check('an asset in the payload is not offered as an event',
+      !links.some((u) => u.includes('/assets/')));
+    check('another site\u2019s URL in the payload is ignored',
+      !links.some((u) => u.includes('elsewhere.example')));
+    check('the same links arrive through the ordinary reader',
+      identifyCandidateLinks(EMBEDDED, PAGE_URL).length === 2);
+
+    // A page that already lists its events properly is left alone.
+    const PLAIN = `<html><body>
+      <a href="/events/one">One</a><a href="/events/two">Two</a>
+      <a href="/events/three">Three</a><a href="/events/four">Four</a>
+      <a href="/events/five">Five</a>
+      <script>var config = {"tracker":"/events/pixel-hit"};</script>
+    </body></html>`;
+    check('a page that already lists its events is not rummaged through',
+      identifyCandidateLinks(PLAIN, 'https://plain.example/whats-on').length === 5);
+
+    // And end to end: the shell scans, and its embedded events become events.
+    const shell = (await q(
+      `insert into event_sources (source_type, name, url, trust) values ('venue_website', 'Payload site', 'https://payload.example/en/program/filter/', 'trusted') returning id`
+    ))[0] as { id: string };
+    const shellScan = await scanSource(shell.id, {
+      fetcher: mockFetcher({
+        'https://payload.example/en/program/filter/': { body: EMBEDDED },
+        'https://payload.example/en/program/event/123/oliver-heldens/': { body: '<html><title>Oliver Heldens</title><body><main>h</main></body></html>' },
+        'https://payload.example/en/program/event/456/dirty-workz/': { body: '<html><title>Dirty Workz</title><body><main>d</main></body></html>' },
+      }),
+      ai: mockAI({
+        'https://payload.example/en/program/event/123/oliver-heldens/': proposal('Oliver Heldens'),
+        'https://payload.example/en/program/event/456/dirty-workz/': proposal('Dirty Workz'),
+      }),
+      delayMs: 1,
+    });
+    check('a client-rendered shell still yields its events',
+      shellScan.method === 'html' && shellScan.extracted === 2, JSON.stringify(shellScan));
   }
 
   // -------------------------------------------------------------------------
