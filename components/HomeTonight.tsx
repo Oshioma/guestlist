@@ -1,5 +1,8 @@
 import Link from 'next/link';
 import { query } from '@/lib/db';
+import { getCurrentMember } from '@/lib/auth';
+import { getRecommendedEvents } from '@/lib/recommend';
+import { toRecCards } from '@/lib/recCards';
 import { EventImage } from '@/components/EventImage';
 import { fmtEventDate } from '@/lib/util';
 import styles from './HomeTonight.module.css';
@@ -19,24 +22,41 @@ type HomeTonightEvent = {
   genres: { name: string; slug: string }[];
 };
 
+type HomePick = {
+  id: string;
+  title: string;
+  slug: string;
+  when: string;
+  city: string | null;
+  primary_image_url: string | null;
+  genres: string[];
+  featured?: boolean;
+};
+
 export async function HomeTonight() {
-  const events = await query<HomeTonightEvent>(
-    `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
-            e.city, e.primary_image_url, e.featured, v.name as venue_name,
-            coalesce((select count(*)::int from member_event_actions mea
-                       where mea.event_id = e.id and mea.rsvp = 'going'), 0) as going_count,
-            coalesce((select json_agg(json_build_object('name', g.name, 'slug', g.slug))
-                        from event_genres eg join genres g on g.id = eg.genre_id
-                       where eg.event_id = e.id), '[]'::json) as genres
-       from events e
-       left join venues v on v.id = e.venue_id
-      where e.status = 'live'
-        and e.listing_status <> 'cancelled'
-        and e.start_at > now()
-        and e.start_at < now() + interval '18 hours'
-      order by e.featured desc, e.start_at asc
-      limit 8`
-  );
+  const member = await getCurrentMember();
+  const [events, recommended] = await Promise.all([
+    query<HomeTonightEvent>(
+      `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
+              e.city, e.primary_image_url, e.featured, v.name as venue_name,
+              coalesce((select count(*)::int from member_event_actions mea
+                         where mea.event_id = e.id and mea.rsvp = 'going'), 0) as going_count,
+              coalesce((select json_agg(json_build_object('name', g.name, 'slug', g.slug))
+                          from event_genres eg join genres g on g.id = eg.genre_id
+                         where eg.event_id = e.id), '[]'::json) as genres
+         from events e
+         left join venues v on v.id = e.venue_id
+        where e.status = 'live'
+          and e.listing_status <> 'cancelled'
+          and e.start_at > now()
+          and e.start_at < now() + interval '18 hours'
+        order by e.featured desc, e.start_at asc
+        limit 8`
+    ),
+    member
+      ? getRecommendedEvents(member.id, { limit: 3, exploration: false })
+      : Promise.resolve([]),
+  ]);
 
   if (!events.length) {
     return (
@@ -53,7 +73,26 @@ export async function HomeTonight() {
 
   const editorial = events.filter((e) => e.featured);
   const fallback = events.filter((e) => !e.featured);
-  const picks = [...editorial, ...fallback].slice(0, 3);
+  const publicPicks: HomePick[] = [...editorial, ...fallback].slice(0, 3).map((event) => ({
+    id: event.id,
+    title: event.title,
+    slug: event.slug,
+    when: fmtEventDate(event.start_at, event.end_at, event.timezone),
+    city: event.city,
+    primary_image_url: event.primary_image_url,
+    genres: event.genres.map((g) => g.name),
+    featured: event.featured,
+  }));
+  const personalisedPicks: HomePick[] = toRecCards(recommended).map((event) => ({
+    id: event.id,
+    title: event.title,
+    slug: event.slug,
+    when: event.when,
+    city: event.city,
+    primary_image_url: event.primary_image_url,
+    genres: event.genres,
+  }));
+  const picks = member && personalisedPicks.length ? personalisedPicks : publicPicks;
   const tonight = events.slice(0, 5);
   const totalGoing = tonight.reduce((sum, event) => sum + event.going_count, 0);
 
@@ -124,7 +163,7 @@ export async function HomeTonight() {
             <span className={styles.pickThumb}>
               <EventImage
                 src={event.primary_image_url}
-                genres={event.genres.map((g) => g.name)}
+                genres={event.genres}
                 compactArt
               />
               <span className={styles.pickNumber}>{String(index + 1).padStart(2, '0')}</span>
@@ -132,7 +171,7 @@ export async function HomeTonight() {
             <span>
               <span className={styles.pickName}>{event.title}</span>
               <span className={styles.pickMeta}>
-                {fmtEventDate(event.start_at, event.end_at, event.timezone)}
+                {event.when}
                 {event.city ? ` · ${event.city}` : ''}
               </span>
               {event.featured && <span className={styles.editorial}>Guestlist pick</span>}
