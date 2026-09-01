@@ -438,7 +438,7 @@ export async function currentEventsForArchive(archiveEventId: string, limit = 4)
 // ---------------------------------------------------------------------------
 
 export async function archiveHighlights() {
-  const [onThisWeek, recent, flyers, decades, entities, memories, mixes] = await Promise.all([
+  const [onThisWeek, recent, flyers, decades, attendedEvents, entities, memories, mixes] = await Promise.all([
     // Exact/month-dated events whose calendar week matches now (any year).
     query(
       `select e.id, e.title, e.slug, e.display_date, e.city, e.year
@@ -467,6 +467,17 @@ export async function archiveHighlights() {
       `select (floor(year / 10) * 10)::int as decade, count(*)::int as n
          from archive_events where status = 'published' and year is not null
         group by 1 order by 1`
+    ),
+    query(
+      `select e.id, e.title, e.slug, e.display_date, e.venue_name, e.city,
+              count(*)::int as members
+         from archive_events e
+         join archive_attendance a on a.archive_event_id = e.id
+         join members am on am.id = a.member_id
+        where e.status = 'published' and ${ATTENDANCE_PUBLIC_SQL()}
+        group by e.id
+        order by members desc, max(a.created_at) desc
+        limit 12`
     ),
     query(
       `select se.id, se.name, se.slug, se.entity_type, se.city, se.country_name,
@@ -502,7 +513,7 @@ export async function archiveHighlights() {
         order by x.published_at desc limit 6`
     ),
   ]);
-  return { onThisWeek, recent, flyers, decades, entities, memories, mixes };
+  return { onThisWeek, recent, flyers, decades, attendedEvents, entities, memories, mixes };
 }
 
 export async function searchArchive(q: string, viewerId: string | null) {

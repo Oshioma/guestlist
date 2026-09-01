@@ -21,6 +21,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
     onThisWeek: Row[]; recent: Row[];
     flyers: { id: string; thumb_path: string | null; storage_path: string; slug: string; title: string; display_date: string }[];
     decades: { decade: number; n: number }[];
+    attendedEvents: { id: string; title: string; slug: string; display_date: string; venue_name: string | null; city: string | null; members: number }[];
     entities: { id: string; name: string; slug: string; entity_type: string; city: string | null; country_name: string | null; active_from_year: number | null; active_to_year: number | null; members: number; archive_events: number }[];
     memories: { body: string; display_name: string; title: string; slug: string }[];
     mixes: MixRow[];
@@ -168,6 +169,25 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
           </section>
         )}
       </div>
+
+      {h.attendedEvents.length > 0 && (
+        <section>
+          <div className="sectionLabel">Nights Guestlist members were at</div>
+          <div className="exploreGrid">
+            {h.attendedEvents.map((e) => (
+              <Link key={e.id} href={`/archive/events/${e.slug}`} className="exploreCard">
+                <span className="exploreName">{e.title}</span>
+                <span className="exploreCountry">
+                  {[e.display_date, e.venue_name, e.city].filter(Boolean).join(' · ')}
+                </span>
+                <span className="exploreStats">
+                  {`${e.members} member${e.members === 1 ? ' was' : 's were'} there`}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {h.entities.length > 0 && (
         <section>
