@@ -556,6 +556,48 @@ try {
     const profile = await (await nadia.fetch(`/members/${await mslug('oshi@guestlist.net')}`)).text();
     check('cultural profile: raving since + now', profile.includes('Raving since 1992') && profile.includes('Hospitality'));
 
+    // -----------------------------------------------------------------------
+    // Near home comes first. Distance decides what "near" means, so a city
+    // across a strait counts and another country does not.
+    const text = async (c, url) => (await (await c.fetch(url)).text());
+    const before = (html, a, b) => {
+      const ia = html.indexOf(a); const ib = html.indexOf(b);
+      return ia !== -1 && (ib === -1 || ia < ib);
+    };
+
+    {
+      const ukEvent = 'Rewind Sessions presents Jungle Mania';
+      const zanzibar = 'Kendwa Full Moon Sessions';
+      const ibiza = 'Sunset at Casa Balearica';
+
+      const londonView = await text(nadia, '/events');
+      check('London member: UK nights rank above Tanzania',
+        before(londonView, ukEvent, zanzibar));
+      check('London member: UK nights rank above Spain',
+        before(londonView, ukEvent, ibiza));
+
+      // Someone whose city is Dar es Salaam still gets Zanzibar — ~120km
+      // away, across the water, and nothing to do with sharing a name.
+      const [dar] = await q(
+        `insert into locations (kind, name, normalized_name, slug, country_code, country_name,
+                                timezone, latitude, longitude)
+         values ('city','Dar es Salaam','dar es salaam','dar-es-salaam','TZ','Tanzania',
+                 'Africa/Dar_es_Salaam', -6.7924, 39.2083)
+         on conflict do nothing returning id`);
+      const darId = dar?.id ?? (await q(`select id from locations where slug = 'dar-es-salaam'`))[0].id;
+      await q(`update members set home_location_id = $1 where email = 'dev-rob@example.com'`, [darId]);
+      const rob = client();
+      check('login dev-rob (home: Dar es Salaam)', (await rob.login('dev-rob@example.com')) === 200);
+      const darView = await text(rob, '/events');
+      check('Dar es Salaam member: Zanzibar nights rank above UK ones',
+        before(darView, zanzibar, ukEvent));
+
+      // Worth Travelling For is about leaving home, so it is untouched.
+      const travel = await text(nadia, '/events?tab=travel');
+      check('Worth Travelling For still surfaces events abroad',
+        travel.includes(zanzibar) || travel.includes(ibiza));
+    }
+
     check('/you requires sign-in', (await anon.fetch('/you')).status === 307);
     check('/people requires sign-in', (await anon.fetch('/people')).status === 307);
     check('client cannot spoof server-side rec analytics',

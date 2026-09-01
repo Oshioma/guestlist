@@ -7,6 +7,7 @@
 // member themselves provided or mutually visible social data.
 
 import { query } from './db';
+import { NEAR_KM } from './events';
 import { tasteGenreIds } from './taste';
 import { track } from './analytics';
 
@@ -19,6 +20,9 @@ export const REC_WEIGHTS = {
   homeCity: 20,
   followedCity: 15,
   travelDestination: 25,
+  // Negative: distance from the member's chosen cities.
+  outsideMyCities: -12, // same country, different part of it
+  otherCountry: -30,    // another country entirely, and not a trip they planned
   closeFriendGoing: 30, // stronger than an ordinary connection, by design
   connectionGoing: 20,
   sceneGoing: 10,
@@ -132,13 +136,24 @@ export async function getRecommendedEvents(
       is_home_city: boolean;
       is_followed_city: boolean;
       is_travel_city: boolean;
+      near_my_places: boolean;
+      in_my_country: boolean;
       close_friends_going: string[];
       connections_going: string[];
       scene_going: number;
       featured: boolean;
     }
   >(
-    `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
+    `with my_places as (
+       select l.latitude, l.longitude, l.country_name
+         from members m join locations l on l.id = m.home_location_id
+        where m.id = $1
+       union
+       select l.latitude, l.longitude, l.country_name
+         from member_locations ml join locations l on l.id = ml.location_id
+        where ml.member_id = $1
+     )
+     select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
             e.city, e.country, e.location_id, v.name as venue_name,
             e.promoter_id, p.name as promoter_name, e.primary_image_url,
             e.event_type, e.price_from::text, e.price_to::text, e.currency,
@@ -163,6 +178,21 @@ export async function getRecommendedEvents(
             exists (select 1 from travel_plans tp
                      where tp.member_id = $1 and tp.location_id = e.location_id
                        and e.start_at::date between tp.start_date and tp.end_date) as is_travel_city,
+            -- Near one of the member's chosen cities, by distance rather than
+            -- by name: Dar es Salaam reaches Zanzibar, London never reaches
+            -- Spain. my_places is home city + followed cities.
+            exists (
+              select 1 from my_places p
+               where e.latitude is not null and e.longitude is not null
+                 and p.latitude is not null and p.longitude is not null
+                 and (6371 * acos(least(1, greatest(-1,
+                       cos(radians(p.latitude)) * cos(radians(e.latitude)) *
+                       cos(radians(e.longitude) - radians(p.longitude)) +
+                       sin(radians(p.latitude)) * sin(radians(e.latitude))
+                     )))) <= ${NEAR_KM}
+            ) as near_my_places,
+            exists (select 1 from my_places p
+                     where e.country is not null and p.country_name = e.country) as in_my_country,
             coalesce((
               -- Close friends going (the viewer's PRIVATE marks), strongest
               -- social signal. Privacy identical to connections below.
@@ -265,6 +295,11 @@ export async function getRecommendedEvents(
       score += w.followedVenue;
       reasons.push({ code: 'FOLLOWED_VENUE', name: r.venue_name });
     }
+    // A night you would have to fly to is not competing on equal terms with
+    // one across town — unless you told us you are travelling there.
+    if (!r.is_travel_city && !r.near_my_places) {
+      score += r.in_my_country ? w.outsideMyCities : w.otherCountry;
+    }
     if (r.is_travel_city && r.city) {
       score += w.travelDestination;
       reasons.push({ code: 'TRAVEL_DESTINATION', city: r.city });
@@ -295,9 +330,11 @@ export async function getRecommendedEvents(
     }
     const { matched_explicit, matched_inferred, followed_promoter, followed_venue,
             followed_artists, is_home_city, is_followed_city, is_travel_city,
+            near_my_places, in_my_country,
             close_friends_going, connections_going, scene_going, featured, ...event } = r;
     void matched_inferred; void followed_promoter; void followed_venue; void followed_artists;
     void is_home_city; void is_followed_city; void is_travel_city; void connections_going;
+    void near_my_places; void in_my_country;
     void close_friends_going; void scene_going; void featured; void matched_explicit;
     return { ...event, score, reasons };
   });
