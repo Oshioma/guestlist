@@ -42,10 +42,15 @@ async function snapshot(a:Article,editorId:string){await query(`insert into arti
 
 export async function updateDraft(id:string,authorId:string,p:ArticlePatch){
   const current=await getAuthorArticle(id,authorId); if(!current) return null;
-  if(!['draft','changes_requested'].includes(current.status)) throw new Error('This article can no longer be edited');
+  if(['archived','rejected'].includes(current.status)) throw new Error('This article can no longer be edited');
   await snapshot(current,authorId); const x=normalizedPatch(current,p);
   await query(`update articles set title=$3, subtitle=$4, excerpt=$5, body=$6, article_type=$7, hero_image_url=$8, hero_image_alt=$9, image_provider=$10, image_credit=$11, image_source_url=$12, tags=$13, reading_minutes=$14, updated_at=now() where id=$1 and author_id=$2`,[id,authorId,x.title,x.subtitle,x.excerpt,x.body,x.article_type,x.hero_image_url,x.hero_image_alt,x.image_provider,x.image_credit,x.image_source_url,x.tags,x.reading_minutes]);
   return getAuthorArticle(id,authorId);
+}
+export async function deleteAuthorArticle(id:string,authorId:string){
+  const current=await getAuthorArticle(id,authorId); if(!current)return false;
+  await query(`delete from articles where id=$1 and author_id=$2`,[id,authorId]);
+  return true;
 }
 export async function submitArticle(id:string,authorId:string){
   const a=await getAuthorArticle(id,authorId); if(!a) return null;
