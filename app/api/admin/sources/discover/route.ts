@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, requireAdmin } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { cleanGenreIds, cleanPlace } from '@/lib/util';
+import { cleanPlace } from '@/lib/util';
 import { defaultDiscoveryClient, discoverSources } from '@/lib/supply/discover';
 
 export const maxDuration = 60;
@@ -29,15 +29,25 @@ export async function POST(req: NextRequest) {
     const city = cleanPlace(body.city);
     const limit = Math.min(Math.max(Number(body.limit) || 8, 1), 15);
 
-    const genreIds = cleanGenreIds(body.genreIds);
-    const genres = genreIds.length
-      ? (
-          await query<{ name: string }>(
+    // The picker defaults to every genre, and a genre list that long says
+    // nothing useful to the model — so a full selection is sent as "any dance
+    // music" rather than a thirty-item list. A deliberate narrowing is sent
+    // as-is, and matching is ANY-of, never all-of (see the system prompt).
+    const genreIds = [...new Set(
+      (Array.isArray(body.genreIds) ? body.genreIds : []).filter(
+        (g: unknown): g is string => typeof g === 'string' && /^[0-9a-f-]{36}$/.test(g)
+      )
+    )];
+    const [chosen, activeCount] = await Promise.all([
+      genreIds.length
+        ? query<{ name: string }>(
             `select name from genres where id = any($1::uuid[]) and active order by name`,
             [genreIds]
           )
-        ).map((g) => g.name)
-      : [];
+        : Promise.resolve([]),
+      query<{ n: number }>(`select count(*)::int as n from genres where active`),
+    ]);
+    const genres = chosen.length >= (activeCount[0]?.n ?? 0) ? [] : chosen.map((g) => g.name);
 
     const outcome = await discoverSources(
       { country, city, genres, limit },
