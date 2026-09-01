@@ -1,6 +1,7 @@
 // Event queries for discovery, detail and admin surfaces.
 
 import { query, queryOne } from './db';
+import { memberPlaceAnchors, proximityTierSql } from './proximity';
 
 export type GenreTag = { id: string; name: string; slug: string; parent_genre_id: string | null };
 
@@ -32,7 +33,7 @@ export type EventCard = {
 // places people actually travel to for a night out (Dar es Salaam →
 // Zanzibar, London → Brighton), tight enough that another country never
 // qualifies by accident.
-export const NEAR_KM = 150;
+export { NEAR_KM } from './proximity';
 
 export type BrowseTab =
   | 'for-you'
@@ -160,40 +161,15 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
   // London never picks up Spain.
   // Worth Travelling For is *about* leaving home, so it never gets the
   // near-home tier applied to it.
+  // Where a member's life actually is — near one of their cities, then their
+  // country, then the rest of the world. One definition, shared with the
+  // Tonight list (lib/proximity), so the two surfaces cannot disagree about
+  // where somebody lives.
+  // Worth Travelling For is *about* leaving home, so it never gets the
+  // near-home tier applied to it.
   let proximityTier = '(select 0)';
   if (params.member?.id && params.tab !== 'travel') {
-    const places = await query<{ latitude: number | null; longitude: number | null; country_name: string | null }>(
-      `select l.latitude, l.longitude, l.country_name
-         from members m join locations l on l.id = m.home_location_id
-        where m.id = $1
-       union
-       select l.latitude, l.longitude, l.country_name
-         from member_locations ml join locations l on l.id = ml.location_id
-        where ml.member_id = $1`,
-      [params.member.id]
-    );
-    const coords = places.filter((p) => p.latitude != null && p.longitude != null);
-    const countries = [...new Set(places.map((p) => p.country_name).filter(Boolean))] as string[];
-
-    if (coords.length || countries.length) {
-      // 0 = near one of my cities, 1 = same country, 2 = everywhere else.
-      const nearClauses = coords.map((p) => {
-        const latP = arg(p.latitude);
-        const lngP = arg(p.longitude);
-        return `(6371 * acos(least(1, greatest(-1,
-            cos(radians(${latP})) * cos(radians(e.latitude)) *
-            cos(radians(e.longitude) - radians(${lngP})) +
-            sin(radians(${latP})) * sin(radians(e.latitude))
-          )))) <= ${arg(NEAR_KM)}`;
-      });
-      const near = nearClauses.length
-        ? `(e.latitude is not null and e.longitude is not null and (${nearClauses.join(' or ')}))`
-        : 'false';
-      const sameCountry = countries.length
-        ? `(e.country is not null and e.country = any(${arg(countries)}))`
-        : 'false';
-      proximityTier = `(case when ${near} then 0 when ${sameCountry} then 1 else 2 end)`;
-    }
+    proximityTier = proximityTierSql(await memberPlaceAnchors(params.member.id), arg);
   }
 
   // Recommended ranking: near home first, then featured, then follow +

@@ -8,11 +8,17 @@
 // likely to be on when they think of a night we have not got.
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
+
+// The Archive is its own world — a wall of flyers and memories, browsed
+// rather than navigated. The footer's "add a night that's on" ask has nothing
+// to do with 1996, so it stays out of the way there.
+const NO_FOOTER = [/^\/archive(\/|$)/];
 
 export function SiteFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdmin: boolean }) {
   const router = useRouter();
+  const pathname = usePathname() ?? '';
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -60,6 +66,8 @@ export function SiteFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdm
     }
   }
 
+  if (NO_FOOTER.some((re) => re.test(pathname))) return null;
+
   const articleHref = isSignedIn ? '/articles/new' : '/login?next=/articles/new';
   const manualHref = isSignedIn ? '/events/submit/manual' : '/login?next=/events/submit/manual';
 
@@ -88,13 +96,14 @@ export function SiteFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdm
           </button>
         </form>
         {message && <p style={{ margin: '12px 0 0', color: 'var(--text-muted)' }}>{message}</p>}
-        <div style={{ marginTop: 10 }}>
-          <Link href={manualHref} className="btnGhost">Add manually</Link>
-        </div>
       </section>
 
       <nav className="siteFooterNav" aria-label="Guestlist footer">
         <Link href={articleHref}>Add article</Link>
+        {/* Filling the form in by hand lives next to writing a piece by hand —
+            both are the "I'll do it myself" route, and neither belongs as a
+            second button under the paste-a-link box. */}
+        <Link href={manualHref}>Add event</Link>
         <Link href="/events">Events</Link>
         <Link href="/balance">Balance</Link>
         <Link href="/terms">Terms &amp; Conditions</Link>

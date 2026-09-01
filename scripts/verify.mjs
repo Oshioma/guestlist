@@ -749,8 +749,10 @@ console.log('\n— Signup flow —');
   const header = await (await fresh.fetch('/events')).text();
   check('header no longer carries the + Add Event nav link',
     !header.includes('+ Add Event'));
-  check('events page carries the big Add an event panel',
-    header.includes('addEventCta') && header.includes('+ Add an event'));
+  check('events page carries the one Add an event box, the footer\u2019s',
+    header.includes('siteFooterAdd') && header.includes('Know something we\u2019re missing?'));
+  check('the old purple panel with no box is gone',
+    !header.includes('addEventCta'));
 }
 
 
@@ -907,9 +909,9 @@ console.log('\n— Country pages —');
       where l.country_name = 'United Kingdom' and e.status = 'live' and e.start_at > now()`
   );
   const page = await (await anon.fetch('/united-kingdom')).text();
-  check('a country page exists at its own slug', page.includes('Coming up in United Kingdom'));
+  check('a country page exists at its own slug', page.includes('Coming up in the United Kingdom'));
   check('it lists the cities in that country', page.includes('London'));
-  check('it offers somewhere to go next', page.includes('Beyond United Kingdom'));
+  check('it offers somewhere to go next', page.includes('Beyond the United Kingdom'));
   check('the country actually has events to show', uk.n > 0);
 
   check('a country nobody has cities in is a 404',
@@ -926,11 +928,11 @@ console.log('\n— Country pages —');
   const city = await (await anon.fetch('/london')).text();
   check('a city page names its own city first',
     city.indexOf('Coming up in London') > 0);
-  check('then the rest of that country', city.includes('Elsewhere in United Kingdom'));
-  check('then everywhere else', city.includes('Beyond United Kingdom'));
+  check('then the rest of that country', city.includes('Elsewhere in the United Kingdom'));
+  check('then everywhere else', city.includes('Beyond the United Kingdom'));
   check('the country comes before the world on a city page',
-    city.indexOf('Coming up in London') < city.indexOf('Elsewhere in United Kingdom')
-    && city.indexOf('Elsewhere in United Kingdom') < city.indexOf('Beyond United Kingdom'));
+    city.indexOf('Coming up in London') < city.indexOf('Elsewhere in the United Kingdom')
+    && city.indexOf('Elsewhere in the United Kingdom') < city.indexOf('Beyond the United Kingdom'));
   check('a city page links up to its country',
     city.includes('href="/united-kingdom"'));
   // The country shelf excludes the city you are already looking at, so a
@@ -1158,7 +1160,7 @@ console.log('\n— The footer, everywhere —');
 {
   // Pages a signed-out visitor actually gets a page for — /people redirects
   // to the sign-in, and a redirect has no body to carry a footer.
-  const pages = ['/', '/events', '/explore', '/balance', '/archive', '/login', '/terms'];
+  const pages = ['/', '/events', '/explore', '/balance', '/login', '/terms'];
   const bodies = {};
   for (const path of pages) bodies[path] = await (await anon.fetch(path)).text();
 
@@ -1166,18 +1168,147 @@ console.log('\n— The footer, everywhere —');
     pages.every((p) => bodies[p].includes('siteFooter')));
   check('and carries it exactly once',
     pages.every((p) => bodies[p].split('class="siteFooter"').length - 1 === 1));
+  // The Archive is browsed, not navigated — the "add a night that's on" ask
+  // has nothing to say about 1996.
+  check('the archive is left alone',
+    !(await (await anon.fetch('/archive')).text()).includes('siteFooterAdd'));
   check('the terms and privacy links are reachable from anywhere',
     pages.every((p) => bodies[p].includes('/terms') && bodies[p].includes('/privacy')));
   check('the add-an-event ask travels with it',
     bodies['/explore'].includes('Know something we’re missing?'));
-  check('but stands down where the page already asks',
-    bodies['/events'].includes('addEventCta'));
+  check('adding by hand is a footer link, not a second button under the box',
+    bodies['/explore'].includes('>Add event</a>')
+    && !bodies['/explore'].includes('Add manually'));
+  check('and the ask is the same one everywhere — no second panel',
+    bodies['/events'].includes('siteFooterAdd')
+    && !bodies['/events'].includes('addEventCta'));
 
   const signedIn = await (await nadia.fetch('/explore')).text();
   check('a signed-in member is offered the article link directly',
     signedIn.includes('href="/articles/new"'));
   check('a signed-out visitor is sent to sign in first',
     bodies['/explore'].includes('/login?next=/articles/new'));
+}
+
+
+// ---------------------------------------------------------------------------
+// Tonight is the most local question the site asks. It had no geography in it
+// at all — no ordering, a bare limit — so a member in London opened it and got
+// Spain.
+console.log('\n— Tonight, from where you are —');
+{
+  const londoner = client();
+  check('a Londoner signs in', (await londoner.login('dev-nadia@example.com')) === 200);
+
+  // One night in their city, one in their country, one a long way away — all
+  // inside the tonight window.
+  const [london] = await q(`select id, latitude, longitude from locations where slug = 'london'`);
+  const [ibiza] = await q(`select id from locations where lower(name) = 'ibiza'`);
+  const mk = (slug, title, city, country, locationId, lat, lng) => q(
+    `insert into events (slug, title, title_normalized, start_at, end_at, timezone, status,
+                         city, country, location_id, latitude, longitude, listing_status, published_at)
+     values ($1, $2, lower($2), now() + interval '3 hours', now() + interval '9 hours',
+             'Europe/London', 'live', $3, $4, $5, $6, $7, 'confirmed', now())
+     returning id`,
+    [slug, title, city, country, locationId, lat, lng]
+  );
+  const [here] = await mk('tonight-here', 'Tonight In London', 'London', 'United Kingdom',
+    london.id, london.latitude ?? 51.5074, london.longitude ?? -0.1278);
+  const [sameCountry] = await mk('tonight-country', 'Tonight In Glasgow', 'Glasgow', 'United Kingdom',
+    null, 55.8642, -4.2518);
+  const [faraway] = await mk('tonight-spain', 'Tonight In Ibiza', 'Ibiza', 'Spain',
+    ibiza?.id ?? null, 38.9067, 1.4206);
+
+  // Nadia's home city is London in the seed; make sure the anchor exists.
+  await q(`update members set home_location_id = $1 where email = 'dev-nadia@example.com'`,
+    [london.id]);
+
+  const page = await (await londoner.fetch('/clubmessenger')).text();
+  check('their own city is the first heading', page.includes('Tonight near London'));
+  check('the rest of their country is its own section',
+    page.includes('Elsewhere in the United Kingdom tonight'));
+  check('and another country is plainly labelled as such',
+    page.includes('Beyond the United Kingdom tonight'));
+  check('home comes before the country, which comes before the world',
+    page.indexOf('Tonight In London') < page.indexOf('Tonight In Glasgow')
+    && page.indexOf('Tonight In Glasgow') < page.indexOf('Tonight In Ibiza'));
+
+  // Being popular somewhere else never lifts it above home.
+  const [rob] = await q(`select id from members where email = 'dev-rob@example.com'`);
+  const [sophie] = await q(`select id from members where email = 'dev-sophie@example.com'`);
+  for (const m of [rob, sophie]) {
+    await q(`insert into member_event_actions (member_id, event_id, rsvp, rsvp_at)
+             values ($1, $2, 'going', now())
+             on conflict (member_id, event_id) do update set rsvp = 'going'`, [m.id, faraway.id]);
+  }
+  const busy = await (await londoner.fetch('/clubmessenger')).text();
+  check('a busier night abroad still sits below home',
+    busy.indexOf('Tonight In London') < busy.indexOf('Tonight In Ibiza'));
+
+  // A member who has never said where they live is asked, not guessed at.
+  const nowhere = client();
+  const nowhereEmail = `verify-placeless-${Date.now()}@example.com`;
+  await client().fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email: nowhereEmail, password: 'a-brand-new-password', displayName: 'Placeless Pat' }),
+  });
+  await nowhere.login(nowhereEmail, 'a-brand-new-password');
+  const unplaced = await (await nowhere.fetch('/clubmessenger')).text();
+  check('a member with no city is asked for one rather than sorted wrongly',
+    unplaced.includes('we don’t know where you are') && unplaced.includes('/you#places'));
+  check('and still sees what is on, under a plain heading',
+    unplaced.includes('Tonight In London') && !unplaced.includes('Tonight near'));
+
+  await q(`delete from events where slug like 'tonight-%'`);
+}
+
+
+// ---------------------------------------------------------------------------
+// A typed city has to become a real place, or nothing can put local events
+// first. And a blank one gets asked about rather than shrugged at.
+console.log('\n— Signing up with a city —');
+{
+  const signupPage = await (await anon.fetch('/signup')).text();
+  check('the city field says why it is there',
+    signupPage.includes('We put what’s on near you at the top'));
+  check('it is no longer labelled as an afterthought',
+    signupPage.includes('Your city') && !signupPage.includes('Home city (optional)'));
+  // The blank-city ask itself is client-side, so what the server page can
+  // prove is that the field invites a real answer.
+  check('the field invites a real city rather than a shrug',
+    signupPage.includes('London, Lagos, Dar es Salaam'));
+
+  const email = `verify-placed-${Date.now()}@example.com`;
+  check('somebody joins with a city',
+    (await client().fetch('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ email, password: 'a-brand-new-password', displayName: 'Placed Person', homeCity: 'London' }),
+    })).status === 200);
+  const [joined] = await q(
+    `select m.home_city, l.name as location_name, l.slug as location_slug
+       from members m left join locations l on l.id = m.home_location_id
+      where m.email = $1`, [email]
+  );
+  check('the city they typed is resolved to a real place, not just stored as text',
+    joined.home_city === 'London' && joined.location_slug === 'london');
+
+  // Which is the whole point: that member's Tonight now knows where they are.
+  const placed = client();
+  await placed.login(email, 'a-brand-new-password');
+  const theirTonight = await (await placed.fetch('/clubmessenger')).text();
+  check('and their Tonight starts from their own city',
+    theirTonight.includes('Tonight near London')
+    || !theirTonight.includes('we don’t know where you are'));
+
+  // A city we have never heard of is created rather than dropped.
+  const oddEmail = `verify-odd-city-${Date.now()}@example.com`;
+  await client().fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email: oddEmail, password: 'a-brand-new-password', displayName: 'Odd City', homeCity: 'Nungwi' }),
+  });
+  check('a city Guestlist has never seen is created, not discarded',
+    (await q(`select l.name from members m join locations l on l.id = m.home_location_id where m.email = $1`,
+      [oddEmail]))[0]?.name === 'Nungwi');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

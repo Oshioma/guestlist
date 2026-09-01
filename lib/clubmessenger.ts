@@ -22,6 +22,7 @@
 
 import { query, queryOne } from './db';
 import { closeFriendSql } from './connections';
+import { memberPlaceAnchors, proximityTierSql } from './proximity';
 
 export const CLUB_LIMITS = {
   messagesPerMinute: 12,
@@ -196,6 +197,9 @@ export type TonightEvent = {
   end_at: string | null;
   timezone: string;
   city: string | null;
+  country: string | null;
+  // 0 near one of my cities, 1 my country, 2 everywhere else. See lib/proximity.
+  proximity: number;
   venue_name: string | null;
   primary_image_url: string | null;
   listing_status: string;
@@ -214,10 +218,23 @@ const TONIGHT_WINDOW = `
   and coalesce(e.end_at, e.start_at + interval '6 hours') > now() - interval '2 hours'
 `;
 
+// TONIGHT, FROM WHERE YOU ARE.
+//
+// This list used to have no geography in it at all — no ordering, a bare
+// limit 40 — so a member in London opened it and got Spain. Tonight is the
+// most local question the site asks; it is answered near-first now, with the
+// same definition of "near" the events page uses.
 export async function tonightEvents(viewerId: string): Promise<TonightEvent[]> {
+  const args: unknown[] = [viewerId];
+  const arg = (v: unknown) => {
+    args.push(v);
+    return `$${args.length}`;
+  };
+  const tier = proximityTierSql(await memberPlaceAnchors(viewerId), arg);
   return query<TonightEvent>(
     `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
-            e.city, v.name as venue_name, e.primary_image_url, e.listing_status,
+            e.city, e.country, ${tier} as proximity,
+            v.name as venue_name, e.primary_image_url, e.listing_status,
             my.rsvp as my_rsvp,
             coalesce(fh.friends, '[]'::json) as friends_here,
             coalesce(fg.friends, '[]'::json) as friends_going,
@@ -258,8 +275,11 @@ export async function tonightEvents(viewerId: string): Promise<TonightEvent[]> {
           where mea.event_id = e.id and mea.rsvp = 'going'
        ) gc on true
       where ${TONIGHT_WINDOW}
-      limit 40`,
-    [viewerId]
+      -- Nearest first, then soonest. The page re-ranks within each tier on
+      -- who is out, but it never lifts another country above home.
+      order by proximity, e.start_at
+      limit 60`,
+    args
   );
 }
 
