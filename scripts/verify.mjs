@@ -490,6 +490,31 @@ console.log('\n— Signup flow —');
       none.includes('Rewind Sessions presents Jungle Mania') && none.includes('genreArt'));
   }
 
+  // Admin can drop optional sections out of the nav without a deploy; the
+  // pages stay reachable by URL.
+  {
+    check('non-admin cannot change site settings',
+      (await fresh.fetch('/api/admin/site', {
+        method: 'PATCH', body: JSON.stringify({ nav: { explore: false } }),
+      })).status === 403);
+
+    const off = await admin.fetch('/api/admin/site', {
+      method: 'PATCH', body: JSON.stringify({ nav: { explore: false, people: false } }),
+    });
+    check('admin turns Explore and People off', off.status === 200);
+    const hidden = await (await anon.fetch('/events')).text();
+    check('both vanish from the nav',
+      !hidden.includes('>Explore</a>') && !hidden.includes('>People</a>'));
+    check('the pages still load by URL',
+      (await anon.fetch('/explore')).status === 200);
+
+    await admin.fetch('/api/admin/site', {
+      method: 'PATCH', body: JSON.stringify({ nav: { explore: true, people: true } }),
+    });
+    const back = await (await anon.fetch('/events')).text();
+    check('turning them back on restores the nav', back.includes('>Explore</a>'));
+  }
+
   const you = await (await fresh.fetch('/you')).text();
   check('the You page offers the display-name field', you.includes('id="displayName"'));
   const header = await (await fresh.fetch('/events')).text();
