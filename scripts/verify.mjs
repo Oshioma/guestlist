@@ -497,11 +497,11 @@ console.log('\n— Sources admin —');
         JSON.stringify(dead));
   listing.close();
 
-  // A source an admin added is meant to be watched: it polls from the start.
+  // A source earns its schedule by producing an event, not by being added.
   const polls = await q(
     `select polling_enabled from event_sources where url = 'https://example.com/verification-source'`
   );
-  check('a newly added source polls from the start', polls[0]?.polling_enabled === true);
+  check('a newly added source does not poll until it proves itself', polls[0]?.polling_enabled === false);
 
   // The scheduled scan runs on GET too, because that is what Vercel Cron
   // sends — but only for an admin or the cron secret.

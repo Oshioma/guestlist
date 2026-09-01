@@ -30,6 +30,7 @@ type Candidate = {
 type ScanSummary = {
   status: string; extracted: number; candidatesFound: number;
   newCandidates: number; duplicates: number; failed: number; error: string | null;
+  startedPolling: boolean;
 };
 
 type RowState = {
@@ -307,9 +308,13 @@ export function SourceDiscovery({
                                   {row.scan.candidatesFound === 1 ? '' : 's'} · {row.scan.extracted} extracted ·{' '}
                                   {row.scan.duplicates} duplicate · {row.scan.failed} failed
                                   {row.scan.extracted > 0 ? (
-                                    <> — <a href="/admin/events?state=new" style={{ textDecoration: 'underline' }}>review →</a></>
+                                    <>
+                                      {row.scan.startedPolling && <> · now polling</>}
+                                      {' — '}
+                                      <a href="/admin/events?state=new" style={{ textDecoration: 'underline' }}>review →</a>
+                                    </>
                                   ) : (
-                                    <> — nothing readable on those pages yet</>
+                                    <> — nothing readable on those pages yet, so it stays off the schedule</>
                                   )}
                                 </>
                               ) : (row.scan.error ?? 'Scan failed')}

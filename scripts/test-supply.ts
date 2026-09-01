@@ -973,6 +973,60 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  console.log('\n— a source earns its polling schedule —');
+  {
+    const mk = async (name: string, url: string) => (await q(
+      `insert into event_sources (source_type, name, url, trust) values ('promoter_website', $1, $2, 'trusted') returning id`,
+      [name, url]
+    ))[0] as { id: string };
+    const polling = async (id: string) => ((await q(`select polling_enabled from event_sources where id = $1`, [id]))[0] as { polling_enabled: boolean }).polling_enabled;
+
+    const listing = (host: string) => `<html><body><main>
+      <a href="${host}/events/earned-night">Earned Night — ${futureDate}</a></main></body></html>`;
+    const eventProposal = {
+      is_event: true, is_music_event: true, title: 'Earned Night',
+      start_date: FUTURE.toISOString().slice(0, 10), start_time: '22:00',
+      city: 'Leeds', country: 'United Kingdom',
+      genres: [{ name: 'Techno', confidence: 88 }],
+      field_confidence: { title: 90, date: 88, city: 85, genres: 85 },
+    };
+
+    // A scan that finds nothing leaves the source off the schedule.
+    const quiet = await mk('Quiet source', 'https://quiet-earner.example/whats-on');
+    const quietScan = await scanSource(quiet.id, {
+      fetcher: mockFetcher({ 'https://quiet-earner.example/whats-on': { body: '<html><body><main><a href="/about">About</a></main></body></html>' } }),
+      ai: noAI, delayMs: 1,
+    });
+    check('a scan that finds nothing does not start polling',
+      quietScan.startedPolling === false && (await polling(quiet.id)) === false);
+
+    // A scan that brings back an event does.
+    const good = await mk('Earning source', 'https://earner.example/whats-on');
+    const goodScan = await scanSource(good.id, {
+      fetcher: mockFetcher({
+        'https://earner.example/whats-on': { body: listing('https://earner.example') },
+        'https://earner.example/events/earned-night': { body: '<html><title>Earned Night</title><body><main>x</main></body></html>' },
+      }),
+      ai: mockAI({ 'https://earner.example/events/earned-night': eventProposal }),
+      delayMs: 1,
+    });
+    check('the first productive scan starts polling',
+      goodScan.extracted === 1 && goodScan.startedPolling === true && (await polling(good.id)) === true);
+
+    // Once the admin has had their say, nothing here overrides it: an admin
+    // who switches polling off does not get it switched back on by a rescan.
+    await q(`update event_sources set polling_enabled = false where id = $1`, [good.id]);
+    const rescan = await scanSource(good.id, {
+      fetcher: mockFetcher({
+        'https://earner.example/whats-on': { body: listing('https://earner.example') },
+      }),
+      ai: noAI, delayMs: 1,
+    });
+    check('a later scan never overrides the admin turning polling off',
+      rescan.startedPolling === false && (await polling(good.id)) === false);
+  }
+
+  // -------------------------------------------------------------------------
   console.log('\n— finding the real listing page when a suggested path misses —');
   {
     const home = `<html><body>
