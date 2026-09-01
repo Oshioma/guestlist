@@ -3,6 +3,7 @@ import { query, queryOne } from '@/lib/db';
 import { createSession, hashPassword, setSessionCookie } from '@/lib/auth';
 import { memberSlug } from '@/lib/members';
 import { notifyAdminsNewMember } from '@/lib/adminNotify';
+import { findOrCreateCity } from '@/lib/locations';
 
 export async function POST(req: NextRequest) {
   const data = await req.json().catch(() => ({}));
@@ -35,6 +36,20 @@ export async function POST(req: NextRequest) {
   );
   await query(`update members set slug = $2 where id = $1`,
     [member!.id, memberSlug(displayName, member!.id)]);
+
+  // A typed city has to become a real place, or it is decoration. Everything
+  // that puts local events first — Tonight, the events ranking, city alerts —
+  // reads home_location_id, not this free-text field, so resolving it here is
+  // the difference between "we know where you are" and not.
+  if (homeCity) {
+    try {
+      const location = await findOrCreateCity({ name: homeCity });
+      await query(`update members set home_location_id = $2 where id = $1`, [member!.id, location.id]);
+    } catch (err) {
+      // A place we cannot resolve is not a reason to fail somebody's signup.
+      console.error('could not resolve signup city', err);
+    }
+  }
 
   // The admins hear about it. Never blocking: a notification that cannot be
   // written must not stop somebody joining.

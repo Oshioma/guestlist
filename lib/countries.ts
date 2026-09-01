@@ -112,6 +112,21 @@ export function canonicalCountry(raw: string | null | undefined): string | null 
 export const COUNTRY_ALIAS_SQL_PAIRS: [string, string][] =
   [...Object.entries(ALIASES), ...Object.entries(ISO_CODES)].map(([from, to]) => [from, to]);
 
+// Countries whose names take "the": you go to Spain, but you go to THE
+// Netherlands. A sentence like "Elsewhere in United Kingdom" is the kind of
+// small wrongness that makes a site feel machine-written.
+const TAKES_THE = new Set([
+  'United Kingdom', 'United States', 'United Arab Emirates', 'Netherlands',
+  'Philippines', 'Bahamas', 'Maldives', 'Gambia', 'Czech Republic',
+  'Dominican Republic', 'Democratic Republic of the Congo', 'Republic of the Congo',
+  'Ivory Coast', 'Seychelles', 'Comoros', 'Solomon Islands', 'Marshall Islands',
+  'Cayman Islands', 'Falkland Islands', 'Faroe Islands',
+]);
+
+export function countryWithArticle(name: string): string {
+  return TAKES_THE.has(name) ? `the ${name}` : name;
+}
+
 // A country's own page lives at /netherlands, /united-kingdom, /cote-d-ivoire.
 // Diacritics and apostrophes are folded out so the URL is typeable.
 export function countrySlug(name: string): string {

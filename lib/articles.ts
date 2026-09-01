@@ -1,5 +1,5 @@
 import { query, queryOne } from './db';
-import { notifyAdminsNewArticle } from './adminNotify';
+import { notifyAdminsArticleEdited, notifyAdminsNewArticle } from './adminNotify';
 
 export type Article = {
   id:string; section_slug:string; section_name:string; author_id:string; author_name:string; author_slug:string|null; author_avatar_url:string|null;
@@ -47,6 +47,10 @@ export async function updateDraft(id:string,authorId:string,p:ArticlePatch){
   if(['archived','rejected'].includes(current.status)) throw new Error('This article can no longer be edited');
   await snapshot(current,authorId); const x=normalizedPatch(current,p);
   await query(`update articles set title=$3, subtitle=$4, excerpt=$5, body=$6, article_type=$7, hero_image_url=$8, hero_image_alt=$9, image_provider=$10, image_credit=$11, image_source_url=$12, tags=$13, reading_minutes=$14, updated_at=now() where id=$1 and author_id=$2`,[id,authorId,x.title,x.subtitle,x.excerpt,x.body,x.article_type,x.hero_image_url,x.hero_image_alt,x.image_provider,x.image_credit,x.image_source_url,x.tags,x.reading_minutes]);
+  // Changing a draft nobody has seen is nobody's business but the author's.
+  // Changing something already published, approved, or on the editorial desk
+  // is — the piece is out in the world under Guestlist's name.
+  if (['submitted','approved','published'].includes(current.status)) await notifyAdminsArticleEdited(id);
   return getAuthorArticle(id,authorId);
 }
 export async function deleteAuthorArticle(id:string,authorId:string){

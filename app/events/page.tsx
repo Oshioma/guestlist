@@ -10,7 +10,6 @@ import { FilterControls } from '@/components/FilterControls';
 import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
 import { toRecCards } from '@/lib/recCards';
 import { PicksHero } from '@/components/PicksHero';
-import { AddEventCta } from '@/components/AddEventCta';
 import { AskPanel } from '@/components/ask/AskPanel';
 
 export const dynamic = 'force-dynamic';
@@ -224,6 +223,9 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
             <Link href={buildQS({ tab: 'travel', genre: null, city: null, date: null })} className="btnGhost">
               Browse destinations
             </Link>
+            {/* The most useful answer to "nothing matched" is often that the
+                night exists and we have not got it yet. */}
+            <Link href="/events/submit/manual" className="btnGhost">Add an event</Link>
           </div>
         </div>
       )}
@@ -232,7 +234,6 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
           the list hasn't answered it. */}
       <AskPanel isSignedIn={!!member} />
 
-      <AddEventCta city={city} />
     </main>
   );
 }
