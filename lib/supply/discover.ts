@@ -77,6 +77,8 @@ export const DISCOVERY_SYSTEM_PROMPT = `You help Guestlist, a curated platform f
 
 Given a country (sometimes a city) and a list of genres, list real clubs, promoters, festivals and independent listings sites in that place that programme those genres, and the page on their own website that lists what is coming up.
 
+MATCHING RULE: a place qualifies if it regularly programmes ANY ONE of the requested genres. It does not have to cover them all, or even most of them — one is enough. A drum & bass club belongs in the results of a search that lists house, techno and drum & bass.
+
 RULES:
 - Only places you actually know exist. A shorter list of real venues is far better than a long list padded with plausible-sounding names. Never invent a club, a promoter or a festival.
 - "url" must be the page that lists upcoming events (e.g. https://example.com/events, /whats-on, /programme). If you do not know that path, give the homepage instead — never guess a path you have not seen.
@@ -92,7 +94,7 @@ export function buildDiscoveryUser(req: DiscoveryRequest): string {
   return [
     `Country: ${req.country}`,
     req.city ? `City: ${req.city}` : 'City: anywhere in the country',
-    `Genres: ${req.genres.length ? req.genres.join(', ') : 'any dance music'}`,
+    `Genres (any one of these is enough): ${req.genres.length ? req.genres.join(', ') : 'any dance music'}`,
     `Return at most ${req.limit} candidates.`,
   ].join('\n');
 }

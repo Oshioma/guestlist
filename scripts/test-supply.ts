@@ -30,7 +30,8 @@ import { mapGenreProposals, loadGenres } from '@/lib/supply/genres';
 import { computeOverallConfidence, canAutoPublish } from '@/lib/supply/confidence';
 import { runExtractionPipeline } from '@/lib/supply/pipeline';
 import { scanSource, identifyCandidateLinks, parseFeedLinks, canonicaliseCandidateUrl } from '@/lib/supply/scanner';
-import { discoverSources, normaliseCandidates, isBannedCandidateHost, type DiscoveryClient } from '@/lib/supply/discover';
+import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
+import { matchGenreIdsByName } from '@/lib/util';
 import { isLiveSource } from '@/lib/supply/health';
 import { testVerdict } from '@/lib/supply/verdict';
 import { parse } from 'node-html-parser';
@@ -944,6 +945,25 @@ async function main() {
     ] }, req);
     check('malformed and duplicate suggestions are dropped',
       junk.length === 1 && junk[0].url === 'https://dupe.example/events');
+
+    // Any ONE of the requested genres is enough to qualify a place: a drum &
+    // bass club belongs in the results of a house/techno/d&b search.
+    check('the request tells the model any one genre is enough',
+      buildDiscoveryUser({ ...req, genres: ['House', 'Techno'] }).includes('any one of these is enough'));
+    check('the system prompt states the any-of matching rule',
+      /ANY ONE of the requested genres/.test(DISCOVERY_SYSTEM_PROMPT)
+      && /does not have to cover them all/i.test(DISCOVERY_SYSTEM_PROMPT));
+
+    // What an added source gets TAGGED with comes from the candidate itself,
+    // matched against our own taxonomy — never a name we do not have.
+    const taxonomy = [
+      { id: '11111111-1111-1111-1111-111111111111', name: 'House' },
+      { id: '22222222-2222-2222-2222-222222222222', name: 'Drum & Bass' },
+    ];
+    check('candidate genres map onto our taxonomy',
+      matchGenreIdsByName(['house', ' Drum & Bass '], taxonomy).length === 2);
+    check('unknown genre names are dropped, not invented',
+      matchGenreIdsByName(['Polka', 'House'], taxonomy).join() === taxonomy[0].id);
 
     const unavailable = await discoverSources(req, { available: false, async propose() { return { ok: false, detail: 'no key' }; } });
     check('discovery says so when no API key is configured', !unavailable.ok && unavailable.error === 'unavailable');

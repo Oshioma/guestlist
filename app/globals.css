@@ -1022,6 +1022,18 @@ button { font-family: inherit; }
   color: var(--text-muted);
   margin-bottom: 5px;
 }
+.discoverPanel .linkBtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 11.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  text-decoration: underline;
+  cursor: pointer;
+}
 @media (max-width: 640px) {
   .discoverForm { grid-template-columns: 1fr; }
 }

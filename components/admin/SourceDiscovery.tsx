@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GenrePicker, type GenreOpt } from '@/components/admin/GenrePicker';
 import { probeLabel, testVerdict, type ProbeResult } from '@/lib/supply/verdict';
-import { sourceTypeLabel } from '@/lib/util';
+import { matchGenreIdsByName, sourceTypeLabel } from '@/lib/util';
 
 type Candidate = {
   name: string;
@@ -47,7 +47,10 @@ export function SourceDiscovery({
   const [open, setOpen] = useState(false);
   const [country, setCountry] = useState('');
   const [city, setCity] = useState('');
-  const [genreIds, setGenreIds] = useState<string[]>([]);
+  // Everything on by default: the usual search is "what is on in this country
+  // at all", and narrowing is the deliberate act, not widening.
+  const [genreIds, setGenreIds] = useState<string[]>(genres.map((g) => g.id));
+  const allSelected = genreIds.length === genres.length;
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState('');
   const [searched, setSearched] = useState(false);
@@ -113,6 +116,16 @@ export function SourceDiscovery({
     setTestingAll(false);
   }
 
+  // What the source gets TAGGED with is not the search filter. When the whole
+  // taxonomy is selected, tagging a club with thirty genres would say nothing;
+  // so prefer the genres the candidate itself was described with, and fall
+  // back to the search selection only when it was a deliberate narrowing.
+  function tagsFor(c: Candidate): string[] {
+    const own = matchGenreIdsByName(c.genres, genres);
+    if (own.length) return own;
+    return allSelected ? [] : genreIds;
+  }
+
   async function add(c: Candidate) {
     setRow(c.url, { adding: true, error: '' });
     try {
@@ -125,7 +138,7 @@ export function SourceDiscovery({
           sourceType: c.kind,
           city: c.city,
           country: c.country,
-          genreIds,
+          genreIds: tagsFor(c),
           notes: c.note,
         }),
       });
@@ -173,7 +186,16 @@ export function SourceDiscovery({
                      placeholder="e.g. Dar es Salaam" maxLength={80} />
             </div>
           </div>
-          <label style={{ display: 'block', marginTop: 10 }}>Genres</label>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 10 }}>
+            <label style={{ margin: 0 }}>Genres</label>
+            <button
+              type="button"
+              className="linkBtn"
+              onClick={() => setGenreIds(allSelected ? [] : genres.map((g) => g.id))}
+            >
+              {allSelected ? 'Clear all' : 'Select all'}
+            </button>
+          </div>
           <GenrePicker genres={genres} selected={genreIds} onChange={setGenreIds} wrap />
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
             <button className="btnAccent" type="button" onClick={search} disabled={searching}>
