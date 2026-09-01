@@ -1151,6 +1151,35 @@ console.log('\n— Finding missing flyers —');
   await new Promise((r) => fixtures.close(r));
 }
 
+
+// ---------------------------------------------------------------------------
+// The footer belongs to the site, not to the homepage.
+console.log('\n— The footer, everywhere —');
+{
+  // Pages a signed-out visitor actually gets a page for — /people redirects
+  // to the sign-in, and a redirect has no body to carry a footer.
+  const pages = ['/', '/events', '/explore', '/balance', '/archive', '/login', '/terms'];
+  const bodies = {};
+  for (const path of pages) bodies[path] = await (await anon.fetch(path)).text();
+
+  check('every page carries the footer',
+    pages.every((p) => bodies[p].includes('siteFooter')));
+  check('and carries it exactly once',
+    pages.every((p) => bodies[p].split('class="siteFooter"').length - 1 === 1));
+  check('the terms and privacy links are reachable from anywhere',
+    pages.every((p) => bodies[p].includes('/terms') && bodies[p].includes('/privacy')));
+  check('the add-an-event ask travels with it',
+    bodies['/explore'].includes('Know something we’re missing?'));
+  check('but stands down where the page already asks',
+    bodies['/events'].includes('addEventCta'));
+
+  const signedIn = await (await nadia.fetch('/explore')).text();
+  check('a signed-in member is offered the article link directly',
+    signedIn.includes('href="/articles/new"'));
+  check('a signed-out visitor is sent to sign in first',
+    bodies['/explore'].includes('/login?next=/articles/new'));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

@@ -21,7 +21,6 @@ import { HomeTonight } from '@/components/HomeTonight';
 import { AskPanel } from '@/components/ask/AskPanel';
 import { BalanceHomeSection } from '@/components/balance/BalanceHomeSection';
 import { optional } from '@/lib/resilient';
-import { HomeFooter } from '@/components/HomeFooter';
 
 export const dynamic = 'force-dynamic';
 
@@ -296,7 +295,6 @@ export default async function HomePage() {
         )}
 
         <BalanceHomeSection />
-        <HomeFooter isSignedIn={!!member} isAdmin={member?.role === 'admin'} />
       </div>
     </main>
   );
