@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import './globals.css';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
+import { SetYourCity } from '@/components/SetYourCity';
 import { getCurrentMember } from '@/lib/auth';
 
 export const metadata: Metadata = {
@@ -22,6 +23,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" data-theme={theme}>
       <body>
         <SiteHeader />
+        {/* A member with no resolved place is, to Guestlist, nowhere. Asked
+            once a visit until they answer — see components/SetYourCity. */}
+        {member && !member.home_location_id && <SetYourCity />}
         {children}
         <SiteFooter isSignedIn={!!member} isAdmin={member?.role === 'admin'} />
       </body>

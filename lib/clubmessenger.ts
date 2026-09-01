@@ -203,6 +203,9 @@ export type TonightEvent = {
   venue_name: string | null;
   primary_image_url: string | null;
   listing_status: string;
+  // Carried for the homepage band, which reads this same list (lib/tonight).
+  featured: boolean;
+  genres: { name: string; slug: string }[];
   my_rsvp: string | null;
   friends_here: { id: string; display_name: string; avatar_url: string | null; status: string | null; is_close?: boolean }[];
   friends_going: { id: string; display_name: string; avatar_url: string | null; is_close?: boolean }[];
@@ -212,7 +215,9 @@ export type TonightEvent = {
 
 // The tonight window: events live + listable that overlap "tonight" —
 // started up to 12h ago (still running) through starting in the next 24h.
-const TONIGHT_WINDOW = `
+// Exported because the homepage band shows the same night: see lib/tonight,
+// which is where both surfaces read Tonight from.
+export const TONIGHT_WINDOW = `
   e.status = 'live' and e.listing_status <> 'cancelled'
   and e.start_at < now() + interval '24 hours'
   and coalesce(e.end_at, e.start_at + interval '6 hours') > now() - interval '2 hours'
@@ -235,6 +240,7 @@ export async function tonightEvents(viewerId: string): Promise<TonightEvent[]> {
     `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
             e.city, e.country, ${tier} as proximity,
             v.name as venue_name, e.primary_image_url, e.listing_status,
+            e.featured, coalesce(gj.genres, '[]'::json) as genres,
             my.rsvp as my_rsvp,
             coalesce(fh.friends, '[]'::json) as friends_here,
             coalesce(fg.friends, '[]'::json) as friends_going,
@@ -242,6 +248,11 @@ export async function tonightEvents(viewerId: string): Promise<TonightEvent[]> {
             coalesce(gc.n, 0) as going_count
        from events e
        left join venues v on v.id = e.venue_id
+       left join lateral (
+         select json_agg(json_build_object('name', g.name, 'slug', g.slug) order by g.sort_order) as genres
+           from event_genres eg join genres g on g.id = eg.genre_id
+          where eg.event_id = e.id
+       ) gj on true
        left join member_event_actions my
          on my.member_id = $1 and my.event_id = e.id
        left join lateral (
@@ -295,19 +306,28 @@ export type TonightPublicEvent = {
   end_at: string | null;
   timezone: string;
   city: string | null;
+  country: string | null;
   venue_name: string | null;
   primary_image_url: string | null;
   listing_status: string;
+  featured: boolean;
+  genres: { name: string; slug: string }[];
   going_count: number;
 };
 
 export async function tonightEventsPublic(): Promise<TonightPublicEvent[]> {
   return query<TonightPublicEvent>(
     `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
-            e.city, v.name as venue_name, e.primary_image_url, e.listing_status,
+            e.city, e.country, v.name as venue_name, e.primary_image_url, e.listing_status,
+            e.featured, coalesce(gj.genres, '[]'::json) as genres,
             coalesce(gc.n, 0) as going_count
        from events e
        left join venues v on v.id = e.venue_id
+       left join lateral (
+         select json_agg(json_build_object('name', g.name, 'slug', g.slug) order by g.sort_order) as genres
+           from event_genres eg join genres g on g.id = eg.genre_id
+          where eg.event_id = e.id
+       ) gj on true
        left join lateral (
          select count(*)::int as n from member_event_actions mea
           where mea.event_id = e.id and mea.rsvp = 'going'

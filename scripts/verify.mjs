@@ -1410,6 +1410,118 @@ console.log('\n— Picking a city that has events —');
   await q(`delete from locations where slug = 'paris-verify'`);
 }
 
+
+// ---------------------------------------------------------------------------
+// Tonight is on TWO pages. They must not drift — that is exactly how the
+// Tonight page came to show a member their own city first while the homepage
+// carried on showing Spain.
+console.log('\n— Tonight, in both places at once —');
+{
+  const [london] = await q(`select id, latitude, longitude from locations where slug = 'london'`);
+  await q(`update members set home_location_id = $1 where email = 'dev-nadia@example.com'`, [london.id]);
+  const mk = (slug, title, city, country, loc, lat, lng) => q(
+    `insert into events (slug, title, title_normalized, start_at, end_at, timezone, status,
+                         city, country, location_id, latitude, longitude, listing_status, published_at)
+     values ($1, $2, lower($2), now() + interval '3 hours', now() + interval '9 hours',
+             'Europe/London', 'live', $3, $4, $5, $6, $7, 'confirmed', now())`,
+    [slug, title, city, country, loc, lat, lng]
+  );
+  await mk('both-home', 'Both Home Night', 'London', 'United Kingdom', london.id, 51.5074, -0.1278);
+  await mk('both-away', 'Both Away Night', 'Ibiza', 'Spain', null, 38.9067, 1.4206);
+
+  const viewer = client();
+  await viewer.login('dev-nadia@example.com');
+  const home = await (await viewer.fetch('/')).text();
+  const tonightPage = await (await viewer.fetch('/clubmessenger')).text();
+
+  const firstOf = (html) => {
+    const h = html.indexOf('Both Home Night');
+    const a = html.indexOf('Both Away Night');
+    return h === -1 || a === -1 ? null : (h < a ? 'home' : 'away');
+  };
+  check('the homepage band shows tonight', firstOf(home) !== null);
+  check('the Tonight page shows tonight', firstOf(tonightPage) !== null);
+  check('both put the member’s own city first — the same rule, one place',
+    firstOf(home) === 'home' && firstOf(tonightPage) === 'home');
+
+  await q(`delete from events where slug like 'both-%'`);
+}
+
+// ---------------------------------------------------------------------------
+// A member has a home city AND cities they follow. A followed city is
+// somewhere they chose to care about, so it comes after home and before the
+// rest of their country.
+console.log('\n— Cities you follow come next —');
+{
+  const [london] = await q(`select id, latitude, longitude from locations where slug = 'london'`);
+  const [followed] = await q(
+    `insert into locations (kind, name, normalized_name, slug, country_code, country_name, timezone, latitude, longitude)
+     values ('city', 'Lagos', 'lagos', 'lagos-verify', 'NG', 'Nigeria', 'Africa/Lagos', 6.5244, 3.3792)
+     on conflict (kind, normalized_name, country_code) do update set name = 'Lagos'
+     returning id, latitude, longitude`
+  );
+  const mk = (slug, title, city, country, loc, lat, lng) => q(
+    `insert into events (slug, title, title_normalized, start_at, end_at, timezone, status,
+                         city, country, location_id, latitude, longitude, listing_status, published_at)
+     values ($1, $2, lower($2), now() + interval '4 hours', now() + interval '10 hours',
+             'Europe/London', 'live', $3, $4, $5, $6, $7, 'confirmed', now())`,
+    [slug, title, city, country, loc, lat, lng]
+  );
+  await mk('follow-home', 'Follow Home Night', 'London', 'United Kingdom', london.id, 51.5074, -0.1278);
+  await mk('follow-followed', 'Follow Lagos Night', 'Lagos', 'Nigeria', followed.id, 6.5244, 3.3792);
+  await mk('follow-country', 'Follow Glasgow Night', 'Glasgow', 'United Kingdom', null, 55.8642, -4.2518);
+  await mk('follow-away', 'Follow Ibiza Night', 'Ibiza', 'Spain', null, 38.9067, 1.4206);
+
+  const [me] = await q(`select id from members where email = 'dev-nadia@example.com'`);
+  await q(`update members set home_location_id = $2 where id = $1`, [me.id, london.id]);
+  await q(`insert into member_locations (member_id, location_id) values ($1, $2)
+           on conflict do nothing`, [me.id, followed.id]);
+
+  const viewer2 = client();
+  await viewer2.login('dev-nadia@example.com');
+  const page2 = await (await viewer2.fetch('/clubmessenger')).text();
+
+  check('a city they follow gets a section of its own',
+    page2.includes('Tonight in the cities you follow'));
+  check('home, then followed, then the rest of the country, then the world',
+    page2.indexOf('Follow Home Night') < page2.indexOf('Follow Lagos Night')
+    && page2.indexOf('Follow Lagos Night') < page2.indexOf('Follow Glasgow Night')
+    && page2.indexOf('Follow Glasgow Night') < page2.indexOf('Follow Ibiza Night'));
+
+  await q(`delete from member_locations where member_id = $1 and location_id = $2`, [me.id, followed.id]);
+  await q(`delete from events where slug like 'follow-%'`);
+  await q(`delete from locations where slug = 'lagos-verify'`);
+}
+
+// ---------------------------------------------------------------------------
+// A member with no resolved place is, to Guestlist, nowhere. Ask them.
+console.log('\n— Asking members with no city —');
+{
+  const email = `verify-nocity-${Date.now()}@example.com`;
+  await client().fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'a-brand-new-password', displayName: 'No City Nate' }),
+  });
+  const placeless = client();
+  await placeless.login(email, 'a-brand-new-password');
+
+  const page = await (await placeless.fetch('/events')).text();
+  check('a member with no city is asked for one', page.includes('Where are you?'));
+  check('and the ask goes somewhere that can answer it', page.includes('/you#places'));
+
+  // Once they have a place, the ask stops — it is not a permanent fixture.
+  const [london] = await q(`select id from locations where slug = 'london'`);
+  await q(`update members set home_location_id = $2 where email = $1`, [email, london.id]);
+  check('once they have a city, they are not asked again',
+    !(await (await placeless.fetch('/events')).text()).includes('Where are you?'));
+
+  // And it never interrupts the page that answers it.
+  await q(`update members set home_location_id = null where email = $1`, [email]);
+  const you = await (await placeless.fetch('/you')).text();
+  check('it stays out of the way on the page that sets it',
+    you.includes('gl_city_prompt_dismissed') === false || !you.includes('Where are you?'));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

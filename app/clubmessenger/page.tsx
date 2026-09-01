@@ -19,7 +19,8 @@ import { AutoRefresh } from '@/components/clubmessenger/AutoRefresh';
 import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
 import { NotificationsPanel } from '@/components/clubmessenger/NotificationsPanel';
 import { HeatCardLink } from '@/components/clubmessenger/HeatCardLink';
-import { TIER_NEAR, TIER_COUNTRY, TIER_ELSEWHERE, TIER_UNKNOWN, tierHeading } from '@/lib/proximity';
+import { tierHeading } from '@/lib/proximity';
+import { rankTonight, tonightGroups, knowsWhereTheyAre, homeCountryFrom } from '@/lib/tonight';
 import { EventImage } from '@/components/EventImage';
 
 export const dynamic = 'force-dynamic';
@@ -103,36 +104,18 @@ export default async function ClubMessengerPage() {
   ]);
   const heat = await heatForEvents(events.map((e) => e.id));
 
-  // Home first, always. Who is out and how hot a room is decide the order
-  // WITHIN where you are — they never lift another country above your own,
-  // which is how a member in London opened Tonight and got Spain.
-  const ranked = [...events].sort((a, b) => {
-    const diff =
-      a.proximity - b.proximity ||
-      b.friends_here.length - a.friends_here.length ||
-      b.friends_going.length - a.friends_going.length ||
-      Number(b.my_rsvp === 'going') - Number(a.my_rsvp === 'going') ||
-      Number(b.my_rsvp === 'interested') - Number(a.my_rsvp === 'interested') ||
-      (heat.get(b.id)?.heat ?? 0) - (heat.get(a.id)?.heat ?? 0);
-    return diff || new Date(a.start_at).getTime() - new Date(b.start_at).getTime();
-  });
+  // Home first, always. The rule itself lives in lib/tonight, because the
+  // homepage band shows this same list and the two must not drift.
+  const ranked = rankTonight(events, heat);
 
   // Where the member says they are, for the headings. Their own country beats
   // the country of whatever happens to be first in the list.
   const home = {
     city: member.home_city ?? null,
-    country: ranked.find((e) => e.proximity === TIER_NEAR)?.country
-      ?? ranked.find((e) => e.proximity === TIER_COUNTRY)?.country
-      ?? member.home_country ?? null,
+    country: homeCountryFrom(ranked, member.home_country ?? null),
   };
-  // A member who has never told us where they live gets one plain list and a
-  // line asking, rather than headings that pretend to know.
-  const knowsWhereIAm = ranked.some((e) => e.proximity !== TIER_UNKNOWN);
-  const groups = knowsWhereIAm
-    ? [TIER_NEAR, TIER_COUNTRY, TIER_ELSEWHERE]
-        .map((tier) => ({ tier, events: ranked.filter((e) => e.proximity === tier) }))
-        .filter((g) => g.events.length > 0)
-    : [{ tier: -1, events: ranked }];
+  const knowsWhereIAm = knowsWhereTheyAre(ranked);
+  const groups = tonightGroups(ranked);
 
   const friendsOut = new Map<string, { name: string; event: TonightEvent }>();
   for (const e of events) {
