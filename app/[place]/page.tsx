@@ -5,7 +5,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
-import { getLocationBySlug } from '@/lib/locations';
+import { getCountryBySlug, getLocationBySlug } from '@/lib/locations';
+import { countrySlug } from '@/lib/countries';
+import { placeEventCards } from '@/lib/placeEvents';
+import { CountryView } from './CountryView';
 import { query } from '@/lib/db';
 import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
 import { toRecCards } from '@/lib/recCards';
@@ -22,11 +25,22 @@ export const dynamic = 'force-dynamic';
 export default async function PlacePage({ params }: { params: Promise<{ place: string }> }) {
   const { place } = await params;
   const location = await getLocationBySlug(place);
+  // A city row wins the slug — Singapore and Luxembourg are cities we list
+  // before they are countries. Anything else that names a country we hold
+  // cities in gets the country page, and a location row filed as a country
+  // gets it too rather than an empty city page.
+  if (!location || location.kind === 'country') {
+    const country = await getCountryBySlug(place);
+    if (country) return <CountryView country={country} />;
+  }
   if (!location) notFound();
   const member = await getCurrentMember();
+  const country = location.country_name ?? null;
+  const countryHref = country ? `/${countrySlug(country)}` : null;
 
   const weekend = weekendWindow();
-  const [events, weekendPicks, forYou, promoters, venues, genres, memberFollowsCity] = await Promise.all([
+  const [events, weekendPicks, forYou, promoters, venues, genres, memberFollowsCity,
+         restOfCountry, beyondCountry] = await Promise.all([
     query<EventCardType>(
       `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
               e.city, e.country, e.event_type, e.price_from, e.price_to, e.currency,
@@ -81,6 +95,13 @@ export default async function PlacePage({ params }: { params: Promise<{ place: s
       ? query(`select 1 from member_locations where member_id = $1 and location_id = $2`,
           [member.id, location.id]).then((r) => r.length > 0)
       : Promise.resolve(false),
+    // Somebody looking at one city wants that city first, then the rest of
+    // the country they are already in, and only then the world. Two shelves
+    // below the grid, rather than a mixed list that buries what is local.
+    country
+      ? placeEventCards({ countryNames: [country], excludeLocationId: location.id, limit: 8 })
+      : Promise.resolve([]),
+    placeEventCards({ excludeCountryNames: country ? [country] : null, limit: 8 }),
   ]);
 
   if (member) {
@@ -102,7 +123,9 @@ export default async function PlacePage({ params }: { params: Promise<{ place: s
       <div className="cityHead">
         <div>
           <div className="homeKicker">
-            {[location.country_name, location.timezone].filter(Boolean).join(' · ')}
+            {countryHref && country
+              ? <><Link href={countryHref} style={{ textDecoration: 'underline' }}>{country}</Link>{location.timezone ? ` · ${location.timezone}` : ''}</>
+              : [location.country_name, location.timezone].filter(Boolean).join(' · ')}
           </div>
           <h1 className="pageTitle" style={{ margin: 0 }}>{location.name}</h1>
         </div>
@@ -177,6 +200,34 @@ export default async function PlacePage({ params }: { params: Promise<{ place: s
             </div>
           )}
         </div>
+      )}
+
+      {restOfCountry.length > 0 && country && (
+        <>
+          <div className="homeSectionHead">
+            <h2 className="homeSectionTitle">{`Elsewhere in ${country}`}</h2>
+            {countryHref && <Link href={countryHref} className="btnGhost">{`All of ${country} →`}</Link>}
+          </div>
+          <div className="cardGrid" style={{ paddingBottom: 26 }}>
+            {restOfCountry.map((e) => (
+              <EventCard key={e.id} event={e} saved={savedIds.has(e.id)} isSignedIn={!!member} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {beyondCountry.length > 0 && (
+        <>
+          <div className="homeSectionHead">
+            <h2 className="homeSectionTitle">{country ? `Beyond ${country}` : 'Everywhere else'}</h2>
+            <Link href="/explore" className="btnGhost">Explore the world →</Link>
+          </div>
+          <div className="cardGrid" style={{ paddingBottom: 26 }}>
+            {beyondCountry.map((e) => (
+              <EventCard key={e.id} event={e} saved={savedIds.has(e.id)} isSignedIn={!!member} />
+            ))}
+          </div>
+        </>
       )}
 
       <AddEventCta city={location.name} />

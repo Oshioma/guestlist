@@ -33,7 +33,7 @@ import { scanSource, identifyCandidateLinks, parseFeedLinks, canonicaliseCandida
 import { explainScan, outcomeLabel } from '@/lib/supply/outcomes';
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
-import { canonicalCountry } from '@/lib/countries';
+import { canonicalCountry, countrySlug } from '@/lib/countries';
 import { isLiveSource } from '@/lib/supply/health';
 import { findListingLink } from '@/lib/supply/probe';
 import { testVerdict } from '@/lib/supply/verdict';
@@ -997,6 +997,20 @@ async function main() {
       && canonicalCountry('UAE') === 'United Arab Emirates');
     check('blank is null, not an empty country',
       canonicalCountry('   ') === null && canonicalCountry(null) === null);
+    // Two letters is never a country's real name — and /explore falls back to
+    // a location's country_code, which is how a bare "IT" reached the screen.
+    check('an ISO code becomes the country it stands for',
+      canonicalCountry('IT') === 'Italy' && canonicalCountry('it') === 'Italy'
+      && canonicalCountry('NL') === 'Netherlands' && canonicalCountry('ci') === "Côte d'Ivoire");
+    check('a country page slug is typeable',
+      countrySlug('United Kingdom') === 'united-kingdom'
+      && countrySlug('Italy') === 'italy'
+      && countrySlug("Côte d'Ivoire") === 'cote-d-ivoire');
+    check('every alias and code lands on a name that slugs back to itself',
+      ['UK', 'england', 'IT', 'italia', 'USA', 'nl'].every((v) => {
+        const name = canonicalCountry(v)!;
+        return canonicalCountry(name) === name && countrySlug(name).length > 1;
+      }));
   }
 
   // -------------------------------------------------------------------------
