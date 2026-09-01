@@ -12,7 +12,8 @@
     "db:reset": "node scripts/migrate.mjs --reset && node scripts/seed.mjs",
     "verify": "node scripts/verify.mjs",
     "test:supply": "tsx scripts/test-supply.ts",
-    "verify:v2b": "node scripts/verify-v2b.mjs"
+    "verify:v2b": "node scripts/verify-v2b.mjs",
+    "schema:snapshot": "node scripts/schema-snapshot.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

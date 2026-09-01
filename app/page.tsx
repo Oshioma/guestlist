@@ -20,6 +20,7 @@ import { EventImage } from '@/components/EventImage';
 import { HomeTonight } from '@/components/HomeTonight';
 import { AskPanel } from '@/components/ask/AskPanel';
 import { BalanceHomeSection } from '@/components/balance/BalanceHomeSection';
+import { optional } from '@/lib/resilient';
 import { HomeFooter } from '@/components/HomeFooter';
 
 export const dynamic = 'force-dynamic';
@@ -28,13 +29,16 @@ export const dynamic = 'force-dynamic';
 // magazine, not an admin dashboard.
 async function MemberHome({ member }: { member: { id: string; display_name: string; role: 'member' | 'admin' } }) {
   const weekend = weekendWindow();
+  // Every band below is secondary to "here is your Guestlist": picks, your
+  // people, your scene, your places, your trips. One of them failing hides
+  // that band; it must never blank the page.
   const [weekendPicks, picks, yourPeople, danced, places, travel] = await Promise.all([
-    getRecommendedEvents(member.id, { limit: 4, from: weekend.from, to: weekend.to, exploration: false }),
-    getRecommendedEvents(member.id, { limit: 6 }),
-    yourPeopleUpcoming(member.id, { from: weekend.from, to: weekend.to, limit: 8 }),
-    peopleYouMayHaveDancedWith(member.id, 4),
-    memberPlaces(member.id),
-    query<{ id: string; name: string; slug: string; start_date: string; end_date: string; n: number }>(
+    optional('home:weekendPicks', () => getRecommendedEvents(member.id, { limit: 4, from: weekend.from, to: weekend.to, exploration: false }), []),
+    optional('home:picks', () => getRecommendedEvents(member.id, { limit: 6 }), []),
+    optional('home:yourPeople', () => yourPeopleUpcoming(member.id, { from: weekend.from, to: weekend.to, limit: 8 }), []),
+    optional('home:danced', () => peopleYouMayHaveDancedWith(member.id, 4), []),
+    optional('home:places', () => memberPlaces(member.id), []),
+    optional('home:travel', () => query<{ id: string; name: string; slug: string; start_date: string; end_date: string; n: number }>(
       `select tp.id, l.name, l.slug, tp.start_date::text, tp.end_date::text,
               (select count(*)::int from events e
                 where e.location_id = tp.location_id and e.status = 'live'
@@ -44,14 +48,15 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
         where tp.member_id = $1 and tp.end_date >= current_date
         order by tp.start_date limit 3`,
       [member.id]
-    ),
+    ), []),
   ]);
   const hour = new Date().getUTCHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const firstName = member.display_name.split(' ')[0];
   const weekendIds = new Set(weekendPicks.map((e) => e.id));
   const laterPicks = picks.filter((e) => !weekendIds.has(e.id)).slice(0, 4);
-  await trackRecommendationImpressions(member.id, [...weekendPicks, ...laterPicks], 'home');
+  await optional('home:impressions',
+    () => trackRecommendationImpressions(member.id, [...weekendPicks, ...laterPicks], 'home'), undefined);
 
   return (
     <section className="wrap myGuestlist">
@@ -157,6 +162,9 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
 
 export default async function HomePage() {
   const member = await getCurrentMember();
+  // browseEvents is the page's reason to exist, so it is deliberately NOT
+  // wrapped: an empty homepage pretending all is well would be worse than an
+  // error. The chips and the promoter row beside it are decoration.
   const [events, genres, promoters] = await Promise.all([
     browseEvents({
       tab: 'for-you',
@@ -164,16 +172,16 @@ export default async function HomePage() {
       member: member ? { id: member.id, home_country: member.home_country } : null,
       limit: 6,
     }),
-    getTopLevelGenres(),
-    listPromoters({ sort: 'popular', limit: 4 }),
+    optional('home:genres', () => getTopLevelGenres(), []),
+    optional('home:promoters', () => listPromoters({ sort: 'popular', limit: 4 }), []),
   ]);
   const savedIds = new Set<string>(
     member
       ? (
-          await query<{ event_id: string }>(
+          await optional('home:saved', () => query<{ event_id: string }>(
             `select event_id from member_event_actions where member_id = $1 and saved_at is not null`,
             [member.id]
-          )
+          ), [])
         ).map((r) => r.event_id)
       : []
   );

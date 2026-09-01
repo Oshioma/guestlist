@@ -43,7 +43,13 @@ const GROUPS: { name: string; items: Item[] }[] = [
       { href: '/admin/guestlist-x', label: '@guestlist' },
     ],
   },
-  { name: 'System', items: [{ href: '/admin/site', label: 'Site' }] },
+  {
+    name: 'System',
+    items: [
+      { href: '/admin/site', label: 'Site' },
+      { href: '/admin/schema', label: 'Database' },
+    ],
+  },
 ];
 
 export function AdminNav() {

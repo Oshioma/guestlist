@@ -973,6 +973,32 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  console.log('\n— schema expectations snapshot —');
+  {
+    // The admin audit reads a generated snapshot, because the .sql files are
+    // not in the serverless bundle. This is what stops it going stale: add a
+    // migration without running `npm run schema:snapshot` and this fails.
+    const { readExpectations, renderSnapshot } = await import('./schema-snapshot.mjs');
+    const fresh = renderSnapshot(readExpectations());
+    const committed = readFileSync(path.join(root, 'lib', 'schemaExpectations.ts'), 'utf8');
+    check('lib/schemaExpectations.ts matches the migrations on disk', fresh === committed,
+      'run: npm run schema:snapshot');
+
+    const { EXPECTED_TABLES, EXPECTED_COLUMNS } = await import('@/lib/schemaExpectations');
+    check('the snapshot covers the tables the homepage needs',
+      EXPECTED_TABLES.includes('homepage_feed_suppressions')
+      && EXPECTED_TABLES.includes('events') && EXPECTED_TABLES.includes('articles'));
+    check('the snapshot covers columns added by later migrations',
+      EXPECTED_COLUMNS.includes('events.listing_status')
+      && EXPECTED_COLUMNS.includes('members.slug'));
+    // member_connections.tier was added in 006 and dropped again in 008.
+    // Expecting a column the schema deliberately no longer has would make
+    // the audit cry wolf, and an audit nobody believes is worse than none.
+    check('a column added and later dropped is not expected',
+      !EXPECTED_COLUMNS.includes('member_connections.tier'));
+  }
+
+  // -------------------------------------------------------------------------
   console.log('\n— a source earns its polling schedule —');
   {
     const mk = async (name: string, url: string) => (await q(
