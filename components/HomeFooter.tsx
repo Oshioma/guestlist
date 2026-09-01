@@ -10,6 +10,11 @@ export function HomeFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdm
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
+  function sendToManual(value: string, error: string) {
+    const qs = new URLSearchParams({ url: value, importError: error });
+    router.push(`/events/submit/manual?${qs.toString()}`);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const value = url.trim();
@@ -24,8 +29,11 @@ export function HomeFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdm
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
-        const qs = new URLSearchParams({ url: value, importError: data.error || 'Import failed' });
-        router.push(`/events/submit/manual?${qs.toString()}`);
+        sendToManual(value, data.error || 'Import failed');
+        return;
+      }
+      if (data.outcome === 'checking') {
+        sendToManual(value, 'We could not read enough event information from that page automatically.');
         return;
       }
       if (data.outcome === 'duplicate') {
@@ -39,8 +47,7 @@ export function HomeFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdm
       setMessage(data.message || 'Thanks — your event has been submitted for review.');
       setUrl('');
     } catch {
-      const qs = new URLSearchParams({ url: value, importError: 'Import failed' });
-      router.push(`/events/submit/manual?${qs.toString()}`);
+      sendToManual(value, 'Import failed');
     } finally {
       setBusy(false);
     }
