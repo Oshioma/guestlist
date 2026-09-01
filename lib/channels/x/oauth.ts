@@ -14,7 +14,7 @@ import { query, queryOne } from '../../db';
 import { getSetting, setSetting } from '../../settings';
 import { encryptToken } from './client';
 
-const SITE = process.env.SITE_URL ?? 'https://www.clubguestlists.com';
+const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 export const X_SCOPES = ['tweet.read', 'tweet.write', 'users.read', 'offline.access', 'media.write'];
 
 function redirectUri(): string {

@@ -25,15 +25,19 @@ import { processAnnouncements } from '@/lib/announcements';
 
 export const maxDuration = 300;
 
-function secretMatches(header: string | null): boolean {
-  const secret = process.env.SUPPLY_CRON_SECRET;
+function matches(header: string | null, secret: string | undefined): boolean {
   if (!secret || !header?.startsWith('Bearer ')) return false;
   const provided = Buffer.from(header.slice(7));
   const expected = Buffer.from(secret);
   return provided.length === expected.length && timingSafeEqual(provided, expected);
 }
 
-export async function POST(req: NextRequest) {
+// SUPPLY_CRON_SECRET is ours; CRON_SECRET is the one Vercel Cron sends.
+function secretMatches(header: string | null): boolean {
+  return matches(header, process.env.SUPPLY_CRON_SECRET) || matches(header, process.env.CRON_SECRET);
+}
+
+async function run(req: NextRequest) {
   if (!secretMatches(req.headers.get('authorization'))) {
     const member = await getCurrentMember();
     if (member?.role !== 'admin') {
@@ -104,3 +108,7 @@ export async function POST(req: NextRequest) {
     ...delivery,
   });
 }
+
+// Vercel Cron sends GET; an external scheduler can keep using POST.
+export const POST = run;
+export const GET = run;

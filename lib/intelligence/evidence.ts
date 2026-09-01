@@ -9,7 +9,7 @@ import {
   type ArchiveEvidence, type EvidencePack, type EventEvidence, emptyEvidence,
 } from './types';
 
-const SITE = process.env.SITE_URL ?? 'https://www.clubguestlists.com';
+const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 
 function dateLabel(iso: string, timezone: string): string {
   return new Date(iso).toLocaleDateString('en-GB', {

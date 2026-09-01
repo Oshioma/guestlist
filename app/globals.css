@@ -973,6 +973,32 @@ button { font-family: inherit; }
 }
 .adminTableWrap { overflow-x: auto; }
 
+/* A quiet aside inside an auth card — the old-Guestlist explanation, and
+   anything else that answers "why didn't that work?" without shouting. */
+.authNote {
+  margin-top: 18px;
+  padding: 14px 15px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 13.5px;
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.authNote p { margin: 0; color: var(--text-muted); }
+.linkBtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent-ink, var(--accent));
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* ADMIN → DATABASE: the verdict has to be readable at a glance, because the
    whole point is noticing before visitors do. */
 .schemaVerdict {

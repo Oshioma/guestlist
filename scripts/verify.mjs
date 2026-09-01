@@ -512,6 +512,86 @@ console.log('\n— Sources admin —');
 }
 
 // ---------------------------------------------------------------------------
+console.log('\n— Forgotten password —');
+{
+  // A member of its own, so resetting a password does not sign out the
+  // shared fixtures the rest of this file is still using.
+  const email = `reset-${Date.now()}@example.com`;
+  const guest = client();
+  await guest.fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'first-password-1', displayName: 'Reset Tester', homeCity: 'London' }),
+  });
+
+  const forgotPage = await (await fetch(`${BASE}/forgot`)).text();
+  check('the forgot page explains the old Guestlist', forgotPage.includes('old Guestlist'));
+  check('and offers creating an account instead', forgotPage.includes('Create an account'));
+  const loginPage = await (await fetch(`${BASE}/login`)).text();
+  check('login links to the reset flow', loginPage.includes('/forgot'));
+
+  // The reply must never reveal whether an address is a member: Guestlist is
+  // a members' club, and "no such account" would let anyone check who is on it.
+  const known = await anon.fetch('/api/auth/forgot', { method: 'POST', body: JSON.stringify({ email }) });
+  const unknown = await anon.fetch('/api/auth/forgot', {
+    method: 'POST', body: JSON.stringify({ email: 'nobody-at-all@example.com' }),
+  });
+  check('a known address gets a bland confirmation', known.status === 200);
+  check('an unknown address is answered identically', unknown.status === 200);
+  check('the two replies are byte-identical', (await known.text()) === (await unknown.text()));
+  check('an empty address is rejected',
+        (await anon.fetch('/api/auth/forgot', { method: 'POST', body: JSON.stringify({}) })).status === 400);
+
+  const rows = await q(
+    `select pr.token_hash, pr.used_at, pr.expires_at > now() as live
+       from password_resets pr join members m on m.id = pr.member_id
+      where m.email = $1 order by pr.created_at desc`, [email]
+  );
+  check('a reset was recorded for the real member', rows.length === 1);
+  check('the stored token is a sha256 hash, not the token itself',
+        /^[0-9a-f]{64}$/.test(rows[0]?.token_hash ?? ''));
+  check('it is live and unused', rows[0]?.live === true && rows[0]?.used_at === null);
+  check('nothing was recorded for the unknown address',
+        (await q(`select count(*)::int as n from password_resets pr
+                    join members m on m.id = pr.member_id where m.email = $1`,
+                 ['nobody-at-all@example.com']))[0].n === 0);
+
+  const mail = await q(
+    `select body_text from email_outbox
+      where email_type = 'transactional_password_reset' order by created_at desc limit 1`
+  );
+  check('a reset email was queued', mail.length === 1);
+  const token = (mail[0]?.body_text ?? '').match(/[?&]token=([A-Za-z0-9_-]+)/)?.[1];
+  check('the email carries a reset link', !!token);
+
+  check('a made-up token is refused',
+        (await anon.fetch('/api/auth/reset', {
+          method: 'POST', body: JSON.stringify({ token: 'not-a-real-token', password: 'longenough1' }),
+        })).status === 410);
+  check('a short password is refused',
+        (await anon.fetch('/api/auth/reset', {
+          method: 'POST', body: JSON.stringify({ token, password: 'short' }),
+        })).status === 400);
+
+  const resetter = client();
+  check('the reset succeeds',
+        (await resetter.fetch('/api/auth/reset', {
+          method: 'POST', body: JSON.stringify({ token, password: 'a-brand-new-password' }),
+        })).status === 200);
+  check('and signs you straight in', (await resetter.fetch('/you')).status === 200);
+  check('the same link cannot be used twice',
+        (await anon.fetch('/api/auth/reset', {
+          method: 'POST', body: JSON.stringify({ token, password: 'another-password-1' }),
+        })).status === 410);
+
+  check('the old password no longer works',
+        (await client().login(email, 'first-password-1')) === 401);
+  check('the new password does',
+        (await client().login(email, 'a-brand-new-password')) === 200);
+  check('every other session was signed out by the reset',
+        (await guest.fetch('/you')).status !== 200);
+}
+
+// ---------------------------------------------------------------------------
 // A missing table once took the whole homepage down with a server-side
 // exception, and nothing said so until visitors found it.
 console.log('\n— Database audit + homepage resilience —');

@@ -7,7 +7,7 @@ import { query, queryOne } from '@/lib/db';
 import { audit, notifyPromoter } from '@/lib/audit';
 import { queueMemberTransactional } from '@/lib/email';
 
-const SITE = process.env.SITE_URL ?? 'https://www.clubguestlists.com';
+const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 
 // Claim decisions go straight to the claimant (there may be no promoter
 // team yet at this point).

@@ -16,7 +16,7 @@ import { getSetting, setSetting } from './settings';
 import { queueEmail, renderEmailHtml, unsubscribeUrl } from './email';
 import { fmtEventDate, fmtEventTime } from './util';
 
-const SITE = process.env.SITE_URL ?? 'https://www.clubguestlists.com';
+const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 
 // ---------------------------------------------------------------------------
 // Central caps — admin-adjustable in one place (system_settings), never

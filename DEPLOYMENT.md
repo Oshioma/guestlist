@@ -60,7 +60,7 @@ fictional test data and it truncates tables.
 | `DATABASE_URL` | the **pooler** connection string (port 6543) |
 | `SESSION_SECRET` | a long random string — `openssl rand -hex 32` |
 | `ANTHROPIC_API_KEY` | *(optional but recommended)* an Anthropic API key from console.anthropic.com — enables AI extraction; without it, imports run structured-data-only and everything lands in admin review |
-| `CRON_SECRET` | another `openssl rand -hex 32` — **required for scheduled source scans.** Vercel Cron only sends an `Authorization` header when this variable exists, and the job rejects unauthenticated calls, so without it the schedule runs and gets 401s silently |
+| `CRON_SECRET` | another `openssl rand -hex 32` — **required for the scheduled jobs.** Supabase sends it as a bearer token (step 7); the job endpoints reject unauthenticated calls |
 | `SUPPLY_CRON_SECRET` | *(optional)* the same idea, for an external scheduler you drive yourself |
 
    Never set `SUPPLY_FETCH_ALLOW_HOSTS` in production (dev/test only).
@@ -75,7 +75,7 @@ hosting entirely — the landing page now lives at `/` inside the app.
 
 ## 6. Create your admin account
 
-1. Visit `https://guestlist.net/signup` and register normally.
+1. Visit `https://www.guestlist.net/signup` and register normally.
 2. In the SQL editor:
 
 ```sql
@@ -84,25 +84,92 @@ update members set role = 'admin' where lower(email) = lower('you@guestlist.net'
 
 3. Reload the site — an **Admin** link appears in the header.
 
-## 7. Schedule source polling
+## 7. Schedule the background jobs (Supabase)
 
-`vercel.json` already schedules `/api/jobs/scan-sources` every six hours, so
-there is nothing to install — but it only works once `CRON_SECRET` is set in
-the project's environment variables (step 4). Vercel attaches that value as a
-bearer token on the cron request; with no value set, no header is sent, and
-the job answers 401 and scans nothing.
+Scheduling lives in **Supabase**, not Vercel: Vercel's Hobby plan only runs a
+cron once a day, and these jobs want to run hourly. Supabase drives them with
+`pg_cron` + `pg_net`, which also means the schedule is visible and editable in
+the same place as the data.
+
+In Supabase → *Database* → *Extensions*, enable **pg_cron** and **pg_net**.
+Then, in the SQL editor (once — replace the secret with the value of
+`CRON_SECRET`, and the domain with your own):
+
+```sql
+-- The bearer token lives in Vault, not in the job definition, so it is not
+-- readable from cron.job by anyone who can read the schedule. Written as a
+-- block that can be re-run: vault.create_secret fails on a name that already
+-- exists, which is a confusing error to meet the second time round.
+do $$
+declare v_id uuid;
+begin
+  select id into v_id from vault.secrets where name = 'guestlist_cron_secret';
+  if v_id is null then
+    perform vault.create_secret(
+      'PASTE_THE_CRON_SECRET_HERE', 'guestlist_cron_secret',
+      'Bearer token for Guestlist job endpoints');
+  else
+    perform vault.update_secret(v_id, 'PASTE_THE_CRON_SECRET_HERE');
+  end if;
+end $$;
+
+select cron.schedule('guestlist-scan-sources', '0 */6 * * *', $job$
+  select net.http_post(
+    url := 'https://www.guestlist.net/api/jobs/scan-sources',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (
+        select decrypted_secret from vault.decrypted_secrets where name = 'guestlist_cron_secret'
+      )
+    ),
+    body := '{}'::jsonb
+  );
+$job$);
+
+select cron.schedule('guestlist-send-emails', '0 * * * *', $job$
+  select net.http_post(
+    url := 'https://www.guestlist.net/api/jobs/send-emails',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || (
+        select decrypted_secret from vault.decrypted_secrets where name = 'guestlist_cron_secret'
+      )
+    ),
+    body := '{}'::jsonb
+  );
+$job$);
+```
+
+Keep the token in Vault as above rather than writing it into the job body.
+A token pasted straight into `cron.schedule` sits in plaintext in `cron.job`,
+readable by anyone with database access and easy to copy out by accident.
+
+To check it is running:
+
+```sql
+select jobname, schedule, active from cron.job;
+select j.jobname, r.status, r.start_time, r.return_message
+  from cron.job_run_details r join cron.job j on j.jobid = r.jobid
+ order by r.start_time desc limit 20;
+```
+
+A `401` in `return_message` means the token does not match `CRON_SECRET` (or
+`SUPPLY_CRON_SECRET`) in the Vercel environment. To see what is stored:
+`select name, decrypted_secret from vault.decrypted_secrets where name = 'guestlist_cron_secret';` To change a schedule, call
+`cron.schedule` again with the same job name; `select cron.unschedule('guestlist-scan-sources');`
+removes one.
+
+Both endpoints accept GET and POST, so any external scheduler (cron-job.org,
+a GitHub Actions schedule, a server crontab) works too:
+
+```
+*/30 * * * *  curl -s -X POST https://www.guestlist.net/api/jobs/scan-sources \
+                -H "Authorization: Bearer $SUPPLY_CRON_SECRET"
+```
 
 A source is only scanned on that schedule once it is polling, and a source
 starts polling when its first scan actually brings back an event. Add it,
 **Scan now**, and it puts itself on the schedule.
-
-Any external scheduler still works if you prefer one — cron-job.org, a
-GitHub Actions schedule, a server crontab:
-
-```
-*/30 * * * *  curl -s -X POST https://guestlist.net/api/jobs/scan-sources \
-                -H "Authorization: Bearer $SUPPLY_CRON_SECRET"
-```
 
 ## 8. Smoke test
 

@@ -20,7 +20,7 @@ import { getSafetySwitches } from './settings';
 import { getRecommendedEvents, reasonText, weekendWindow, type RecommendedEvent } from './recommend';
 import { fmtEventDate } from './util';
 
-const SITE = process.env.SITE_URL ?? 'https://www.clubguestlists.com';
+const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 
 export const EMAIL_LIMITS = {
   maxAttempts: 3,

@@ -27,6 +27,7 @@ export const MIGRATION_FILES: string[] = [
   '020_homepage_feed_suppressions.sql',
   '021_memory_attendance.sql',
   '022_sitemap_scan_method.sql',
+  '023_password_resets.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
@@ -99,6 +100,7 @@ export const EXPECTED_TABLES: string[] = [
   'members',
   'notification_preferences',
   'notifications',
+  'password_resets',
   'promoter_announcement_audit',
   'promoter_announcements',
   'promoter_claims',

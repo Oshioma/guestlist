@@ -48,7 +48,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     // the inviter can share it directly.
     const invitee = await queryOne<{ id: string }>(
       `select id from members where lower(email) = $1`, [email]);
-    const site = process.env.SITE_URL ?? 'https://www.clubguestlists.com';
+    const site = process.env.SITE_URL ?? 'https://www.guestlist.net';
     await queueMemberTransactional({
       memberId: invitee?.id ?? null,
       email,
