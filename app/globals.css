@@ -812,6 +812,67 @@ button { font-family: inherit; }
 /* ---------- admin ---------- */
 
 .adminShell { padding-bottom: 100px; }
+
+/* Admin bar: grouped, wrapping, and it tells you where you are. */
+.adminNav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 0 14px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--border);
+}
+.adminNavBrand {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+.adminNavGroups { display: flex; flex-wrap: wrap; gap: 6px 18px; flex: 1; min-width: 0; }
+.adminNavGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 18px;
+  border-right: 1px solid var(--border);
+}
+.adminNavGroup:last-child { border-right: none; padding-right: 0; }
+.adminNavGroupLabel {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-right: 4px;
+}
+.adminNavLink {
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+.adminNavLink:hover { background: var(--surface); color: var(--text); }
+.adminNavLink.active { background: var(--accent); color: var(--on-accent); }
+.adminNavNew {
+  margin-left: auto;
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.adminNavNew:hover { border-color: var(--accent); color: var(--accent-ink); }
+@media (max-width: 720px) {
+  .adminNavGroup { border-right: none; padding-right: 0; }
+  .adminNavNew { margin-left: 0; }
+}
 .adminTitle {
   font-size: 30px;
   letter-spacing: -0.6px;
