@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { query } from '@/lib/db';
 import { ReviewCard, type AdminEventRow } from '@/components/admin/ReviewCard';
+import { PublishAll } from '@/components/admin/PublishAll';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,6 +102,10 @@ export default async function AdminEventsPage({
           </Link>
         ))}
       </div>
+
+      {(state === 'new' || state === 'needs_review') && events.length > 0 && (
+        <PublishAll state={state} count={events.length} />
+      )}
 
       {events.length === 0 ? (
         <p className="adminSub">Nothing in this queue.</p>

@@ -2739,3 +2739,25 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
   cursor: pointer;
 }
 .eventLinkerResults button:hover:not(:disabled) { background: var(--surface-hover); }
+
+/* PUBLISH ALL — the bar above the review queue. Loud enough to find, calm
+   enough that nobody presses it by accident: the confirm step is what makes
+   it safe, so the first press only ever asks. */
+.publishAllBar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  margin: 0 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.publishAllText { display: grid; gap: 3px; min-width: 220px; flex: 1 1 320px; }
+.publishAllText strong { font-size: 15px; }
+.publishAllText span { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.publishAllDone { color: var(--text) !important; font-weight: 600; }
+.publishAllError { color: var(--danger) !important; font-weight: 600; }
+.publishAllActions { display: flex; gap: 8px; flex-wrap: wrap; }

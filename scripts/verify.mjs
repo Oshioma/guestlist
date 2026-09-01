@@ -831,6 +831,72 @@ console.log('\n— Articles ↔ events —');
     (await q(`select count(*)::int as n from article_events where event_id = $1`, [hidden.id]))[0].n === 0);
 }
 
+
+// ---------------------------------------------------------------------------
+// Publish all: the review queue cleared in one press, without sweeping up
+// the two things a person still has to decide about.
+console.log('\n— Publish all —');
+{
+  const bulk = client();
+  check('admin login', (await bulk.login('oshi@guestlist.net')) === 200);
+
+  const mk = (title) => q(
+    `insert into events (slug, title, title_normalized, start_at, timezone, status, city, country)
+     values ($1, $2, lower($2), now() + interval '20 days', 'Europe/London', 'new', 'Leeds', 'United Kingdom')
+     returning id`,
+    [`bulk-${title}`, `Bulk ${title}`]
+  );
+
+  const [ok1] = await mk('one');
+  const [ok2] = await mk('two');
+  const [dupTarget] = await mk('target');
+  const [flagged] = await q(
+    `insert into events (slug, title, title_normalized, start_at, timezone, status, city, country, possible_duplicate_of)
+     values ('bulk-flagged', 'Bulk Flagged', 'bulk flagged', now() + interval '21 days', 'Europe/London', 'new', 'Leeds', 'United Kingdom', $1)
+     returning id`, [dupTarget.id]
+  );
+  const [finished] = await q(
+    `insert into events (slug, title, title_normalized, start_at, end_at, timezone, status, city, country)
+     values ('bulk-finished', 'Bulk Finished', 'bulk finished', now() - interval '9 days', now() - interval '9 days' + interval '5 hours', 'Europe/London', 'new', 'Leeds', 'United Kingdom')
+     returning id`
+  );
+
+  const queue = await (await bulk.fetch('/admin/events?state=new')).text();
+  check('the review queue offers publish all', queue.includes('Publish all'));
+  check('the bar says what it will skip',
+    queue.includes('flagged as a possible duplicate'));
+
+  check('a member cannot publish a queue',
+    (await nadia.fetch('/api/admin/events/publish-all', { method: 'POST', body: JSON.stringify({ state: 'new' }) })).status === 403);
+  check('rejected is not a queue anyone can bulk-publish',
+    (await bulk.fetch('/api/admin/events/publish-all', { method: 'POST', body: JSON.stringify({ state: 'rejected' }) })).status === 400);
+
+  const res = await bulk.fetch('/api/admin/events/publish-all', {
+    method: 'POST', body: JSON.stringify({ state: 'new' }),
+  });
+  const out = await res.json();
+  check('publishing the queue reports what it did',
+    res.status === 200 && out.published >= 3 && out.skippedDuplicates >= 1 && out.skippedPast >= 1);
+
+  const after = await q(
+    `select id, status::text from events where id = any($1::uuid[])`,
+    [[ok1.id, ok2.id, flagged.id, finished.id]]
+  );
+  const statusOf = (id) => after.find((r) => r.id === id)?.status;
+  check('the clean ones went live',
+    statusOf(ok1.id) === 'live' && statusOf(ok2.id) === 'live');
+  check('a flagged duplicate was left for a person to decide',
+    statusOf(flagged.id) === 'new');
+  check('an event that already finished was left alone',
+    statusOf(finished.id) === 'new');
+  check('publishing stamped published_at',
+    (await q(`select published_at from events where id = $1`, [ok1.id]))[0].published_at !== null);
+  check('the bulk publish is in the audit log',
+    (await q(`select count(*)::int as n from audit_log where action = 'events_bulk_published'`))[0].n > 0);
+
+  await q(`delete from events where slug like 'bulk-%'`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

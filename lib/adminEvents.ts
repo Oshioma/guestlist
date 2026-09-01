@@ -2,6 +2,7 @@
 // wiring, dedupe flagging, publish transitions.
 
 import { onEventPublished } from './alerts';
+import { audit } from './audit';
 import { findOrCreateCity } from './locations';
 import { query, queryOne } from './db';
 import { checkForDuplicate } from './dedupe';
@@ -256,4 +257,74 @@ export async function updateEvent(
   if (input.status === 'live') void onEventPublished(id);
   await syncRelations(id, input as EventInput);
   return { ok: true };
+}
+
+// PUBLISH ALL — the review queue, cleared in one go.
+//
+// Reviewing a hundred imported events one card at a time is the reason good
+// events sit unpublished for days. This publishes a whole queue, but it is
+// deliberately not a blunt "set everything live":
+//
+// - Only the NEW and NEEDS REVIEW queues can be bulk-published. Rejected is a
+//   decision someone made; it is not undone by a convenience button.
+// - Anything the engine flagged as a possible duplicate is left behind. A
+//   duplicate published in bulk is a mess someone has to unpick by hand.
+// - Events that have already finished are left behind too — publishing them
+//   puts nothing in front of anybody.
+// - It works from the queue as the server sees it, never from a list of ids
+//   the browser sends, so it cannot be pointed at anything else.
+//
+// The cap is real work per event (alerts for members who follow the city,
+// promoter or genre), so a big queue takes more than one press and says so.
+export const PUBLISH_ALL_LIMIT = 100;
+
+export type PublishAllResult = {
+  published: number;
+  skippedDuplicates: number;
+  skippedPast: number;
+  remaining: number;
+};
+
+export async function publishQueue(
+  state: 'new' | 'needs_review',
+  adminId: string
+): Promise<PublishAllResult> {
+  if (state !== 'new' && state !== 'needs_review') {
+    return { published: 0, skippedDuplicates: 0, skippedPast: 0, remaining: 0 };
+  }
+
+  const queue = await query<{ id: string; is_duplicate: boolean; is_past: boolean }>(
+    `select id,
+            possible_duplicate_of is not null as is_duplicate,
+            coalesce(end_at, start_at + interval '6 hours') <= now() as is_past
+       from events where status = $1::event_status`,
+    [state]
+  );
+  const publishable = queue.filter((e) => !e.is_duplicate && !e.is_past);
+  const batch = publishable.slice(0, PUBLISH_ALL_LIMIT);
+
+  if (batch.length) {
+    await query(
+      `update events
+          set status = 'live'::event_status,
+              published_at = coalesce(published_at, now()),
+              updated_at = now()
+        where id = any($1::uuid[])`,
+      [batch.map((e) => e.id)]
+    );
+    await audit('events_bulk_published', {
+      actorId: adminId,
+      detail: { state, count: batch.length },
+    });
+    // Alerts are per event by design — the fatigue and dedupe rules in the
+    // alert engine are what stop a bulk publish becoming a bulk email.
+    for (const e of batch) await onEventPublished(e.id);
+  }
+
+  return {
+    published: batch.length,
+    skippedDuplicates: queue.filter((e) => e.is_duplicate).length,
+    skippedPast: queue.filter((e) => !e.is_duplicate && e.is_past).length,
+    remaining: publishable.length - batch.length,
+  };
 }
