@@ -5,6 +5,7 @@
 
 import { parse, HTMLElement } from 'node-html-parser';
 import type { FieldSource } from './schema';
+import { pickPageImage } from './images';
 
 export type StructuredField<T> = { value: T; source: FieldSource; confidence: number };
 
@@ -218,14 +219,25 @@ export function inspectPage(html: string, pageUrl: string, maxTextChars = 14000)
   const organizerUrl =
     organizer && typeof organizer === 'object' ? abs(str(organizer.url)) : null;
 
-  const ogImage = abs(meta(root, 'meta[property="og:image"]', 'meta[property="og:image:url"]', 'meta[name="twitter:image"]'));
+  const ogImage = abs(meta(root, 'meta[property="og:image"]', 'meta[property="og:image:url"]',
+    'meta[property="og:image:secure_url"]', 'meta[name="twitter:image"]',
+    'meta[property="twitter:image"]', 'meta[name="twitter:image:src"]'));
+  const ldImageRaw = asArray(ld?.image)[0] as string | JsonLdEvent | undefined;
   const ldImage = ld
     ? abs(
-        str(asArray(ld.image)[0]) ??
-          str((asArray(ld.image)[0] as JsonLdEvent | undefined)?.url)
+        str(ldImageRaw) ??
+          str((ldImageRaw as JsonLdEvent | undefined)?.url) ??
+          // schema.org ImageObject says contentUrl; plenty of sites use it.
+          str((ldImageRaw as unknown as { contentUrl?: unknown } | undefined)?.contentUrl)
       )
     : null;
-  const imageUrl = f(ldImage, 'json-ld', 92) ?? f(ogImage, 'opengraph', 80);
+  // When the metadata says nothing, read the page. Most promoter sites never
+  // set og:image, and an event with no flyer is the one thing people notice.
+  const pageImage = ldImage || ogImage ? null : pickPageImage(html, pageUrl);
+  const imageUrl =
+    f(ldImage, 'json-ld', 92) ??
+    f(ogImage, 'opengraph', 80) ??
+    f(pageImage?.url ?? null, 'page', 55);
 
   const feedUrls = root
     .querySelectorAll('link[rel="alternate"]')

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { query } from '@/lib/db';
 import { ReviewCard, type AdminEventRow } from '@/components/admin/ReviewCard';
 import { PublishAll } from '@/components/admin/PublishAll';
+import { FindImages } from '@/components/admin/FindImages';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,6 +106,13 @@ export default async function AdminEventsPage({
 
       {(state === 'new' || state === 'needs_review') && events.length > 0 && (
         <PublishAll state={state} count={events.length} />
+      )}
+
+      {(state === 'new' || state === 'needs_review' || state === 'live') && (
+        <FindImages
+          state={state}
+          missing={events.filter((e) => !e.primary_image_url && e.source_url).length}
+        />
       )}
 
       {events.length === 0 ? (
