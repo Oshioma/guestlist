@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getCurrentMember } from '@/lib/auth';
 import { listPublishedArticles } from '@/lib/articles';
+import { optional } from '@/lib/resilient';
 
 function ArticleRow({articles}:{articles:Awaited<ReturnType<typeof listPublishedArticles>>}){
   if(!articles.length)return null;
@@ -13,7 +14,12 @@ function ArticleRow({articles}:{articles:Awaited<ReturnType<typeof listPublished
 }
 
 export async function BalanceHomeSection(){
-  const [balance,eventFeatures,member]=await Promise.all([listPublishedArticles('balance',3),listPublishedArticles('events',3),getCurrentMember()]);
+  // Editorial is a band under the events, so a missing articles table takes
+  // the band away, not the homepage.
+  const [balance,eventFeatures]=await optional('BalanceHomeSection',
+    ()=>Promise.all([listPublishedArticles('balance',3),listPublishedArticles('events',3)]),
+    [[],[]] as [Awaited<ReturnType<typeof listPublishedArticles>>,Awaited<ReturnType<typeof listPublishedArticles>>]);
+  const member=await getCurrentMember();
   return <section style={{padding:'34px 0',borderTop:'1px solid var(--border)',marginTop:32}}>
     <div className="homeSectionHead" style={{marginTop:0}}><div><div className="homeKicker">Community editorial</div><h2 className="homeSectionTitle" style={{marginTop:5}}>Balance</h2></div><Link href="/balance" className="btnGhost">Explore Balance →</Link></div>
     {balance.length?<ArticleRow articles={balance}/>:<p style={{color:'var(--text-muted)'}}>Member stories are coming to Balance. Be one of the first contributors.</p>}

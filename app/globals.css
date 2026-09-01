@@ -973,6 +973,33 @@ button { font-family: inherit; }
 }
 .adminTableWrap { overflow-x: auto; }
 
+/* ADMIN → DATABASE: the verdict has to be readable at a glance, because the
+   whole point is noticing before visitors do. */
+.schemaVerdict {
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+}
+.schemaVerdict.ok { border-left-color: var(--ok); }
+.schemaVerdict.bad { border-left-color: var(--danger); }
+.schemaList {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.schemaList li {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 12px;
+  background: var(--bg);
+}
+
 /* Find clubs & events — the discovery bench on /admin/sources. Reads as its
    own workspace, so adding a known URL and searching for new ones don't
    blur into one form. */

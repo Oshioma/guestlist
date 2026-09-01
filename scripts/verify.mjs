@@ -512,6 +512,38 @@ console.log('\n— Sources admin —');
 }
 
 // ---------------------------------------------------------------------------
+// A missing table once took the whole homepage down with a server-side
+// exception, and nothing said so until visitors found it.
+console.log('\n— Database audit + homepage resilience —');
+{
+  const page = await admin.fetch('/admin/schema');
+  check('admin database page renders', page.status === 200);
+  const body = await page.text();
+  check('a fully migrated database reports as up to date',
+        body.includes('Up to date'), body.slice(0, 300));
+  const asMember = await nadia.fetch('/admin/schema');
+  check('members cannot see the database audit', asMember.status !== 200);
+
+  // The homepage must survive a secondary section failing. Renaming the
+  // table GuestlistNow reads reproduces exactly the outage we had.
+  await q(`alter table homepage_feed_suppressions rename to homepage_feed_suppressions_gone`);
+  try {
+    const home = await fetch(`${BASE}/`);
+    check('homepage still renders when a section’s table is missing', home.status === 200);
+    const html = await home.text();
+    check('the events people came for are still on the page',
+          html.includes('On Guestlist now') || html.includes('cardGrid'));
+    const audit = await (await admin.fetch('/admin/schema')).text();
+    check('the audit names the missing table',
+          audit.includes('homepage_feed_suppressions') && audit.includes('Behind'));
+  } finally {
+    await q(`alter table homepage_feed_suppressions_gone rename to homepage_feed_suppressions`);
+  }
+  const recovered = await fetch(`${BASE}/`);
+  check('homepage still fine once the table is back', recovered.status === 200);
+}
+
+// ---------------------------------------------------------------------------
 console.log('\n— Signup flow —');
 {
   const fresh = client();

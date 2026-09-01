@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { query } from '@/lib/db';
+import { optional } from '@/lib/resilient';
 import { getCurrentMember } from '@/lib/auth';
 import { getRecommendedEvents } from '@/lib/recommend';
 import { toRecCards } from '@/lib/recCards';
@@ -35,7 +36,9 @@ type HomePick = {
 
 export async function HomeTonight() {
   const member = await getCurrentMember();
-  const [events, recommended] = await Promise.all([
+  // Tonight is a band, not the page: if either query fails the homepage
+  // still has everything else on it.
+  const [events, recommended] = await optional('HomeTonight', () => Promise.all([
     query<HomeTonightEvent>(
       `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
               e.city, e.primary_image_url, e.featured, v.name as venue_name,
@@ -56,7 +59,7 @@ export async function HomeTonight() {
     member
       ? getRecommendedEvents(member.id, { limit: 3, exploration: false })
       : Promise.resolve([]),
-  ]);
+  ]), [[], []] as [HomeTonightEvent[], Awaited<ReturnType<typeof getRecommendedEvents>>]);
 
   if (!events.length) {
     return (
