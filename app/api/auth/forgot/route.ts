@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { createResetToken, RESET_TTL_MINUTES } from '@/lib/passwordReset';
 import { queueMemberTransactional, processEmailQueue } from '@/lib/email';
 
-const SITE = process.env.SITE_URL ?? 'https://www.clubguestlists.com';
+const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));

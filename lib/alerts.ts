@@ -19,7 +19,7 @@ import { getSafetySwitches } from './settings';
 import { getRecommendedEvents } from './recommend';
 import { fmtEventDate, fmtEventTime } from './util';
 
-const SITE = process.env.SITE_URL ?? 'https://www.clubguestlists.com';
+const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 
 // Deterministic reason priority — the first reason a member sees.
 export const ALERT_REASON_PRIORITY = [

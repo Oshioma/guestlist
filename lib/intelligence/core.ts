@@ -20,7 +20,7 @@ import { validateDraft } from './validate';
 import { defaultWriterClient, TemplateWriterClient, WRITER_META, type IntelligenceWriterClient } from './writer';
 import type { EvidencePack } from './types';
 
-const SITE = process.env.SITE_URL ?? 'https://www.clubguestlists.com';
+const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 
 // Archive rights that permit REDISTRIBUTION to social — website display
 // permission is NOT enough. external_reference/unknown/restricted stay off X.
