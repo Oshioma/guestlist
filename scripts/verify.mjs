@@ -1170,8 +1170,13 @@ console.log('\n— The footer, everywhere —');
     pages.every((p) => bodies[p].split('class="siteFooter"').length - 1 === 1));
   // The Archive is browsed, not navigated — the "add a night that's on" ask
   // has nothing to say about 1996.
-  check('the archive is left alone',
-    !(await (await anon.fetch('/archive')).text()).includes('siteFooterAdd'));
+  // Not just the ask — the whole footer. The Archive is a wall of flyers and
+  // memories; "know a night we're missing?" has nothing to say about 1996.
+  const archive = await (await anon.fetch('/archive')).text();
+  check('the archive has no footer at all',
+    !archive.includes('siteFooter') && !archive.includes('Know something we’re missing?'));
+  check('and neither do the pages inside it',
+    !(await (await anon.fetch('/archive/search')).text()).includes('siteFooter'));
   check('the terms and privacy links are reachable from anywhere',
     pages.every((p) => bodies[p].includes('/terms') && bodies[p].includes('/privacy')));
   check('the add-an-event ask travels with it',
