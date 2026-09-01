@@ -87,6 +87,26 @@ export async function findOrCreateCity(opts: {
   );
   if (existing) return existing;
 
+  // No country given — somebody typed "London" into a box. Reuse the London we
+  // already have rather than creating a second one beside it: a duplicate city
+  // splits its events in two and is invisible until somebody notices half of
+  // them missing. Where the name is genuinely ambiguous we take the busiest,
+  // which is the one they almost certainly meant.
+  if (!code) {
+    const sameName = await queryOne<Location>(
+      `select l.* from locations l
+        left join lateral (
+          select count(*)::int as n from events e
+           where e.location_id = l.id and e.status = 'live' and e.start_at > now()
+        ) ev on true
+       where l.kind = $1 and l.normalized_name = $2
+       order by ev.n desc nulls last, l.created_at
+       limit 1`,
+      [kind, normalized]
+    );
+    if (sameName) return sameName;
+  }
+
   // Bare slug first; on collision (a different real city with the same
   // name) fall back to a country-code suffix, then a numeric one.
   const base = slugifyPlace(name);

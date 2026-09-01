@@ -169,3 +169,40 @@ export async function notifyAdminsNewArticle(articleId: string): Promise<number>
     return 0;
   }
 }
+
+// An author edited something the desk has already seen — published, approved,
+// or sitting in review. Not a queue item (nothing is blocked on it) and not
+// silent either: one unread line per article, refreshed rather than repeated,
+// so five typo fixes in a row are one notification.
+export async function notifyAdminsArticleEdited(articleId: string): Promise<number> {
+  try {
+    const article = await queryOne<{ title: string; author_name: string; slug: string; status: string }>(
+      `select a.title, a.slug, a.status, m.display_name as author_name
+         from articles a join members m on m.id = a.author_id where a.id = $1`,
+      [articleId]
+    );
+    if (!article) return 0;
+    const people = await admins();
+    for (const admin of people) {
+      const payload = { title: article.title, author: article.author_name, slug: article.slug, status: article.status };
+      const updated = await query(
+        `update notifications set payload = $3, created_at = now()
+          where member_id = $1 and article_id = $2 and type = 'admin_article_edited' and read_at is null
+          returning id`,
+        [admin.id, articleId, payload]
+      );
+      if (!updated.length) {
+        await query(
+          `insert into notifications (member_id, type, article_id, payload)
+           values ($1, 'admin_article_edited', $2, $3)
+           on conflict do nothing`,
+          [admin.id, articleId, payload]
+        );
+      }
+    }
+    return people.length;
+  } catch (err) {
+    console.error('article edited notification failed', err);
+    return 0;
+  }
+}

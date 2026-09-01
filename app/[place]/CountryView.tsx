@@ -10,11 +10,11 @@
 import Link from 'next/link';
 import { getCurrentMember } from '@/lib/auth';
 import { citiesInCountry, type CountryPlace } from '@/lib/locations';
+import { countryWithArticle } from '@/lib/countries';
 import { placeEventCards } from '@/lib/placeEvents';
 import { query } from '@/lib/db';
 import { EventCard } from '@/components/EventCard';
 import { AskPanel } from '@/components/ask/AskPanel';
-import { AddEventCta } from '@/components/AddEventCta';
 
 export async function CountryView({ country }: { country: CountryPlace }) {
   const member = await getCurrentMember();
@@ -53,7 +53,7 @@ export async function CountryView({ country }: { country: CountryPlace }) {
         </div>
       </div>
 
-      <AskPanel isSignedIn={!!member} placeholder={`What’s good in ${country.name} this weekend?`} />
+      <AskPanel isSignedIn={!!member} placeholder={`What’s good in ${countryWithArticle(country.name)} this weekend?`} />
 
       {cities.length > 0 && (
         <div className="chipRow" style={{ margin: '4px 0 14px' }}>
@@ -67,8 +67,8 @@ export async function CountryView({ country }: { country: CountryPlace }) {
 
       {events.length === 0 ? (
         <div className="emptyState">
-          <h3>{`Nothing on in ${country.name} right now.`}</h3>
-          <p>{`Know the nights that matter in ${country.name}? Put them on the map.`}</p>
+          <h3>{`Nothing on in ${countryWithArticle(country.name)} right now.`}</h3>
+          <p>{`Know the nights that matter in ${countryWithArticle(country.name)}? Put them on the map.`}</p>
           <div className="suggestions">
             <Link href="/events/submit" className="btnAccent">Add an event →</Link>
             <Link href="/explore" className="btnGhost">Explore other countries</Link>
@@ -86,7 +86,7 @@ export async function CountryView({ country }: { country: CountryPlace }) {
             </div>
           )}
           <div className="homeSectionHead">
-            <h2 className="homeSectionTitle">{`Coming up in ${country.name}`}</h2>
+            <h2 className="homeSectionTitle">{`Coming up in ${countryWithArticle(country.name)}`}</h2>
           </div>
           <div className="cardGrid" style={{ paddingBottom: 26 }}>
             {events.map((e) => (
@@ -99,7 +99,7 @@ export async function CountryView({ country }: { country: CountryPlace }) {
       {elsewhere.length > 0 && (
         <>
           <div className="homeSectionHead">
-            <h2 className="homeSectionTitle">{`Beyond ${country.name}`}</h2>
+            <h2 className="homeSectionTitle">{`Beyond ${countryWithArticle(country.name)}`}</h2>
             <Link href="/explore" className="btnGhost">Explore the world →</Link>
           </div>
           <div className="cardGrid" style={{ paddingBottom: 26 }}>
@@ -110,7 +110,6 @@ export async function CountryView({ country }: { country: CountryPlace }) {
         </>
       )}
 
-      <AddEventCta />
     </main>
   );
 }

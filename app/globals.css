@@ -1228,20 +1228,29 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
   font-size: 12px;
   color: var(--text-faint);
 }
+/* The site's one invitation to add a night. It used to be two things — a
+   purple panel with a button that went somewhere else, and this box — so the
+   panel is gone and this carries the weight: full width, with the paste box
+   in it rather than a link to a page with a paste box on it. */
 .siteFooterAdd {
-  padding: 30px 0 28px;
-  border-bottom: 1px solid var(--border);
+  margin: 34px 0 0;
+  padding: 26px clamp(18px, 3vw, 32px) 24px;
+  border: 1px solid var(--accent-soft);
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--accent-soft);
 }
-.siteFooterAdd h3 { font-size: 20px; letter-spacing: -0.3px; }
-.siteFooterAdd p { font-size: 14px; }
-/* Full width on desktop — the input is the point of the panel. */
+.siteFooterAdd .homeKicker { color: var(--accent-ink, var(--accent)); }
+.siteFooterAdd h3 {
+  margin: 6px 0;
+  font-size: clamp(19px, 2.6vw, 25px);
+  font-weight: 750;
+  letter-spacing: -0.4px;
+  color: var(--text);
+}
+.siteFooterAdd p { font-size: 14.5px; color: var(--text-soft); }
+/* Full width — the input is the point of the panel. */
 .siteFooterAdd .urlRow { max-width: none; width: 100%; }
-/* Some pages (events, cities, countries) already carry the big "add an
-   event" panel. Two asks in a row is one too many, so the footer's stands
-   down where the page has already made it. Browsers without :has() simply
-   show both, which is untidy rather than broken. */
-body:has(.addEventCta) .siteFooterAdd { display: none; }
-
+.siteFooterAdd .urlRow input { background: var(--surface); }
 .siteFooterNav {
   display: flex;
   flex-wrap: wrap;
@@ -2381,53 +2390,6 @@ body:has(.addEventCta) .siteFooterAdd { display: none; }
 .personCard .connectWrap { width: auto; }
 
 /* --- Archive mixes: our card, the platform's player inside ------------- */
-/* ADD AN EVENT — the invitation, sized like one. Full-width panel with a
-   large button, on the pages where someone just saw what's on. */
-.addEventCta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin: 34px 0 12px;
-  padding: 26px clamp(18px, 3vw, 32px);
-  border-radius: calc(var(--radius) + 2px);
-  border: 1px solid var(--accent-soft);
-  background: var(--accent-soft);
-}
-.addEventCtaText { min-width: 0; max-width: 62ch; }
-.addEventCtaTitle {
-  margin: 0;
-  font-size: clamp(19px, 2.6vw, 25px);
-  font-weight: 750;
-  letter-spacing: -0.4px;
-  color: var(--text);
-}
-.addEventCtaSub {
-  margin: 7px 0 0;
-  color: var(--text-soft);
-  font-size: 14.5px;
-  line-height: 1.55;
-}
-.addEventCtaBtn {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent);
-  color: var(--on-accent);
-  border-radius: 999px;
-  padding: 17px 34px;
-  font-size: 14px;
-  font-weight: 750;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-}
-.addEventCtaBtn:hover { filter: brightness(1.08); }
-@media (max-width: 640px) {
-  .addEventCtaBtn { width: 100%; }
-}
-
 /* Field labels in the You panels (display name and friends). */
 .youFieldLabel {
   display: grid;
@@ -2823,3 +2785,26 @@ body:has(.addEventCta) .siteFooterAdd { display: none; }
 }
 .reviewQueueChip b { color: var(--text); font-weight: 750; }
 .reviewQueueChip:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+
+/* "We don't know where you are" — the one line that turns Tonight from a
+   world list into a local one, shown only until somebody tells us. */
+.clubPlacePrompt {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.clubPlacePrompt a { color: var(--text); text-decoration: underline; }
+
+/* A line under a form field explaining why the field exists. Quieter than a
+   label, louder than a placeholder. */
+.fieldNote {
+  margin: -6px 0 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}

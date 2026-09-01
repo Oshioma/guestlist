@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
 import { getCountryBySlug, getLocationBySlug } from '@/lib/locations';
-import { countrySlug } from '@/lib/countries';
+import { countrySlug, countryWithArticle } from '@/lib/countries';
 import { placeEventCards } from '@/lib/placeEvents';
 import { CountryView } from './CountryView';
 import { query } from '@/lib/db';
@@ -17,7 +17,6 @@ import { EventCard } from '@/components/EventCard';
 import { FollowCityButton } from '@/components/v2c/FollowCityButton';
 import { GuestlistNow } from '@/components/GuestlistNow';
 import { AskPanel } from '@/components/ask/AskPanel';
-import { AddEventCta } from '@/components/AddEventCta';
 import type { EventCard as EventCardType } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
@@ -205,8 +204,8 @@ export default async function PlacePage({ params }: { params: Promise<{ place: s
       {restOfCountry.length > 0 && country && (
         <>
           <div className="homeSectionHead">
-            <h2 className="homeSectionTitle">{`Elsewhere in ${country}`}</h2>
-            {countryHref && <Link href={countryHref} className="btnGhost">{`All of ${country} →`}</Link>}
+            <h2 className="homeSectionTitle">{`Elsewhere in ${countryWithArticle(country)}`}</h2>
+            {countryHref && <Link href={countryHref} className="btnGhost">{`All of ${countryWithArticle(country)} →`}</Link>}
           </div>
           <div className="cardGrid" style={{ paddingBottom: 26 }}>
             {restOfCountry.map((e) => (
@@ -219,7 +218,7 @@ export default async function PlacePage({ params }: { params: Promise<{ place: s
       {beyondCountry.length > 0 && (
         <>
           <div className="homeSectionHead">
-            <h2 className="homeSectionTitle">{country ? `Beyond ${country}` : 'Everywhere else'}</h2>
+            <h2 className="homeSectionTitle">{country ? `Beyond ${countryWithArticle(country)}` : 'Everywhere else'}</h2>
             <Link href="/explore" className="btnGhost">Explore the world →</Link>
           </div>
           <div className="cardGrid" style={{ paddingBottom: 26 }}>
@@ -230,7 +229,6 @@ export default async function PlacePage({ params }: { params: Promise<{ place: s
         </>
       )}
 
-      <AddEventCta city={location.name} />
     </main>
   );
 }

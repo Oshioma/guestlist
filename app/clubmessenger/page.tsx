@@ -19,7 +19,7 @@ import { AutoRefresh } from '@/components/clubmessenger/AutoRefresh';
 import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
 import { NotificationsPanel } from '@/components/clubmessenger/NotificationsPanel';
 import { HeatCardLink } from '@/components/clubmessenger/HeatCardLink';
-import { AddEventCta } from '@/components/AddEventCta';
+import { TIER_NEAR, TIER_COUNTRY, TIER_ELSEWHERE, TIER_UNKNOWN, tierHeading } from '@/lib/proximity';
 import { EventImage } from '@/components/EventImage';
 
 export const dynamic = 'force-dynamic';
@@ -92,8 +92,6 @@ export default async function ClubMessengerPage() {
           ))}
         </div>
 
-        <AddEventCta heading="On tonight and not listed?"
-                     sub="Add it now — it shows up here the moment it's approved." />
       </main>
     );
   }
@@ -105,8 +103,12 @@ export default async function ClubMessengerPage() {
   ]);
   const heat = await heatForEvents(events.map((e) => e.id));
 
+  // Home first, always. Who is out and how hot a room is decide the order
+  // WITHIN where you are — they never lift another country above your own,
+  // which is how a member in London opened Tonight and got Spain.
   const ranked = [...events].sort((a, b) => {
     const diff =
+      a.proximity - b.proximity ||
       b.friends_here.length - a.friends_here.length ||
       b.friends_going.length - a.friends_going.length ||
       Number(b.my_rsvp === 'going') - Number(a.my_rsvp === 'going') ||
@@ -114,6 +116,23 @@ export default async function ClubMessengerPage() {
       (heat.get(b.id)?.heat ?? 0) - (heat.get(a.id)?.heat ?? 0);
     return diff || new Date(a.start_at).getTime() - new Date(b.start_at).getTime();
   });
+
+  // Where the member says they are, for the headings. Their own country beats
+  // the country of whatever happens to be first in the list.
+  const home = {
+    city: member.home_city ?? null,
+    country: ranked.find((e) => e.proximity === TIER_NEAR)?.country
+      ?? ranked.find((e) => e.proximity === TIER_COUNTRY)?.country
+      ?? member.home_country ?? null,
+  };
+  // A member who has never told us where they live gets one plain list and a
+  // line asking, rather than headings that pretend to know.
+  const knowsWhereIAm = ranked.some((e) => e.proximity !== TIER_UNKNOWN);
+  const groups = knowsWhereIAm
+    ? [TIER_NEAR, TIER_COUNTRY, TIER_ELSEWHERE]
+        .map((tier) => ({ tier, events: ranked.filter((e) => e.proximity === tier) }))
+        .filter((g) => g.events.length > 0)
+    : [{ tier: -1, events: ranked }];
 
   const friendsOut = new Map<string, { name: string; event: TonightEvent }>();
   for (const e of events) {
@@ -170,19 +189,35 @@ export default async function ClubMessengerPage() {
         </>
       )}
 
-      <div className="sectionLabel">Tonight</div>
       {ranked.length === 0 && (
-        <div className="clubJoin">
-          <p>Nothing on tonight in the next 24 hours.</p>
-          <p style={{ color: 'var(--text-muted)' }}>
-            Browse what’s coming up and mark yourself going — events show up
-            here the day they happen.
-          </p>
-          <Link href="/events" className="btnGhost">Browse events →</Link>
-        </div>
+        <>
+          <div className="sectionLabel">Tonight</div>
+          <div className="clubJoin">
+            <p>Nothing on tonight in the next 24 hours.</p>
+            <p style={{ color: 'var(--text-muted)' }}>
+              Browse what’s coming up and mark yourself going — events show up
+              here the day they happen.
+            </p>
+            <Link href="/events" className="btnGhost">Browse events →</Link>
+          </div>
+        </>
       )}
+
+      {!knowsWhereIAm && ranked.length > 0 && (
+        <p className="clubPlacePrompt">
+          {'Tonight is a local question and we don’t know where you are. '}
+          <Link href="/you#places">Tell us your city</Link>
+          {' and this list starts with what’s on around you.'}
+        </p>
+      )}
+
+      {groups.map((group) => (
+        <div key={group.tier}>
+      <div className="sectionLabel">
+        {group.tier === -1 ? 'Tonight' : tierHeading(group.tier, home)}
+      </div>
       <div className="clubEventList">
-        {ranked.map((e) => {
+        {group.events.map((e) => {
           const h = heat.get(e.id);
           const hl = h ? heatLabel(h.heat) : null;
           const friendBits = [
@@ -225,9 +260,9 @@ export default async function ClubMessengerPage() {
           );
         })}
       </div>
+        </div>
+      ))}
 
-      <AddEventCta heading="On tonight and not listed?"
-                   sub="Add it now — it shows up here the moment it's approved." />
 
       <div className="clubFootNote">
         Presence is manual — you’re only “here” when you tap I’M HERE, and
