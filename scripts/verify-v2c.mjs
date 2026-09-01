@@ -436,6 +436,17 @@ try {
     check('explore lists destinations from real supply',
       explore.includes('London') && explore.includes('Zanzibar') && explore.includes('Cape Town'));
 
+    // Grouped by country: a flat alphabet of cities hides which scenes have
+    // depth, and gives someone looking for one country nowhere to click.
+    check('explore groups cities under their country',
+      explore.includes('United Kingdom') && explore.includes('Tanzania'));
+    const uk = await (await anon.fetch('/explore?country=United%20Kingdom')).text();
+    check('a country filter keeps its own cities', uk.includes('London'));
+    check('and drops the others', !uk.includes('Zanzibar'));
+    const nowhere = await (await anon.fetch('/explore?country=Atlantis')).text();
+    check('an empty country says so rather than looking broken',
+      nowhere.includes('Nothing on in Atlantis'));
+
     check('thabo follows a city via API',
       (await thabo.post('/api/you/places', { action: 'follow', locationId: (await q(`select id from locations where slug='london'`))[0].id })).status === 200);
     check('city_followed analytics recorded', (await analyticsCount('city_followed')) >= 1);
