@@ -50,6 +50,23 @@ export async function POST(req: NextRequest) {
         [member.id, archiveEventId, text]);
       await track('memory_added', { memberId: member.id, metadata: { archive_event_id: archiveEventId } });
     }
+
+    // A public first-person memory is also an explicit statement that this
+    // member was there. Preserve any attendance/privacy choice they already
+    // made; otherwise add the normal public, certain attendance mark.
+    const attendance = await queryOne(
+      `insert into archive_attendance (member_id, archive_event_id, certainty, visibility)
+       values ($1, $2, 'sure', 'public')
+       on conflict (member_id, archive_event_id) do nothing
+       returning member_id`,
+      [member.id, archiveEventId]
+    );
+    if (attendance) {
+      await track('i_was_there_added', {
+        memberId: member.id,
+        metadata: { archive_event_id: archiveEventId, source: 'memory' },
+      });
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status });
