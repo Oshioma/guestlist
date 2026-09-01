@@ -20,6 +20,7 @@ import { EventImage } from '@/components/EventImage';
 import { HomeTonight } from '@/components/HomeTonight';
 import { AskPanel } from '@/components/ask/AskPanel';
 import { BalanceHomeSection } from '@/components/balance/BalanceHomeSection';
+import { HomeFooter } from '@/components/HomeFooter';
 
 export const dynamic = 'force-dynamic';
 
@@ -287,21 +288,7 @@ export default async function HomePage() {
         )}
 
         <BalanceHomeSection />
-
-        <section className="homeSubmitStrip">
-          <div>
-            <h3 style={{ margin: '0 0 6px' }}>Know a night we’re missing?</h3>
-            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-              Paste the event link and we’ll take care of the rest.
-            </p>
-          </div>
-          <Link href="/events/submit" className="btnAccent">Add an event →</Link>
-        </section>
-
-        <footer className="siteFooter">
-          <div>Guestlist — the best events for our community, not every event.</div>
-          <div><Link href="/balance">Balance</Link> · info@guestlist.net</div>
-        </footer>
+        <HomeFooter isSignedIn={!!member} isAdmin={member?.role === 'admin'} />
       </div>
     </main>
   );
