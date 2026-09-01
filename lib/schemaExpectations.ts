@@ -33,6 +33,7 @@ export const MIGRATION_FILES: string[] = [
   '026_country_codes_to_names.sql',
   '027_admin_notifications.sql',
   '028_article_edited_notification.sql',
+  '029_canonical_city_names.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [

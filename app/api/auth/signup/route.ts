@@ -4,13 +4,14 @@ import { createSession, hashPassword, setSessionCookie } from '@/lib/auth';
 import { memberSlug } from '@/lib/members';
 import { notifyAdminsNewMember } from '@/lib/adminNotify';
 import { findOrCreateCity } from '@/lib/locations';
+import { canonicalCity } from '@/lib/cityNames';
 
 export async function POST(req: NextRequest) {
   const data = await req.json().catch(() => ({}));
   const email = String(data.email ?? '').trim().toLowerCase();
   const password = String(data.password ?? '');
   const displayName = String(data.displayName ?? '').trim();
-  const homeCity = String(data.homeCity ?? '').trim() || null;
+  const homeCity = canonicalCity(String(data.homeCity ?? ''));
 
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return NextResponse.json({ error: 'A valid email is required' }, { status: 400 });

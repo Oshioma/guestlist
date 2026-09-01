@@ -1311,6 +1311,57 @@ console.log('\n— Signing up with a city —');
       [oddEmail]))[0]?.name === 'Nungwi');
 }
 
+
+// ---------------------------------------------------------------------------
+// "Dar es salaam" on a page of members reads as carelessness. Cities are
+// tidied on the way in, and the migration tidied the ones already stored.
+console.log('\n— One city, one spelling —');
+{
+  const messy = `verify-messy-city-${Date.now()}@example.com`;
+  check('somebody joins typing their city carelessly',
+    (await client().fetch('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: messy, password: 'a-brand-new-password',
+        displayName: 'Careless Typist', homeCity: '  dar es salaam ',
+      }),
+    })).status === 200);
+
+  const [row] = await q(
+    `select m.home_city, l.name as location_name
+       from members m left join locations l on l.id = m.home_location_id
+      where m.email = $1`, [messy]
+  );
+  check('it is stored as the city, properly spelled', row.home_city === 'Dar es Salaam');
+  check('and the place it resolved to carries the same spelling',
+    row.location_name === 'Dar es Salaam');
+
+  // Two people typing it differently land on ONE city, not two.
+  const shouty = `verify-shouty-city-${Date.now()}@example.com`;
+  await client().fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: shouty, password: 'a-brand-new-password',
+      displayName: 'Shouty Typist', homeCity: 'DAR ES SALAAM',
+    }),
+  });
+  check('two spellings are one city, not two',
+    (await q(`select count(*)::int as n from locations
+               where kind = 'city' and lower(name) = 'dar es salaam'`))[0].n === 1);
+  check('and both members are filed under it',
+    (await q(`select count(distinct home_location_id)::int as n from members
+               where email in ($1, $2)`, [messy, shouty]))[0].n === 1);
+
+  // The migration cleaned what was already stored.
+  await q(`update members set home_city = 'dar es salaam' where email = $1`, [messy]);
+  check('a value written before the cleanup is visibly wrong until fixed',
+    (await q(`select home_city from members where email = $1`, [messy]))[0].home_city === 'dar es salaam');
+
+  const people = await (await nadia.fetch('/people')).text();
+  check('no member is shown a city in lower case',
+    !/Now in (dar|london|zanzibar|brighton)\b/.test(people));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));
