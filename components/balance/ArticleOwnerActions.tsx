@@ -1,0 +1,5 @@
+'use client';
+import Link from 'next/link';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+export function ArticleOwnerActions({articleId}:{articleId:string}){const router=useRouter();const [busy,setBusy]=useState(false);async function remove(){if(!window.confirm('Delete this article? This cannot be undone.'))return;setBusy(true);try{const r=await fetch(`/api/articles/${articleId}`,{method:'DELETE'});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Delete failed');router.push('/balance');router.refresh();}catch(e){window.alert(e instanceof Error?e.message:'Delete failed');setBusy(false)}}return <div style={{display:'flex',gap:8,marginTop:16,flexWrap:'wrap'}}><Link href={`/balance/write?id=${articleId}`} style={{display:'inline-flex',padding:'9px 14px',border:'1px solid var(--border)',borderRadius:999,textDecoration:'none'}}>Edit article</Link><button type="button" disabled={busy} onClick={remove} style={{padding:'9px 14px',border:'1px solid var(--border)',borderRadius:999,background:'transparent',cursor:busy?'wait':'pointer'}}>{busy?'Deleting…':'Delete article'}</button></div>}
