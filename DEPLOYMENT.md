@@ -60,7 +60,8 @@ fictional test data and it truncates tables.
 | `DATABASE_URL` | the **pooler** connection string (port 6543) |
 | `SESSION_SECRET` | a long random string — `openssl rand -hex 32` |
 | `ANTHROPIC_API_KEY` | *(optional but recommended)* an Anthropic API key from console.anthropic.com — enables AI extraction; without it, imports run structured-data-only and everything lands in admin review |
-| `SUPPLY_CRON_SECRET` | another `openssl rand -hex 32` — auth for scheduled source scans |
+| `CRON_SECRET` | another `openssl rand -hex 32` — **required for scheduled source scans.** Vercel Cron only sends an `Authorization` header when this variable exists, and the job rejects unauthenticated calls, so without it the schedule runs and gets 401s silently |
+| `SUPPLY_CRON_SECRET` | *(optional)* the same idea, for an external scheduler you drive yourself |
 
    Never set `SUPPLY_FETCH_ALLOW_HOSTS` in production (dev/test only).
 3. Deploy, and check the preview URL loads `/events`.
@@ -83,18 +84,25 @@ update members set role = 'admin' where lower(email) = lower('you@guestlist.net'
 
 3. Reload the site — an **Admin** link appears in the header.
 
-## 7. Schedule source polling (optional, for connected websites)
+## 7. Schedule source polling
 
-Any scheduler that can send an authenticated POST works — e.g. cron-job.org,
-a GitHub Actions schedule, or a server crontab:
+`vercel.json` already schedules `/api/jobs/scan-sources` every six hours, so
+there is nothing to install — but it only works once `CRON_SECRET` is set in
+the project's environment variables (step 4). Vercel attaches that value as a
+bearer token on the cron request; with no value set, no header is sent, and
+the job answers 401 and scans nothing.
+
+A source is only scanned on that schedule once it is polling, and a source
+starts polling when its first scan actually brings back an event. Add it,
+**Scan now**, and it puts itself on the schedule.
+
+Any external scheduler still works if you prefer one — cron-job.org, a
+GitHub Actions schedule, a server crontab:
 
 ```
 */30 * * * *  curl -s -X POST https://guestlist.net/api/jobs/scan-sources \
                 -H "Authorization: Bearer $SUPPLY_CRON_SECRET"
 ```
-
-(Note: Vercel's built-in Cron sends GET requests, so use an external
-scheduler for now.)
 
 ## 8. Smoke test
 
