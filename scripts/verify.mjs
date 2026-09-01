@@ -1362,6 +1362,54 @@ console.log('\n— One city, one spelling —');
     !/Now in (dar|london|zanzibar|brighton)\b/.test(people));
 }
 
+
+// ---------------------------------------------------------------------------
+// Picking a city from the dropdown and getting nothing is a dead end: the
+// dropdown only lists cities that HAVE events, so an empty result means the
+// tab filtered them out, not that the city is quiet.
+console.log('\n— Picking a city that has events —');
+{
+  const [paris] = await q(
+    `insert into locations (kind, name, normalized_name, slug, country_code, country_name, timezone)
+     values ('city', 'Paris', 'paris', 'paris-verify', 'FR', 'France', 'Europe/Paris')
+     on conflict (kind, normalized_name, country_code) do update set name = 'Paris'
+     returning id`
+  );
+  // A real Paris night that nobody flagged as "worth travelling for".
+  await q(
+    `insert into events (slug, title, title_normalized, start_at, timezone, status, city, country,
+                         location_id, worth_travelling, listing_status, published_at)
+     values ('paris-verify-night', 'Paris Verify Night', 'paris verify night',
+             now() + interval '14 days', 'Europe/Paris', 'live', 'Paris', 'France',
+             $1, false, 'confirmed', now())`,
+    [paris.id]
+  );
+
+  check('the city dropdown offers Paris, because Paris has events',
+    (await (await anon.fetch('/events')).text()).includes('Paris'));
+
+  // A Londoner on Worth Travelling For: France is not home, so it shows —
+  // even though nobody flagged it.
+  const londoner = client();
+  await londoner.login('dev-nadia@example.com');
+  const travel = await (await londoner.fetch('/events?tab=travel&city=Paris')).text();
+  check('a night abroad shows on Worth Travelling For without being flagged',
+    travel.includes('Paris Verify Night'));
+
+  // And when a tab genuinely has nothing for that city, it says so and offers
+  // the way out rather than a bare "nothing matching".
+  const wrongTab = await (await londoner.fetch('/events?tab=festivals&city=Paris')).text();
+  check('an empty tab explains that the city is not the problem',
+    wrongTab.includes('has nights on Guestlist'));
+  check('and offers the city without the tab',
+    wrongTab.includes('See everything in Paris'));
+  check('which is a link that actually keeps the city',
+    wrongTab.includes('city=Paris'));
+
+  await q(`delete from events where slug = 'paris-verify-night'`);
+  await q(`delete from locations where slug = 'paris-verify'`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));
