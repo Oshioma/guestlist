@@ -4,12 +4,18 @@
 //
 // Sources are organised by COUNTRY (one section per country, not one flat
 // list) and can be filtered by country, and by genre.
+//
+// Two tabs: the WORKBENCH is where sources are found, added, tested and
+// fixed; LIVE & POLLING holds the ones that already work, so the bench stays
+// a short list of things that still need attention.
 
 import Link from 'next/link';
 import { query } from '@/lib/db';
 import { fmtDate, sourceTypeLabel } from '@/lib/util';
 import { AddSourceForm } from '@/components/admin/AddSourceForm';
+import { SourceDiscovery } from '@/components/admin/SourceDiscovery';
 import { SourceControls } from '@/components/admin/SourceControls';
+import { isLiveSource } from '@/lib/supply/health';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,11 +51,12 @@ const NO_COUNTRY = 'No country yet';
 export default async function SourcesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ country?: string; genre?: string }>;
+  searchParams: Promise<{ country?: string; genre?: string; view?: string }>;
 }) {
   const params = await searchParams;
   const countryFilter = params.country?.trim() || null;
   const genreFilter = params.genre?.trim() || null;
+  const view = params.view === 'live' ? 'live' : 'workbench';
 
   const sources = await query<SourceRow>(
     `select s.id, s.source_type, s.name, s.url, s.feed_url, s.active, s.trust,
@@ -100,10 +107,16 @@ export default async function SourcesPage({
     ),
   ]);
 
-  // Country chips carry counts from the FULL set, so the filter bar stays
-  // stable while a filter is applied.
+  // The bench and the live list are two different jobs, so each tab counts
+  // and filters only its own sources.
+  const liveSources = sources.filter(isLiveSource);
+  const benchSources = sources.filter((s) => !isLiveSource(s));
+  const inView = view === 'live' ? liveSources : benchSources;
+
+  // Country chips carry counts from the FULL set of the current tab, so the
+  // filter bar stays stable while a filter is applied.
   const countryCounts = new Map<string, number>();
-  for (const s of sources) {
+  for (const s of inView) {
     const key = s.country?.trim() || NO_COUNTRY;
     countryCounts.set(key, (countryCounts.get(key) ?? 0) + 1);
   }
@@ -111,7 +124,7 @@ export default async function SourcesPage({
     a[0] === NO_COUNTRY ? 1 : b[0] === NO_COUNTRY ? -1 : a[0].localeCompare(b[0]));
 
   const genreCounts = new Map<string, { name: string; count: number }>();
-  for (const s of sources) {
+  for (const s of inView) {
     s.genre_slugs.forEach((slug, i) => {
       const cur = genreCounts.get(slug);
       genreCounts.set(slug, { name: s.genre_names[i], count: (cur?.count ?? 0) + 1 });
@@ -119,7 +132,7 @@ export default async function SourcesPage({
   }
   const genreChips = [...genreCounts.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name));
 
-  const filtered = sources.filter((s) => {
+  const filtered = inView.filter((s) => {
     const country = s.country?.trim() || NO_COUNTRY;
     if (countryFilter && country !== countryFilter) return false;
     if (genreFilter && !s.genre_slugs.includes(genreFilter)) return false;
@@ -141,12 +154,14 @@ export default async function SourcesPage({
       (a.city ?? '￿').localeCompare(b.city ?? '￿') || a.name.localeCompare(b.name));
   }
 
-  const filterHref = (next: { country?: string | null; genre?: string | null }) => {
+  const filterHref = (next: { country?: string | null; genre?: string | null; view?: string }) => {
     const q = new URLSearchParams();
     const c = next.country === undefined ? countryFilter : next.country;
     const g = next.genre === undefined ? genreFilter : next.genre;
+    const v = next.view === undefined ? view : next.view;
     if (c) q.set('country', c);
     if (g) q.set('genre', g);
+    if (v === 'live') q.set('view', 'live');
     const s = q.toString();
     return s ? `/admin/sources?${s}` : '/admin/sources';
   };
@@ -161,16 +176,41 @@ export default async function SourcesPage({
         Organised by country — tag each source with a city, country and genres.
       </p>
 
-      <AddSourceForm
-        promoters={promoters}
-        venues={venues}
-        genres={genres}
-        countries={knownCountries.map((c) => c.country)}
-      />
+      <div className="statePills">
+        <Link className={`statePill${view === 'workbench' ? ' active' : ''}`}
+              href={filterHref({ view: 'workbench' })}>
+          Workbench <span className="n">{benchSources.length}</span>
+        </Link>
+        <Link className={`statePill${view === 'live' ? ' active' : ''}`}
+              href={filterHref({ view: 'live' })}>
+          Live &amp; polling <span className="n">{liveSources.length}</span>
+        </Link>
+      </div>
+
+      <p className="adminSub" style={{ marginTop: -12 }}>
+        {view === 'workbench'
+          ? 'Sources being added, tested and fixed — new, paused, failing, or polling without finding anything yet.'
+          : 'Switched on, polling on a schedule, no failures, and producing events. Nothing here needs you today.'}
+      </p>
+
+      {view === 'workbench' && (
+        <>
+          <SourceDiscovery
+            genres={genres}
+            countries={knownCountries.map((c) => c.country)}
+          />
+          <AddSourceForm
+            promoters={promoters}
+            venues={venues}
+            genres={genres}
+            countries={knownCountries.map((c) => c.country)}
+          />
+        </>
+      )}
 
       <div className="chipRow" style={{ marginBottom: 8 }}>
         <Link className={`chip${!countryFilter ? ' active' : ''}`} href={filterHref({ country: null })}>
-          All countries ({sources.length})
+          All countries ({inView.length})
         </Link>
         {countryChips.map(([country, count]) => (
           <Link
@@ -295,7 +335,13 @@ export default async function SourcesPage({
       ))}
       {filtered.length === 0 && (
         <p style={{ color: 'var(--text-faint)' }}>
-          {sources.length === 0 ? 'No sources yet.' : 'No sources match these filters.'}
+          {inView.length > 0
+            ? 'No sources match these filters.'
+            : view === 'live'
+              ? 'Nothing is live yet — a source moves here once it is polling without failures and has found events.'
+              : sources.length === 0
+                ? 'No sources yet. Search a country above to find some.'
+                : 'Everything is live and polling. Nothing on the bench.'}
         </p>
       )}
     </main>

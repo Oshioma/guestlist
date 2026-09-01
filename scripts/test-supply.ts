@@ -30,6 +30,9 @@ import { mapGenreProposals, loadGenres } from '@/lib/supply/genres';
 import { computeOverallConfidence, canAutoPublish } from '@/lib/supply/confidence';
 import { runExtractionPipeline } from '@/lib/supply/pipeline';
 import { scanSource, identifyCandidateLinks, parseFeedLinks, canonicaliseCandidateUrl } from '@/lib/supply/scanner';
+import { discoverSources, normaliseCandidates, isBannedCandidateHost, type DiscoveryClient } from '@/lib/supply/discover';
+import { isLiveSource } from '@/lib/supply/health';
+import { testVerdict } from '@/lib/supply/verdict';
 import { parse } from 'node-html-parser';
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
@@ -764,8 +767,11 @@ async function main() {
     check('new event extracted from scan', scan1.extracted === 1);
     const awayEvent = await q(`select id, source_id, status from events where title = 'Away Day'`);
     check('scanned event carries its source', awayEvent.length === 1 && (awayEvent[0] as { source_id: string }).source_id === sourceAId);
+    // An advertised feed is a fallback, not an upgrade: while the listing page
+    // is yielding events, adopting the site's generic feed would quietly
+    // redirect every later scan away from the page that works.
     const feedSaved = (await q(`select feed_url from event_sources where id = $1`, [sourceAId]))[0] as { feed_url: string | null };
-    check('advertised RSS feed remembered on source', feedSaved.feed_url === 'https://promoter-a.example/feed.xml');
+    check('advertised feed ignored while the listing page is working', feedSaved.feed_url === null);
 
     // Second scan: everything already seen.
     const scan2 = await scanSource(sourceAId, {
@@ -822,6 +828,32 @@ async function main() {
     check('source with no events → clean empty scan', scan.status === 'succeeded' && scan.candidatesFound === 0 && scan.failed === 0);
   }
 
+  // Listing page with no event links, but a working advertised feed: this is
+  // the one case where the feed IS adopted, so later scans use it.
+  {
+    const src = (await q(
+      `insert into event_sources (source_type, name, url) values ('promoter_website', 'Feed fallback', 'https://fallback.example/whats-on') returning id`
+    ))[0] as { id: string };
+    await scanSource(src.id, {
+      fetcher: mockFetcher({
+        'https://fallback.example/whats-on': {
+          body: `<!doctype html><html><head><link rel="alternate" type="application/rss+xml" href="/feed.xml"></head>
+<body><main><a href="/about">About</a></main></body></html>`,
+        },
+        'https://fallback.example/feed.xml': {
+          body: `<?xml version="1.0"?><rss version="2.0"><channel><title>Fallback</title>
+<item><title>Night</title><link>https://fallback.example/events/night</link></item></channel></rss>`,
+          contentType: 'application/rss+xml',
+        },
+        'https://fallback.example/events/night': { body: '<html><title>Night</title><body><main>night</main></body></html>' },
+      }),
+      ai: noAI, delayMs: 1,
+    });
+    const adopted = (await q(`select feed_url from event_sources where id = $1`, [src.id]))[0] as { feed_url: string | null };
+    check('advertised feed adopted when the listing page finds nothing',
+      adopted.feed_url === 'https://fallback.example/feed.xml', JSON.stringify(adopted));
+  }
+
   // -------------------------------------------------------------------------
   console.log('\n— trusted-source auto-publish rules —');
   {
@@ -873,6 +905,73 @@ async function main() {
       }),
     });
     check('low confidence → review queue even when trusted', !out3.autoPublished && out3.eventId != null);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— source discovery (suggestions are never trusted) —');
+  {
+    const fake = (text: string): DiscoveryClient => ({
+      available: true,
+      async propose() { return { ok: true, text, model: 'fake' }; },
+    });
+    const req = { country: 'Tanzania', city: 'Dar es Salaam', genres: ['House'], limit: 5 };
+
+    const good = await discoverSources(req, fake(JSON.stringify({
+      candidates: [
+        { name: 'Elements Club', url: 'https://elements.example/events', kind: 'venue_website',
+          city: 'Dar es Salaam', country: 'Tanzania', genres: ['House'], note: 'Weekly house night' },
+      ],
+    })));
+    check('discovery returns a normalised candidate',
+      good.ok && good.candidates.length === 1 && good.candidates[0].url === 'https://elements.example/events');
+
+    // Aggregators and ticketing platforms are exactly what the independent
+    // event graph exists to avoid, so they never survive normalisation.
+    const banned = normaliseCandidates({ candidates: [
+      { name: 'RA listing', url: 'https://ra.co/clubs/123' },
+      { name: 'Eventbrite', url: 'https://www.eventbrite.co.uk/d/tanzania/music' },
+      { name: 'Real club', url: 'https://realclub.example/whats-on' },
+    ] }, req);
+    check('aggregator suggestions are dropped',
+      banned.length === 1 && banned[0].url === 'https://realclub.example/whats-on');
+    check('banned-host check covers subdomains', isBannedCandidateHost('www.dice.fm') && isBannedCandidateHost('m.facebook.com'));
+
+    const junk = normaliseCandidates({ candidates: [
+      { name: 'No scheme', url: 'notaurl' },
+      { name: 'Local', url: 'javascript:alert(1)' },
+      { name: 'Dupe', url: 'https://dupe.example/events' },
+      { name: 'Dupe again', url: 'https://dupe.example/events/' },
+    ] }, req);
+    check('malformed and duplicate suggestions are dropped',
+      junk.length === 1 && junk[0].url === 'https://dupe.example/events');
+
+    const unavailable = await discoverSources(req, { available: false, async propose() { return { ok: false, detail: 'no key' }; } });
+    check('discovery says so when no API key is configured', !unavailable.ok && unavailable.error === 'unavailable');
+    const garbled = await discoverSources(req, fake('sorry, I cannot help with that'));
+    check('unparseable model output is an error, not a candidate', !garbled.ok);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— workbench vs live split —');
+  {
+    const base = { active: true, polling_enabled: true, failure_count: 0, events_found: 4, linked_events: 2 };
+    check('polling + producing = live', isLiveSource(base));
+    check('paused source stays on the bench', !isLiveSource({ ...base, active: false }));
+    check('not polling stays on the bench', !isLiveSource({ ...base, polling_enabled: false }));
+    check('failing source stays on the bench', !isLiveSource({ ...base, failure_count: 3 }));
+    check('polling but finding nothing stays on the bench',
+      !isLiveSource({ ...base, events_found: 0, linked_events: 0 }));
+
+    const probe = (ok: boolean, candidates: number | null) => ({
+      target: 'https://x.example/events',
+      bot: { ok, status: ok ? 200 : null, code: ok ? null : 'dns', detail: null, ms: 10 },
+      browser: { ok: false, status: null, code: 'dns', detail: null, ms: 10 },
+      method: ok ? ('html' as const) : null,
+      candidates,
+    });
+    check('a candidate with event links reads as OK', !testVerdict(probe(true, 3)).bad);
+    check('a reachable page with no event links reads as a problem', testVerdict(probe(true, 0)).bad);
+    check('an unreachable candidate reads as a problem', testVerdict(probe(false, null)).bad);
   }
 
   // -------------------------------------------------------------------------

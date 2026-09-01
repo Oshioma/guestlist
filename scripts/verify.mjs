@@ -429,6 +429,59 @@ console.log('\n— Sources admin —');
   check('member blocked from sources API', memberAdd.status === 403);
   const page = await (await admin.fetch('/admin/sources')).text();
   check('sources page lists source', page.includes('Verification Source'));
+
+  // Two tabs: a brand new source belongs on the workbench, never in the
+  // live list, until it is polling and producing events.
+  check('workbench tab shows the new source', page.includes('Workbench'));
+  const live = await (await admin.fetch('/admin/sources?view=live')).text();
+  check('live tab renders', live.includes('Live &amp; polling') || live.includes('Live & polling'));
+  check('untested source is not in the live tab', !live.includes('Verification Source'));
+
+  // Discovery: admin-only, and it will not call the model without a country.
+  const memberDiscover = await nadia.fetch('/api/admin/sources/discover', {
+    method: 'POST', body: JSON.stringify({ country: 'United Kingdom' }),
+  });
+  check('member blocked from discovery (403)', memberDiscover.status === 403);
+  const noCountry = await admin.fetch('/api/admin/sources/discover', {
+    method: 'POST', body: JSON.stringify({ country: '' }),
+  });
+  check('discovery requires a country (400)', noCountry.status === 400);
+
+  // Testing a candidate URL before it is a source: the same probe the saved
+  // sources get, run against a local fixture so no live site is touched.
+  const memberTest = await nadia.fetch('/api/admin/sources/test-url', {
+    method: 'POST', body: JSON.stringify({ url: 'http://127.0.0.1:4582/events' }),
+  });
+  check('member blocked from test-url (403)', memberTest.status === 403);
+  const badUrl = await admin.fetch('/api/admin/sources/test-url', {
+    method: 'POST', body: JSON.stringify({ url: 'not-a-url' }),
+  });
+  check('test-url rejects a non-URL (400)', badUrl.status === 400);
+
+  const { createServer } = await import('node:http');
+  const listing = createServer((req, res) => {
+    if (req.url === '/events') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`<html><body><main>
+        <a href="/events/candidate-one">Candidate One — 2030-05-01</a>
+        <a href="/events/candidate-two">Candidate Two — 2030-05-02</a>
+      </main></body></html>`);
+    } else {
+      res.writeHead(404).end();
+    }
+  });
+  await new Promise((r) => listing.listen(4582, '127.0.0.1', r));
+  const good = await (await admin.fetch('/api/admin/sources/test-url', {
+    method: 'POST', body: JSON.stringify({ url: 'http://127.0.0.1:4582/events' }),
+  })).json();
+  check('test-url finds event links on a good candidate', good.bot?.ok === true && good.candidates >= 2,
+        JSON.stringify(good));
+  const dead = await (await admin.fetch('/api/admin/sources/test-url', {
+    method: 'POST', body: JSON.stringify({ url: 'http://127.0.0.1:4582/nope' }),
+  })).json();
+  check('test-url reports a dead candidate as unusable', dead.bot?.ok !== true || dead.candidates === 0,
+        JSON.stringify(dead));
+  listing.close();
 }
 
 // ---------------------------------------------------------------------------
