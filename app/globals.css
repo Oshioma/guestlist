@@ -812,6 +812,67 @@ button { font-family: inherit; }
 /* ---------- admin ---------- */
 
 .adminShell { padding-bottom: 100px; }
+
+/* Admin bar: grouped, wrapping, and it tells you where you are. */
+.adminNav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 0 14px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--border);
+}
+.adminNavBrand {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+.adminNavGroups { display: flex; flex-wrap: wrap; gap: 6px 18px; flex: 1; min-width: 0; }
+.adminNavGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 18px;
+  border-right: 1px solid var(--border);
+}
+.adminNavGroup:last-child { border-right: none; padding-right: 0; }
+.adminNavGroupLabel {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-right: 4px;
+}
+.adminNavLink {
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+.adminNavLink:hover { background: var(--surface); color: var(--text); }
+.adminNavLink.active { background: var(--accent); color: var(--on-accent); }
+.adminNavNew {
+  margin-left: auto;
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.adminNavNew:hover { border-color: var(--accent); color: var(--accent-ink); }
+@media (max-width: 720px) {
+  .adminNavGroup { border-right: none; padding-right: 0; }
+  .adminNavNew { margin-left: 0; }
+}
 .adminTitle {
   font-size: 30px;
   letter-spacing: -0.6px;
@@ -911,6 +972,71 @@ button { font-family: inherit; }
   vertical-align: top;
 }
 .adminTableWrap { overflow-x: auto; }
+
+/* Find clubs & events — the discovery bench on /admin/sources. Reads as its
+   own workspace, so adding a known URL and searching for new ones don't
+   blur into one form. */
+.discoverPanel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 18px;
+}
+.discoverHead {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.discoverForm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+.discoverForm label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+.discoverPanel input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13.5px;
+}
+.discoverPanel > label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+.discoverPanel .linkBtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 11.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  text-decoration: underline;
+  cursor: pointer;
+}
+@media (max-width: 640px) {
+  .discoverForm { grid-template-columns: 1fr; }
+}
 
 .statusDot {
   display: inline-block;
@@ -2104,8 +2230,13 @@ button { font-family: inherit; }
 .guestlistNowHead { display: flex; gap: 10px; align-items: baseline; }
 .guestlistNowBadge { font-weight: 700; color: var(--accent-ink); font-size: 14px; }
 .guestlistNowSub { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; }
-.guestlistNowItem { display: grid; gap: 6px; font-size: 14px; line-height: 1.5; }
+.guestlistNowItem { position: relative; display: grid; gap: 6px; padding-right: 26px; font-size: 14px; line-height: 1.5; }
 .guestlistNowLink { font-size: 12px; color: var(--accent-ink); text-decoration: none; }
+.guestlistNowSuppress { position: absolute; top: -4px; right: -4px; width: 26px; height: 26px; border: 0; border-radius: 50%; background: transparent; color: var(--text-muted); font: 500 21px/1 inherit; cursor: pointer; }
+.guestlistNowSuppress:hover { background: var(--bg); color: var(--text); }
+.guestlistNowSuppress:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.guestlistNowSuppress:disabled { cursor: wait; opacity: .55; }
+.guestlistNowSuppressError { color: var(--danger, #b42318); font-size: 12px; }
 
 /* Connect button cluster: real layout, never overlapping card content */
 .connectWrap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex-shrink: 0; margin-left: auto; }

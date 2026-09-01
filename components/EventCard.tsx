@@ -26,6 +26,7 @@ export function EventCard({
           src={event.primary_image_url}
           alt={event.title}
           genres={event.genres.map((g) => g.name)}
+          label={eventTypeLabel(event.event_type)}
         />
         <div className="dateBadge">
           <div className="d">{day}</div>

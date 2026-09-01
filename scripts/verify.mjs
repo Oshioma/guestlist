@@ -429,6 +429,86 @@ console.log('\n— Sources admin —');
   check('member blocked from sources API', memberAdd.status === 403);
   const page = await (await admin.fetch('/admin/sources')).text();
   check('sources page lists source', page.includes('Verification Source'));
+
+  // Two tabs: a brand new source belongs on the workbench, never in the
+  // live list, until it is polling and producing events.
+  check('workbench tab shows the new source', page.includes('Workbench'));
+  const live = await (await admin.fetch('/admin/sources?view=live')).text();
+  check('live tab renders', live.includes('Live &amp; polling') || live.includes('Live & polling'));
+  check('untested source is not in the live tab', !live.includes('Verification Source'));
+
+  // Discovery: admin-only, and it will not call the model without a country.
+  const memberDiscover = await nadia.fetch('/api/admin/sources/discover', {
+    method: 'POST', body: JSON.stringify({ country: 'United Kingdom' }),
+  });
+  check('member blocked from discovery (403)', memberDiscover.status === 403);
+  const noCountry = await admin.fetch('/api/admin/sources/discover', {
+    method: 'POST', body: JSON.stringify({ country: '' }),
+  });
+  check('discovery requires a country (400)', noCountry.status === 400);
+
+  // Testing a candidate URL before it is a source: the same probe the saved
+  // sources get, run against a local fixture so no live site is touched.
+  const memberTest = await nadia.fetch('/api/admin/sources/test-url', {
+    method: 'POST', body: JSON.stringify({ url: 'http://127.0.0.1:4582/events' }),
+  });
+  check('member blocked from test-url (403)', memberTest.status === 403);
+  const badUrl = await admin.fetch('/api/admin/sources/test-url', {
+    method: 'POST', body: JSON.stringify({ url: 'not-a-url' }),
+  });
+  check('test-url rejects a non-URL (400)', badUrl.status === 400);
+
+  const { createServer } = await import('node:http');
+  const listing = createServer((req, res) => {
+    if (req.url === '/events') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`<html><body><main>
+        <a href="/events/candidate-one">Candidate One — 2030-05-01</a>
+        <a href="/events/candidate-two">Candidate Two — 2030-05-02</a>
+      </main></body></html>`);
+    } else if (req.url === '/') {
+      // The homepage a rescue would read: its nav points at the real listing.
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`<html><body><nav><a href="/about">About</a><a href="/events">Agenda</a></nav></body></html>`);
+    } else {
+      res.writeHead(404).end();
+    }
+  });
+  await new Promise((r) => listing.listen(4582, '127.0.0.1', r));
+  const good = await (await admin.fetch('/api/admin/sources/test-url', {
+    method: 'POST', body: JSON.stringify({ url: 'http://127.0.0.1:4582/events' }),
+  })).json();
+  check('test-url finds event links on a good candidate', good.bot?.ok === true && good.candidates >= 2,
+        JSON.stringify(good));
+
+  // A guessed listing path is a near miss more often than a dead venue: the
+  // homepage is asked where its agenda lives before we write the site off.
+  const missed = await (await admin.fetch('/api/admin/sources/test-url', {
+    method: 'POST', body: JSON.stringify({ url: 'http://127.0.0.1:4582/en/agenda' }),
+  })).json();
+  check('a 404 listing path is rescued from the homepage',
+        missed.target === 'http://127.0.0.1:4582/events' && missed.candidates >= 2
+        && missed.foundVia?.triedFirst === 'http://127.0.0.1:4582/en/agenda', JSON.stringify(missed));
+
+  const dead = await (await admin.fetch('/api/admin/sources/test-url', {
+    method: 'POST', body: JSON.stringify({ url: 'http://127.0.0.1:4583/nope' }),
+  })).json();
+  check('a genuinely dead candidate stays dead', dead.bot?.ok !== true || dead.candidates === 0,
+        JSON.stringify(dead));
+  listing.close();
+
+  // A source earns its schedule by producing an event, not by being added.
+  const polls = await q(
+    `select polling_enabled from event_sources where url = 'https://example.com/verification-source'`
+  );
+  check('a newly added source does not poll until it proves itself', polls[0]?.polling_enabled === false);
+
+  // The scheduled scan runs on GET too, because that is what Vercel Cron
+  // sends — but only for an admin or the cron secret.
+  const cronAnon = await fetch(`${BASE}/api/jobs/scan-sources`);
+  check('scheduled scan rejects an anonymous GET', cronAnon.status === 401);
+  const cronAdmin = await admin.fetch('/api/jobs/scan-sources');
+  check('scheduled scan runs for an admin GET', cronAdmin.status === 200);
 }
 
 // ---------------------------------------------------------------------------
@@ -488,6 +568,39 @@ console.log('\n— Signup flow —');
     const none = await (await anon.fetch('/events?genre=jungle')).text();
     check('an event with no image falls back to genre art',
       none.includes('Rewind Sessions presents Jungle Mania') && none.includes('genreArt'));
+
+    // No image and no genre either: the event type still beats a blank box.
+    await q(`update events set primary_image_url = null where slug = 'the-garden-weekender'`);
+    await q(`delete from event_genres
+              where event_id = (select id from events where slug = 'the-garden-weekender')`);
+    const typed = await (await anon.fetch('/events?tab=festivals')).text();
+    check('an event with no image and no genre falls back to its type',
+      typed.includes('The Garden Weekender') && typed.includes('WEEKENDER'));
+  }
+
+  // Admin can drop optional sections out of the nav without a deploy; the
+  // pages stay reachable by URL.
+  {
+    check('non-admin cannot change site settings',
+      (await fresh.fetch('/api/admin/site', {
+        method: 'PATCH', body: JSON.stringify({ nav: { explore: false } }),
+      })).status === 403);
+
+    const off = await admin.fetch('/api/admin/site', {
+      method: 'PATCH', body: JSON.stringify({ nav: { explore: false, people: false } }),
+    });
+    check('admin turns Explore and People off', off.status === 200);
+    const hidden = await (await anon.fetch('/events')).text();
+    check('both vanish from the nav',
+      !hidden.includes('>Explore</a>') && !hidden.includes('>People</a>'));
+    check('the pages still load by URL',
+      (await anon.fetch('/explore')).status === 200);
+
+    await admin.fetch('/api/admin/site', {
+      method: 'PATCH', body: JSON.stringify({ nav: { explore: true, people: true } }),
+    });
+    const back = await (await anon.fetch('/events')).text();
+    check('turning them back on restores the nav', back.includes('>Explore</a>'));
   }
 
   const you = await (await fresh.fetch('/you')).text();

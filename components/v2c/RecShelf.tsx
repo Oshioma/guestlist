@@ -17,6 +17,7 @@ export type RecCardData = {
   venue_name: string | null;
   primary_image_url: string | null;
   genres: string[]; // fallback artwork picks the best-fitting one when no image
+  typeLabel: string; // last-resort artwork label ("FESTIVAL") when there is no genre
   price: string | null; // original currency, preformatted
   reasons: string[];
   explore: boolean;
@@ -58,7 +59,8 @@ export function RecShelf({ events, title, surface }: { events: RecCardData[]; ti
               className="recCardLink"
               onClick={() => track('recommendation_click', { eventId: e.id, surface })}
             >
-              <EventImage className="recCardImg" src={e.primary_image_url} genres={e.genres} compactArt />
+              <EventImage className="recCardImg" src={e.primary_image_url} genres={e.genres}
+                          label={e.typeLabel} compactArt />
               <div className="recCardBody">
                 <div className="recCardTitle">{e.title}</div>
                 <div className="recCardMeta">

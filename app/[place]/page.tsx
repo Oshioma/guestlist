@@ -109,7 +109,7 @@ export default async function PlacePage({ params }: { params: Promise<{ place: s
         {member && <FollowCityButton locationId={location.id} following={memberFollowsCity} />}
       </div>
 
-      <GuestlistNow city={location.name} />
+      <GuestlistNow city={location.name} isAdmin={member?.role === 'admin'} />
 
       <AskPanel isSignedIn={!!member} placeholder={`What\u2019s good in ${location.name} tonight?`} />
 

@@ -25,6 +25,9 @@ export async function POST(req: NextRequest) {
     const dup = await queryOne('select 1 from event_sources where url = $1', [url]);
     if (dup) return NextResponse.json({ error: 'That URL is already a source' }, { status: 409 });
 
+    // Polling stays OFF here on purpose. A source earns its schedule by
+    // producing an event on its first successful scan (see scanSource) —
+    // adding a URL is not yet evidence that it works.
     const row = await queryOne<{ id: string }>(
       `insert into event_sources (source_type, name, url, promoter_id, venue_id, notes, city, country)
        values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,

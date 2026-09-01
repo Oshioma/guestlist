@@ -136,6 +136,20 @@ export function cleanPlace(raw: unknown): string | null {
   return s || null;
 }
 
+// Map genre NAMES (as a model or a source page reports them) onto the ids of
+// genres we actually have. Unrecognised names are dropped rather than
+// invented — the taxonomy is ours, not the page's.
+export function matchGenreIdsByName(
+  names: string[],
+  genres: { id: string; name: string }[]
+): string[] {
+  const byName = new Map(genres.map((g) => [g.name.trim().toLowerCase(), g.id]));
+  const ids = names
+    .map((n) => byName.get(n.trim().toLowerCase()))
+    .filter((id): id is string => !!id);
+  return [...new Set(ids)];
+}
+
 export function cleanGenreIds(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return [...new Set(raw.filter((g): g is string =>

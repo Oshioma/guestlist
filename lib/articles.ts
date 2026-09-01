@@ -28,8 +28,9 @@ export async function listAuthorArticles(authorId:string):Promise<Article[]>{ret
 export async function getAuthorArticle(id:string,authorId:string):Promise<Article|null>{return queryOne<Article>(`${SELECT} where a.id=$1 and a.author_id=$2`,[id,authorId]);}
 export async function listAdminArticles():Promise<Article[]>{return query<Article>(`${SELECT} order by case a.status when 'submitted' then 0 when 'changes_requested' then 1 when 'approved' then 2 when 'published' then 3 else 4 end, a.updated_at desc limit 200`);}
 
-export async function createDraft(authorId:string) {
-  return queryOne<{id:string;slug:string}>(`insert into articles(section_id,author_id,slug) select id,$1,$2 from editorial_sections where slug='balance' returning id,slug`,[authorId,articleSlug('draft')]);
+export async function createDraft(authorId:string, section='balance') {
+  const safeSection=section==='events'?'events':'balance';
+  return queryOne<{id:string;slug:string}>(`insert into articles(section_id,author_id,slug) select id,$1,$2 from editorial_sections where slug=$3 and active=true returning id,slug`,[authorId,articleSlug('draft'),safeSection]);
 }
 
 export type ArticlePatch={title?:string;subtitle?:string|null;excerpt?:string|null;body?:string;article_type?:string;hero_image_url?:string|null;hero_image_alt?:string|null;image_provider?:string|null;image_credit?:string|null;image_source_url?:string|null;tags?:string[]};
@@ -42,10 +43,15 @@ async function snapshot(a:Article,editorId:string){await query(`insert into arti
 
 export async function updateDraft(id:string,authorId:string,p:ArticlePatch){
   const current=await getAuthorArticle(id,authorId); if(!current) return null;
-  if(!['draft','changes_requested'].includes(current.status)) throw new Error('This article can no longer be edited');
+  if(['archived','rejected'].includes(current.status)) throw new Error('This article can no longer be edited');
   await snapshot(current,authorId); const x=normalizedPatch(current,p);
   await query(`update articles set title=$3, subtitle=$4, excerpt=$5, body=$6, article_type=$7, hero_image_url=$8, hero_image_alt=$9, image_provider=$10, image_credit=$11, image_source_url=$12, tags=$13, reading_minutes=$14, updated_at=now() where id=$1 and author_id=$2`,[id,authorId,x.title,x.subtitle,x.excerpt,x.body,x.article_type,x.hero_image_url,x.hero_image_alt,x.image_provider,x.image_credit,x.image_source_url,x.tags,x.reading_minutes]);
   return getAuthorArticle(id,authorId);
+}
+export async function deleteAuthorArticle(id:string,authorId:string){
+  const current=await getAuthorArticle(id,authorId); if(!current)return false;
+  await query(`delete from articles where id=$1 and author_id=$2`,[id,authorId]);
+  return true;
 }
 export async function submitArticle(id:string,authorId:string){
   const a=await getAuthorArticle(id,authorId); if(!a) return null;

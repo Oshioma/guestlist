@@ -28,6 +28,12 @@ export type EventCard = {
   going_avatars: { display_name: string; avatar_url: string | null }[];
 };
 
+// How far from a chosen city still counts as "near" it. Wide enough for the
+// places people actually travel to for a night out (Dar es Salaam →
+// Zanzibar, London → Brighton), tight enough that another country never
+// qualifies by accident.
+export const NEAR_KM = 150;
+
 export type BrowseTab =
   | 'for-you'
   | 'this-weekend'
@@ -146,10 +152,53 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
     }
   }
 
-  // Recommended ranking: featured first, then follow + explicit-genre
-  // affinity for signed-in members (a followed promoter/venue/artist counts
-  // double), then soonest. Deliberately simple — the schema carries the
-  // signals a real recommender will use later.
+  // Where a member's life actually is. Events near one of their chosen
+  // cities rank above events merely in the same country, which rank above
+  // the rest of the world — so someone in London is not shown Ibiza and
+  // Zanzibar ahead of what is on this weekend. Distance, not country, is
+  // what decides "near": Dar es Salaam picks up Zanzibar (~65km) while
+  // London never picks up Spain.
+  // Worth Travelling For is *about* leaving home, so it never gets the
+  // near-home tier applied to it.
+  let proximityTier = '(select 0)';
+  if (params.member?.id && params.tab !== 'travel') {
+    const places = await query<{ latitude: number | null; longitude: number | null; country_name: string | null }>(
+      `select l.latitude, l.longitude, l.country_name
+         from members m join locations l on l.id = m.home_location_id
+        where m.id = $1
+       union
+       select l.latitude, l.longitude, l.country_name
+         from member_locations ml join locations l on l.id = ml.location_id
+        where ml.member_id = $1`,
+      [params.member.id]
+    );
+    const coords = places.filter((p) => p.latitude != null && p.longitude != null);
+    const countries = [...new Set(places.map((p) => p.country_name).filter(Boolean))] as string[];
+
+    if (coords.length || countries.length) {
+      // 0 = near one of my cities, 1 = same country, 2 = everywhere else.
+      const nearClauses = coords.map((p) => {
+        const latP = arg(p.latitude);
+        const lngP = arg(p.longitude);
+        return `(6371 * acos(least(1, greatest(-1,
+            cos(radians(${latP})) * cos(radians(e.latitude)) *
+            cos(radians(e.longitude) - radians(${lngP})) +
+            sin(radians(${latP})) * sin(radians(e.latitude))
+          )))) <= ${arg(NEAR_KM)}`;
+      });
+      const near = nearClauses.length
+        ? `(e.latitude is not null and e.longitude is not null and (${nearClauses.join(' or ')}))`
+        : 'false';
+      const sameCountry = countries.length
+        ? `(e.country is not null and e.country = any(${arg(countries)}))`
+        : 'false';
+      proximityTier = `(case when ${near} then 0 when ${sameCountry} then 1 else 2 end)`;
+    }
+  }
+
+  // Recommended ranking: near home first, then featured, then follow +
+  // explicit-genre affinity for signed-in members (a followed
+  // promoter/venue/artist counts double), then soonest.
   let genreAffinity = '(select 0)';
   if (params.member?.id) {
     const memberParam = arg(params.member.id);
@@ -168,7 +217,7 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
   }
 
   const orderBy = {
-    recommended: `e.featured desc, ${genreAffinity} desc, e.start_at asc`,
+    recommended: `${proximityTier} asc, e.featured desc, ${genreAffinity} desc, e.start_at asc`,
     soonest: `e.start_at asc`,
     popular: `(pop.going_count * 2 + pop.interested_count) desc, e.start_at asc`,
     newest: `coalesce(e.published_at, e.created_at) desc`,

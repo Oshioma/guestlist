@@ -40,7 +40,7 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
         </div>
       </section>
 
-      <VideoArchive videos={videos} />
+      <VideoArchive videos={videos} legacy={artist.slug === 'dj-cassidy'} />
 
       <div className="sectionLabel" style={{ marginTop: 42 }}>Playing next</div>
       {upcoming.length ? <div className="cardGrid">{upcoming.map((e) => <EventCard key={e.id} event={e} saved={savedIds.has(e.id)} isSignedIn={!!member} />)}</div>

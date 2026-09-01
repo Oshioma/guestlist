@@ -20,12 +20,13 @@ import { EventImage } from '@/components/EventImage';
 import { HomeTonight } from '@/components/HomeTonight';
 import { AskPanel } from '@/components/ask/AskPanel';
 import { BalanceHomeSection } from '@/components/balance/BalanceHomeSection';
+import { HomeFooter } from '@/components/HomeFooter';
 
 export const dynamic = 'force-dynamic';
 
 // MY GUESTLIST — the logged-in front door: a personalised cultural
 // magazine, not an admin dashboard.
-async function MemberHome({ member }: { member: { id: string; display_name: string } }) {
+async function MemberHome({ member }: { member: { id: string; display_name: string; role: 'member' | 'admin' } }) {
   const weekend = weekendWindow();
   const [weekendPicks, picks, yourPeople, danced, places, travel] = await Promise.all([
     getRecommendedEvents(member.id, { limit: 4, from: weekend.from, to: weekend.to, exploration: false }),
@@ -71,7 +72,7 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
         </div>
       )}
 
-      <GuestlistNow />
+      <GuestlistNow isAdmin={member.role === 'admin'} />
       <HomeTonight />
 
       {weekendPicks.length > 0 && (
@@ -212,7 +213,7 @@ export default async function HomePage() {
       )}
 
       <div className="wrap">
-        {!member && <GuestlistNow />}
+        {!member && <GuestlistNow isAdmin={false} />}
         <div className="chipRow" style={{ padding: '26px 0 10px' }}>
           {genres.map((g) => (
             <Link key={g.slug} href={`/events?genre=${g.slug}`} className="chip">
@@ -287,21 +288,7 @@ export default async function HomePage() {
         )}
 
         <BalanceHomeSection />
-
-        <section className="homeSubmitStrip">
-          <div>
-            <h3 style={{ margin: '0 0 6px' }}>Know a night we’re missing?</h3>
-            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-              Paste the event link and we’ll take care of the rest.
-            </p>
-          </div>
-          <Link href="/events/submit" className="btnAccent">Add an event →</Link>
-        </section>
-
-        <footer className="siteFooter">
-          <div>Guestlist — the best events for our community, not every event.</div>
-          <div><Link href="/balance">Balance</Link> · info@guestlist.net</div>
-        </footer>
+        <HomeFooter isSignedIn={!!member} isAdmin={member?.role === 'admin'} />
       </div>
     </main>
   );
