@@ -21,6 +21,16 @@ function hashIp(req: NextRequest): string {
     .digest('hex');
 }
 
+function safeSubmissionUrl(raw: string): string | null {
+  try {
+    const parsed = new URL(raw.trim());
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
@@ -47,6 +57,48 @@ export async function POST(req: NextRequest) {
       { error: 'That’s a lot of links at once — give us an hour to catch up.' },
       { status: 429 }
     );
+  }
+
+  // Manual fallback stays inside the existing event_submissions queue. It
+  // does not create a parallel importer or bypass editorial review.
+  if (body.manual === true) {
+    const cleanUrl = safeSubmissionUrl(url);
+    if (!cleanUrl) {
+      return NextResponse.json({ error: 'That doesn’t look like a valid link.' }, { status: 400 });
+    }
+    const title = String(body.title ?? '').trim();
+    if (!title) return NextResponse.json({ error: 'Event name is required' }, { status: 400 });
+
+    const note = [
+      'Manual submission',
+      `Title: ${title}`,
+      body.date ? `Date: ${String(body.date).trim()}` : null,
+      body.venue ? `Venue: ${String(body.venue).trim()}` : null,
+      body.city ? `City: ${String(body.city).trim()}` : null,
+      body.notes ? `Notes: ${String(body.notes).trim()}` : null,
+      body.importError ? `Automatic import error: ${String(body.importError).trim()}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n')
+      .slice(0, 5000);
+
+    const submission = await queryOne<{ id: string }>(
+      `insert into event_submissions (url, submitted_by, ip_hash, note)
+       values ($1, $2, $3, $4)
+       returning id`,
+      [cleanUrl, member?.id ?? null, ipHash, note]
+    );
+
+    await track('event_submitted', {
+      memberId: member?.id ?? null,
+      metadata: { url: cleanUrl, outcome: 'manual', submissionId: submission?.id ?? null },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      outcome: 'manual',
+      message: 'Thanks — we have the details and will review them.',
+    });
   }
 
   const result = await processUrlSubmission(url, member?.id ?? null, { ipHash });
@@ -81,6 +133,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       outcome: 'created',
       found: parts,
+      eventId: member?.role === 'admin' ? result.eventId : undefined,
       message: 'Thanks for helping build Guestlist.',
     });
   }
