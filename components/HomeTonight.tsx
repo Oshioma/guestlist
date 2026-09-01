@@ -15,6 +15,7 @@ type HomeTonightEvent = {
   primary_image_url: string | null;
   featured: boolean;
   venue_name: string | null;
+  going_count: number;
   genres: { name: string; slug: string }[];
 };
 
@@ -22,6 +23,8 @@ export async function HomeTonight() {
   const events = await query<HomeTonightEvent>(
     `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
             e.city, e.primary_image_url, e.featured, v.name as venue_name,
+            coalesce((select count(*)::int from member_event_actions mea
+                       where mea.event_id = e.id and mea.rsvp = 'going'), 0) as going_count,
             coalesce((select json_agg(json_build_object('name', g.name, 'slug', g.slug))
                         from event_genres eg join genres g on g.id = eg.genre_id
                        where eg.event_id = e.id), '[]'::json) as genres
@@ -48,39 +51,64 @@ export async function HomeTonight() {
     );
   }
 
-  const hero = events[0];
-  const editorial = events.filter((e) => e.featured && e.id !== hero.id);
-  const fallback = events.filter((e) => !e.featured && e.id !== hero.id);
+  const editorial = events.filter((e) => e.featured);
+  const fallback = events.filter((e) => !e.featured);
   const picks = [...editorial, ...fallback].slice(0, 3);
-  const heroGenres = hero.genres.map((g) => g.name);
+  const tonight = events.slice(0, 5);
+  const totalGoing = tonight.reduce((sum, event) => sum + event.going_count, 0);
 
   return (
     <section className={styles.section} aria-label="Tonight and Guestlist picks">
-      <article className={styles.tonight}>
-        <div className={styles.media} aria-hidden="true">
-          <EventImage src={hero.primary_image_url} genres={heroGenres} />
-        </div>
-        <div className={styles.scrim} aria-hidden="true" />
-        <div className={styles.tonightInner}>
-          <div className={styles.topline}>
-            <span className={styles.badge}>TONIGHT</span>
-            <span className={styles.place}>{hero.city ?? 'On Guestlist'}</span>
+      <div className={styles.appPanel}>
+        <div className={styles.appHead}>
+          <div>
+            <div className={styles.liveEyebrow}>LIVE NOW</div>
+            <h2 className={styles.appTitle}>Who’s out tonight?</h2>
+            <p className={styles.appSub}>
+              {totalGoing > 0
+                ? `${totalGoing} Guestlist ${totalGoing === 1 ? 'member is' : 'members are'} already going out`
+                : 'See who’s heading out — and be the first one there.'}
+            </p>
           </div>
-          <div className={styles.copy}>
-            <div className={styles.kicker}>What’s actually worth going to tonight?</div>
-            <h2 className={styles.title}>{hero.title}</h2>
-            <div className={styles.meta}>
-              {fmtEventDate(hero.start_at, hero.end_at, hero.timezone)}
-              {hero.venue_name ? ` · ${hero.venue_name}` : ''}
-              {hero.city ? ` · ${hero.city}` : ''}
-            </div>
-            <div className={styles.actions}>
-              <Link href={`/events/${hero.slug}`} className={styles.primary}>See tonight →</Link>
-              <Link href="/events?tab=for-you" className={styles.secondary}>More tonight</Link>
-            </div>
+          <div className={styles.appActions}>
+            <Link href="/notifications" className={styles.pill}>♟ <span>Notifications</span></Link>
+            <Link href="/you" className={`${styles.pill} ${styles.iconPill}`} aria-label="Tonight settings">⚙</Link>
           </div>
         </div>
-      </article>
+
+        <div className={styles.listHead}>
+          <span>TONIGHT</span>
+          <Link href="/events" className={styles.allTonight}>See all →</Link>
+        </div>
+
+        <div className={styles.tonightList}>
+          {tonight.map((event) => (
+            <Link href={`/events/${event.slug}`} className={styles.eventRow} key={event.id}>
+              <span className={styles.thumb}>
+                <EventImage
+                  src={event.primary_image_url}
+                  genres={event.genres.map((g) => g.name)}
+                  compactArt
+                />
+              </span>
+              <span className={styles.eventBody}>
+                <span className={styles.eventTitle}>{event.title}</span>
+                <span className={styles.eventMeta}>
+                  {fmtEventDate(event.start_at, event.end_at, event.timezone)}
+                  {event.venue_name ? ` · ${event.venue_name}` : ''}
+                  {event.city ? ` · ${event.city}` : ''}
+                </span>
+                <span className={event.going_count > 0 ? styles.socialActive : styles.socialMuted}>
+                  {event.going_count > 0
+                    ? `${event.going_count} ${event.going_count === 1 ? 'person' : 'people'} going`
+                    : 'Be the first one there'}
+                </span>
+              </span>
+              <span className={styles.rowArrow}>›</span>
+            </Link>
+          ))}
+        </div>
+      </div>
 
       <aside className={styles.picks}>
         <div className={styles.picksHead}>
@@ -93,7 +121,14 @@ export async function HomeTonight() {
 
         {picks.map((event, index) => (
           <Link href={`/events/${event.slug}`} className={styles.pick} key={event.id}>
-            <span className={styles.number}>{String(index + 1).padStart(2, '0')}</span>
+            <span className={styles.pickThumb}>
+              <EventImage
+                src={event.primary_image_url}
+                genres={event.genres.map((g) => g.name)}
+                compactArt
+              />
+              <span className={styles.pickNumber}>{String(index + 1).padStart(2, '0')}</span>
+            </span>
             <span>
               <span className={styles.pickName}>{event.title}</span>
               <span className={styles.pickMeta}>
