@@ -121,6 +121,10 @@
 .tonightList {
   display: grid;
   gap: 10px;
+  max-height: 620px;
+  overflow-y: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
 }
 
 .eventRow {
@@ -312,6 +316,7 @@
   .appPanel { padding: 18px; }
   .appHead { display: block; margin-bottom: 22px; }
   .appActions { justify-content: flex-start; margin-top: 16px; }
+  .tonightList { max-height: 500px; }
   .eventRow { grid-template-columns: 84px minmax(0, 1fr) 16px; min-height: 84px; border-radius: 20px; }
   .thumb { width: 84px; height: 84px; }
   .eventBody { padding: 11px 12px; }
