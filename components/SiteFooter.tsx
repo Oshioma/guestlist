@@ -1,10 +1,17 @@
 'use client';
 
+// THE FOOTER — on every page, not only the homepage.
+//
+// It carries the one thing Guestlist most needs from a visitor ("know
+// something we're missing?") and the links a site is expected to have. Both
+// were only ever on the front page, which is the page somebody is least
+// likely to be on when they think of a night we have not got.
+
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-export function HomeFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdmin: boolean }) {
+export function SiteFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdmin: boolean }) {
   const router = useRouter();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -57,14 +64,17 @@ export function HomeFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdm
   const manualHref = isSignedIn ? '/events/submit/manual' : '/login?next=/events/submit/manual';
 
   return (
-    <footer className="siteFooter" style={{ marginTop: 44 }}>
-      <section style={{ padding: '26px 0', borderBottom: '1px solid var(--border)' }}>
+    <footer className="siteFooter">
+      <div className="wrap">
+      {/* The ask runs the full width of the page: it is the most useful thing
+          on the footer, and it was sitting in half a column beside the links. */}
+      <section className="siteFooterAdd">
         <div className="homeKicker">ADD AN EVENT</div>
         <h3 style={{ margin: '6px 0' }}>Know something we’re missing?</h3>
         <p style={{ margin: '0 0 14px', color: 'var(--text-muted)' }}>
           Paste the event or ticket link and we’ll do the rest.
         </p>
-        <form onSubmit={submit} className="urlRow" style={{ maxWidth: 760 }}>
+        <form onSubmit={submit} className="urlRow">
           <input
             type="url"
             value={url}
@@ -83,7 +93,7 @@ export function HomeFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdm
         </div>
       </section>
 
-      <nav style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 18px', padding: '22px 0 10px' }} aria-label="Guestlist footer">
+      <nav className="siteFooterNav" aria-label="Guestlist footer">
         <Link href={articleHref}>Add article</Link>
         <Link href="/events">Events</Link>
         <Link href="/balance">Balance</Link>
@@ -91,8 +101,9 @@ export function HomeFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdm
         <Link href="/privacy">Privacy Policy</Link>
         <a href="mailto:info@guestlist.net">info@guestlist.net</a>
       </nav>
-      <div style={{ paddingBottom: 22, color: 'var(--text-muted)' }}>
+      <div className="siteFooterLine">
         Guestlist — the best events for our community, not every event.
+      </div>
       </div>
     </footer>
   );

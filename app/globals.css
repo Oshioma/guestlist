@@ -1218,17 +1218,39 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
   color: rgba(234,234,234,0.9);
 }
 
+/* THE FOOTER. It used to be a flex row, which put "Know something we're
+   missing?" in half a column with the links beside it — the most useful thing
+   on the page, squeezed. Stacked instead: the ask runs the full width, the
+   links sit under it. */
 .siteFooter {
   margin-top: 70px;
   border-top: 1px solid var(--border);
-  padding: 18px 0 40px;
   font-size: 12px;
   color: var(--text-faint);
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 14px;
 }
+.siteFooterAdd {
+  padding: 30px 0 28px;
+  border-bottom: 1px solid var(--border);
+}
+.siteFooterAdd h3 { font-size: 20px; letter-spacing: -0.3px; }
+.siteFooterAdd p { font-size: 14px; }
+/* Full width on desktop — the input is the point of the panel. */
+.siteFooterAdd .urlRow { max-width: none; width: 100%; }
+/* Some pages (events, cities, countries) already carry the big "add an
+   event" panel. Two asks in a row is one too many, so the footer's stands
+   down where the page has already made it. Browsers without :has() simply
+   show both, which is untidy rather than broken. */
+body:has(.addEventCta) .siteFooterAdd { display: none; }
+
+.siteFooterNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding: 22px 0 10px;
+}
+.siteFooterNav a { color: var(--text-muted); text-decoration: none; }
+.siteFooterNav a:hover { color: var(--text); text-decoration: underline; }
+.siteFooterLine { padding-bottom: 30px; color: var(--text-muted); }
 
 .cardOverlayLink { position: absolute; inset: 0; z-index: 1; }
 .eventCard .saveBtn { z-index: 3; }
