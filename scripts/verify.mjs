@@ -899,6 +899,53 @@ console.log('\n— Publish all —');
 
 
 // ---------------------------------------------------------------------------
+// A country has a page of its own, and a city page puts its own country next.
+console.log('\n— Country pages —');
+{
+  const [uk] = await q(
+    `select count(*)::int as n from events e join locations l on l.id = e.location_id
+      where l.country_name = 'United Kingdom' and e.status = 'live' and e.start_at > now()`
+  );
+  const page = await (await anon.fetch('/united-kingdom')).text();
+  check('a country page exists at its own slug', page.includes('Coming up in United Kingdom'));
+  check('it lists the cities in that country', page.includes('London'));
+  check('it offers somewhere to go next', page.includes('Beyond United Kingdom'));
+  check('the country actually has events to show', uk.n > 0);
+
+  check('a country nobody has cities in is a 404',
+    (await anon.fetch('/atlantis')).status === 404);
+
+  // "IT" is not a country. Nothing should route to it as one.
+  check('an ISO code is not its own country page',
+    (await anon.fetch('/it')).status === 404);
+
+  const explore = await (await anon.fetch('/explore')).text();
+  check('explore points its country headings at the country page',
+    explore.includes('href="/united-kingdom"'));
+
+  const city = await (await anon.fetch('/london')).text();
+  check('a city page names its own city first',
+    city.indexOf('Coming up in London') > 0);
+  check('then the rest of that country', city.includes('Elsewhere in United Kingdom'));
+  check('then everywhere else', city.includes('Beyond United Kingdom'));
+  check('the country comes before the world on a city page',
+    city.indexOf('Coming up in London') < city.indexOf('Elsewhere in United Kingdom')
+    && city.indexOf('Elsewhere in United Kingdom') < city.indexOf('Beyond United Kingdom'));
+  check('a city page links up to its country',
+    city.includes('href="/united-kingdom"'));
+  // The country shelf excludes the city you are already looking at, so a
+  // London night is listed once on /london, not twice.
+  const [londonEvent] = await q(
+    `select e.slug from events e join locations l on l.id = e.location_id
+      where l.slug = 'london' and e.status = 'live'
+        and e.listing_status <> 'cancelled' and e.start_at > now()
+      order by e.start_at limit 1`
+  );
+  check('the rest of the country never repeats the city itself',
+    !!londonEvent && city.split(`/events/${londonEvent.slug}"`).length - 1 === 1);
+}
+
+// ---------------------------------------------------------------------------
 // Admins hear about the site: who joined, what was written, and what is
 // waiting. One line per rare happening; one rolling digest for the queues.
 console.log('\n— Admin notifications —');

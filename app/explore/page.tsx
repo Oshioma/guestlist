@@ -9,7 +9,7 @@
 import Link from 'next/link';
 import { getCurrentMember } from '@/lib/auth';
 import { liveDestinations } from '@/lib/locations';
-import { canonicalCountry } from '@/lib/countries';
+import { canonicalCountry, countrySlug } from '@/lib/countries';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,7 +86,14 @@ export default async function ExplorePage({
           {shown.map(([country, group]) => (
             <section key={country} className="exploreCountry2">
               <div className="exploreCountryHead">
-                <h2>{country}</h2>
+                {/* The heading is the way into the country's own page — every
+                    city in it on one screen, rather than only the ones that
+                    fit here. "Elsewhere" is not a country, so it stays flat. */}
+                <h2>
+                  {country === NO_COUNTRY
+                    ? country
+                    : <Link href={`/${countrySlug(country)}`}>{country}</Link>}
+                </h2>
                 {/* Events, not cities: the cities are right there to be
                     counted, and what a visitor wants to know is how much is on. */}
                 <span>{`${group.events} event${group.events === 1 ? '' : 's'}`}</span>

@@ -65,10 +65,34 @@ const ALIASES: Record<string, string> = {
   uae: 'United Arab Emirates',
 };
 
+// ISO 3166-1 alpha-2 codes. Scraped pages and feeds sometimes give the code
+// where a country name belongs, and /explore falls back to a location's
+// country_code when it has no country_name — so a bare "IT" was reaching the
+// screen as its own country. Two letters is never a country's real name.
+const ISO_CODES: Record<string, string> = {
+  gb: 'United Kingdom', ie: 'Ireland', fr: 'France', de: 'Germany', it: 'Italy',
+  es: 'Spain', pt: 'Portugal', nl: 'Netherlands', be: 'Belgium', lu: 'Luxembourg',
+  ch: 'Switzerland', at: 'Austria', cz: 'Czechia', pl: 'Poland', hu: 'Hungary',
+  ro: 'Romania', bg: 'Bulgaria', gr: 'Greece', hr: 'Croatia', si: 'Slovenia',
+  sk: 'Slovakia', rs: 'Serbia', me: 'Montenegro', al: 'Albania', mt: 'Malta',
+  cy: 'Cyprus', se: 'Sweden', no: 'Norway', dk: 'Denmark', fi: 'Finland',
+  is: 'Iceland', ee: 'Estonia', lv: 'Latvia', lt: 'Lithuania', ua: 'Ukraine',
+  tr: 'Turkey', il: 'Israel', ae: 'United Arab Emirates', sa: 'Saudi Arabia',
+  eg: 'Egypt', ma: 'Morocco', tn: 'Tunisia', za: 'South Africa', ng: 'Nigeria',
+  gh: 'Ghana', ke: 'Kenya', tz: 'Tanzania', ug: 'Uganda', sn: 'Senegal',
+  ci: "Côte d'Ivoire", us: 'United States', ca: 'Canada', mx: 'Mexico',
+  br: 'Brazil', ar: 'Argentina', cl: 'Chile', co: 'Colombia', pe: 'Peru',
+  uy: 'Uruguay', au: 'Australia', nz: 'New Zealand', jp: 'Japan', kr: 'South Korea',
+  cn: 'China', hk: 'Hong Kong', tw: 'Taiwan', sg: 'Singapore', th: 'Thailand',
+  vn: 'Vietnam', id: 'Indonesia', my: 'Malaysia', ph: 'Philippines', in: 'India',
+  jm: 'Jamaica', tt: 'Trinidad and Tobago', bb: 'Barbados', cu: 'Cuba', do: 'Dominican Republic',
+};
+
 export function canonicalCountry(raw: string | null | undefined): string | null {
   const trimmed = (raw ?? '').trim().replace(/\s+/g, ' ');
   if (!trimmed) return null;
-  const alias = ALIASES[trimmed.toLowerCase()];
+  const lower = trimmed.toLowerCase();
+  const alias = ALIASES[lower] ?? ISO_CODES[lower];
   if (alias) return alias;
   // Not an alias: keep what was written, but with a consistent shape so
   // "united kingdom" and "United Kingdom" do not become two countries.
@@ -84,6 +108,17 @@ export function canonicalCountry(raw: string | null | undefined): string | null 
     .join(' ');
 }
 
-// The SQL form of the same map, for migrations and one-off cleanups.
+// The SQL form of the same maps, for migrations and one-off cleanups.
 export const COUNTRY_ALIAS_SQL_PAIRS: [string, string][] =
-  Object.entries(ALIASES).map(([from, to]) => [from, to]);
+  [...Object.entries(ALIASES), ...Object.entries(ISO_CODES)].map(([from, to]) => [from, to]);
+
+// A country's own page lives at /netherlands, /united-kingdom, /cote-d-ivoire.
+// Diacritics and apostrophes are folded out so the URL is typeable.
+export function countrySlug(name: string): string {
+  return name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
