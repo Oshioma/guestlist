@@ -16,6 +16,17 @@ async function aiAssist(title:string,body:string):Promise<AiResult>{
   if(!r.ok)return fallback(title,body); const data=await r.json() as {content?:Array<{type:string;text?:string}>}; const text=data.content?.find(c=>c.type==='text')?.text||'';
   try{return JSON.parse(cleanJson(text)) as AiResult}catch{return fallback(title,body)}
 }
+async function fixTypos(title:string,body:string){
+  const key=process.env.ANTHROPIC_API_KEY; if(!key)throw new Error('Typo fixer is not configured');
+  const model=process.env.ARTICLE_AI_MODEL?.trim()||'claude-sonnet-4-6';
+  const prompt=`Proofread the Guestlist Balance article below. Fix ONLY spelling mistakes, obvious typos, punctuation mistakes and clear grammatical slips. Preserve the writer's voice, wording, slang, paragraph breaks, meaning and style. Do not rewrite, improve, shorten, expand, censor, fact-check or change opinions. Return ONLY valid JSON with exactly two string keys: title and body.\nTITLE: ${title.slice(0,300)}\nARTICLE:\n${body.slice(0,30000)}`;
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model,max_tokens:6000,messages:[{role:'user',content:prompt}]})});
+  if(!r.ok)throw new Error('Typo fixer unavailable');
+  const data=await r.json() as {content?:Array<{type:string;text?:string}>}; const text=data.content?.find(c=>c.type==='text')?.text||'';
+  const fixed=JSON.parse(cleanJson(text)) as {title?:unknown;body?:unknown};
+  if(typeof fixed.title!=='string'||typeof fixed.body!=='string')throw new Error('Typo fixer returned an invalid response');
+  return {title:fixed.title,body:fixed.body};
+}
 async function searchUnsplash(q:string){
   const key=process.env.UNSPLASH_ACCESS_KEY; if(!key||!q)return [];
   const r=await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(q)}&per_page=8&orientation=landscape&client_id=${encodeURIComponent(key)}`,{next:{revalidate:3600}});
@@ -23,8 +34,9 @@ async function searchUnsplash(q:string){
   return (d.results||[]).map(x=>({id:x.id,url:x.urls.regular,thumb:x.urls.small,alt:x.alt_description||q,provider:'unsplash',credit:x.user.name,sourceUrl:x.links.html,photographerUrl:x.user.links.html}));
 }
 export async function POST(req:NextRequest){
-  try{await requireMember();const body=await req.json().catch(()=>({}));const title=typeof body.title==='string'?body.title:'';const article=typeof body.body==='string'?body.body:'';const mode=body.mode==='images'?'images':'coach';
-    const suggestions=await aiAssist(title,article); const query=typeof body.query==='string'&&body.query.trim()?body.query.trim():(suggestions.imageQueries?.[0]||title);
+  try{await requireMember();const body=await req.json().catch(()=>({}));const title=typeof body.title==='string'?body.title:'';const article=typeof body.body==='string'?body.body:'';
+    if(body.mode==='typos'){const fixed=await fixTypos(title,article);return NextResponse.json({fixed});}
+    const mode=body.mode==='images'?'images':'coach'; const suggestions=await aiAssist(title,article); const query=typeof body.query==='string'&&body.query.trim()?body.query.trim():(suggestions.imageQueries?.[0]||title);
     const images=mode==='images'?await searchUnsplash(query):[]; return NextResponse.json({suggestions,images,imageSearchConfigured:!!process.env.UNSPLASH_ACCESS_KEY,query});
-  }catch(e){if(e instanceof AuthError)return NextResponse.json({error:e.message},{status:e.status});console.error(e);return NextResponse.json({error:'Assistant unavailable'},{status:500});}
+  }catch(e){if(e instanceof AuthError)return NextResponse.json({error:e.message},{status:e.status});console.error(e);return NextResponse.json({error:e instanceof Error?e.message:'Assistant unavailable'},{status:500});}
 }
