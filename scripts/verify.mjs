@@ -466,6 +466,10 @@ console.log('\n— Sources admin —');
         <a href="/events/candidate-one">Candidate One — 2030-05-01</a>
         <a href="/events/candidate-two">Candidate Two — 2030-05-02</a>
       </main></body></html>`);
+    } else if (req.url === '/') {
+      // The homepage a rescue would read: its nav points at the real listing.
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`<html><body><nav><a href="/about">About</a><a href="/events">Agenda</a></nav></body></html>`);
     } else {
       res.writeHead(404).end();
     }
@@ -476,12 +480,35 @@ console.log('\n— Sources admin —');
   })).json();
   check('test-url finds event links on a good candidate', good.bot?.ok === true && good.candidates >= 2,
         JSON.stringify(good));
-  const dead = await (await admin.fetch('/api/admin/sources/test-url', {
-    method: 'POST', body: JSON.stringify({ url: 'http://127.0.0.1:4582/nope' }),
+
+  // A guessed listing path is a near miss more often than a dead venue: the
+  // homepage is asked where its agenda lives before we write the site off.
+  const missed = await (await admin.fetch('/api/admin/sources/test-url', {
+    method: 'POST', body: JSON.stringify({ url: 'http://127.0.0.1:4582/en/agenda' }),
   })).json();
-  check('test-url reports a dead candidate as unusable', dead.bot?.ok !== true || dead.candidates === 0,
+  check('a 404 listing path is rescued from the homepage',
+        missed.target === 'http://127.0.0.1:4582/events' && missed.candidates >= 2
+        && missed.foundVia?.triedFirst === 'http://127.0.0.1:4582/en/agenda', JSON.stringify(missed));
+
+  const dead = await (await admin.fetch('/api/admin/sources/test-url', {
+    method: 'POST', body: JSON.stringify({ url: 'http://127.0.0.1:4583/nope' }),
+  })).json();
+  check('a genuinely dead candidate stays dead', dead.bot?.ok !== true || dead.candidates === 0,
         JSON.stringify(dead));
   listing.close();
+
+  // A source an admin added is meant to be watched: it polls from the start.
+  const polls = await q(
+    `select polling_enabled from event_sources where url = 'https://example.com/verification-source'`
+  );
+  check('a newly added source polls from the start', polls[0]?.polling_enabled === true);
+
+  // The scheduled scan runs on GET too, because that is what Vercel Cron
+  // sends — but only for an admin or the cron secret.
+  const cronAnon = await fetch(`${BASE}/api/jobs/scan-sources`);
+  check('scheduled scan rejects an anonymous GET', cronAnon.status === 401);
+  const cronAdmin = await admin.fetch('/api/jobs/scan-sources');
+  check('scheduled scan runs for an admin GET', cronAdmin.status === 200);
 }
 
 // ---------------------------------------------------------------------------

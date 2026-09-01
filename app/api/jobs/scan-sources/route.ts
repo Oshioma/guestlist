@@ -1,11 +1,14 @@
 // Scheduled polling entrypoint: scans every source whose polling schedule is
-// due. Server-side only — call it from cron, e.g.:
+// due.
+//
+// Vercel Cron (see vercel.json) calls this with GET and the CRON_SECRET
+// bearer token, so GET and POST both run the job. An external scheduler works
+// just as well:
 //
 //   */30 * * * *  curl -s -X POST https://guestlist.net/api/jobs/scan-sources \
 //                   -H "Authorization: Bearer $SUPPLY_CRON_SECRET"
 //
-// (Or a Vercel Cron entry hitting this path.) Auth: the SUPPLY_CRON_SECRET
-// bearer token, or an admin session for manual runs.
+// Auth: either bearer secret, or an admin session for manual runs.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
@@ -14,15 +17,19 @@ import { scanDueSources } from '@/lib/supply/scanner';
 
 export const maxDuration = 300;
 
-function secretMatches(header: string | null): boolean {
-  const secret = process.env.SUPPLY_CRON_SECRET;
+function matches(header: string | null, secret: string | undefined): boolean {
   if (!secret || !header?.startsWith('Bearer ')) return false;
   const provided = Buffer.from(header.slice(7));
   const expected = Buffer.from(secret);
   return provided.length === expected.length && timingSafeEqual(provided, expected);
 }
 
-export async function POST(req: NextRequest) {
+// SUPPLY_CRON_SECRET is ours; CRON_SECRET is the one Vercel Cron sends.
+function secretMatches(header: string | null): boolean {
+  return matches(header, process.env.SUPPLY_CRON_SECRET) || matches(header, process.env.CRON_SECRET);
+}
+
+async function run(req: NextRequest) {
   if (!secretMatches(req.headers.get('authorization'))) {
     const member = await getCurrentMember();
     if (member?.role !== 'admin') {
@@ -40,3 +47,6 @@ export async function POST(req: NextRequest) {
     })),
   });
 }
+
+export const POST = run;
+export const GET = run;

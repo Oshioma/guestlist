@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     }
     // safeFetch enforces the private-address and redirect rules; nothing here
     // can reach the internal network.
-    return NextResponse.json(await probeTarget(target));
+    return NextResponse.json(await probeTarget(target, { findListingOnMiss: true }));
   } catch (err) {
     if (err instanceof AuthError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

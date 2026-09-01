@@ -16,6 +16,10 @@ export type ProbeResult = {
   browser: FetchProbe;
   method: 'rss' | 'html' | null;
   candidates: number | null;
+  // Set when the URL we were given was a miss and we found the real listing
+  // page from the site's homepage instead. `target` is then the page that
+  // worked, and this records the one that did not.
+  foundVia?: { triedFirst: string };
 };
 
 export const probeLabel = (p: FetchProbe) =>
@@ -25,7 +29,9 @@ export const probeLabel = (p: FetchProbe) =>
 export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
   if (t.bot.ok && (t.candidates ?? 0) > 0) {
     return {
-      text: `OK — ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'} via ${t.method?.toUpperCase()}`,
+      text: t.foundVia
+        ? `OK — that URL was a dead end, but the site's listing page is ${t.target}, with ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'}. Add uses the working one.`
+        : `OK — ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'} via ${t.method?.toUpperCase()}. Scan it to see how many become events.`,
       bad: false,
     };
   }

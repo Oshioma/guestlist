@@ -6,8 +6,9 @@
 // The browser-user-agent request exists only to diagnose user-agent
 // filtering; the scanner itself never masquerades as a browser.
 
+import { parse } from 'node-html-parser';
 import { safeFetch, type SafeFetchResult } from './safeFetch';
-import { identifyCandidateLinks, parseFeedLinks, looksLikeFeed } from './scanner';
+import { identifyCandidateLinks, parseFeedLinks, looksLikeFeed, canonicaliseCandidateUrl } from './scanner';
 import { supplyConfig } from './config';
 import type { FetchProbe, ProbeResult } from './verdict';
 
@@ -23,7 +24,39 @@ const toProbe = (r: SafeFetchResult): FetchProbe =>
     ? { ok: true, status: r.status, code: null, detail: null, ms: r.ms }
     : { ok: false, status: r.status ?? null, code: r.code, detail: r.detail, ms: r.ms };
 
-export async function probeTarget(target: string): Promise<ProbeResult> {
+// A suggested listing path is often a near miss — /en/agenda when the site
+// uses /agenda. Rather than write the whole venue off on a 404, look at its
+// homepage for the link a person would click.
+const LISTING_TEXT = /\b(agenda|programma|programme|program|events?|what['\u2019]?s[ -]?on|line[ -]?up|kalender|calendar|shows|gigs|tickets)\b/i;
+
+export function findListingLink(html: string, baseUrl: string): string | null {
+  const root = parse(html);
+  const base = new URL(baseUrl);
+  let best: { url: string; score: number } | null = null;
+  for (const a of root.querySelectorAll('a[href]')) {
+    const href = a.getAttribute('href');
+    if (!href) continue;
+    const canonical = href && canonicaliseCandidateUrl(href, baseUrl);
+    if (!canonical) continue;
+    let url: URL;
+    try { url = new URL(canonical); } catch { continue; }
+    if (url.hostname.replace(/^www\./, '') !== base.hostname.replace(/^www\./, '')) continue;
+    if (url.pathname === '/' || url.pathname === base.pathname) continue;
+    const pathHit = LISTING_TEXT.test(url.pathname);
+    const textHit = LISTING_TEXT.test(a.structuredText ?? '');
+    if (!pathHit && !textHit) continue;
+    // A matching path is stronger evidence than matching link text, and a
+    // short path ("/agenda") beats a deep one ("/en/news/agenda-2019").
+    const score = (pathHit ? 2 : 0) + (textHit ? 1 : 0) - url.pathname.split('/').filter(Boolean).length * 0.1;
+    if (!best || score > best.score) best = { url: canonical, score };
+  }
+  return best?.url ?? null;
+}
+
+export async function probeTarget(
+  target: string,
+  opts: { findListingOnMiss?: boolean } = {}
+): Promise<ProbeResult> {
   const asBot = await safeFetch(target, { accept: SCANNER_ACCEPT });
   await new Promise((r) => setTimeout(r, supplyConfig.scan.delayBetweenFetchesMs));
   const asBrowser = await safeFetch(target, { accept: SCANNER_ACCEPT, userAgent: BROWSER_UA });
@@ -41,5 +74,26 @@ export async function probeTarget(target: string): Promise<ProbeResult> {
     }
   }
 
-  return { target, bot: toProbe(asBot), browser: toProbe(asBrowser), method, candidates };
+  const result: ProbeResult = {
+    target, bot: toProbe(asBot), browser: toProbe(asBrowser), method, candidates,
+  };
+
+  // The page is missing, or it loads but has no event links on it: in both
+  // cases the homepage may point at the real listing page.
+  const worthRetrying = !asBot.ok ? asBot.status === 404 : candidates === 0;
+  const origin = (() => { try { return new URL(target).origin; } catch { return null; } })();
+  if (opts.findListingOnMiss && worthRetrying && origin && origin !== target.replace(/\/$/, '')) {
+    await new Promise((r) => setTimeout(r, supplyConfig.scan.delayBetweenFetchesMs));
+    const home = await safeFetch(origin, { accept: SCANNER_ACCEPT });
+    const listing = home.ok ? findListingLink(home.body, home.finalUrl) : null;
+    if (listing && listing !== target) {
+      await new Promise((r) => setTimeout(r, supplyConfig.scan.delayBetweenFetchesMs));
+      const retry = await probeTarget(listing);
+      // Only offer the alternative when it is actually better.
+      if ((retry.candidates ?? 0) > (candidates ?? 0)) {
+        return { ...retry, foundVia: { triedFirst: target } };
+      }
+    }
+  }
+  return result;
 }

@@ -33,6 +33,7 @@ import { scanSource, identifyCandidateLinks, parseFeedLinks, canonicaliseCandida
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
 import { isLiveSource } from '@/lib/supply/health';
+import { findListingLink } from '@/lib/supply/probe';
 import { testVerdict } from '@/lib/supply/verdict';
 import { parse } from 'node-html-parser';
 
@@ -969,6 +970,31 @@ async function main() {
     check('discovery says so when no API key is configured', !unavailable.ok && unavailable.error === 'unavailable');
     const garbled = await discoverSources(req, fake('sorry, I cannot help with that'));
     check('unparseable model output is an error, not a candidate', !garbled.ok);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— finding the real listing page when a suggested path misses —');
+  {
+    const home = `<html><body>
+      <nav><a href="/about">About us</a><a href="/en/agenda">Agenda</a><a href="/contact">Contact</a></nav>
+      <a href="https://tickets.example/buy">Tickets</a>
+    </body></html>`;
+    check('a listing link is found on the homepage',
+      findListingLink(home, 'https://club.example/') === 'https://club.example/en/agenda');
+    check('offsite links are never offered as the listing page',
+      findListingLink('<html><body><a href="https://other.example/agenda">Agenda</a></body></html>',
+        'https://club.example/') === null);
+    check('a homepage with nothing listing-shaped yields nothing',
+      findListingLink('<html><body><a href="/about">About</a><a href="/jobs">Jobs</a></body></html>',
+        'https://club.example/') === null);
+    // Link text alone is enough — plenty of sites use /p/1234 for the agenda.
+    check('link text counts when the path says nothing',
+      findListingLink('<html><body><a href="/p/1234">What\u2019s on</a></body></html>',
+        'https://club.example/') === 'https://club.example/p/1234');
+    check('a short matching path beats a deep one',
+      findListingLink(`<html><body><a href="/news/2019/agenda-archive">Agenda archive</a>
+        <a href="/agenda">Agenda</a></body></html>`, 'https://club.example/')
+        === 'https://club.example/agenda');
   }
 
   // -------------------------------------------------------------------------
