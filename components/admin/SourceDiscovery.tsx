@@ -31,7 +31,7 @@ type Candidate = {
 type ScanSummary = {
   status: string; extracted: number; candidatesFound: number;
   newCandidates: number; duplicates: number; failed: number; error: string | null;
-  startedPolling: boolean; outcomes: OutcomeTally;
+  couldPoll: boolean; outcomes: OutcomeTally;
 };
 
 type RowState = {
@@ -310,7 +310,10 @@ export function SourceDiscovery({
                                   {row.scan.duplicates} duplicate · {row.scan.failed} failed
                                   {row.scan.extracted > 0 ? (
                                     <>
-                                      {row.scan.startedPolling && <> · now polling</>}
+                                      {/* An offer, not a fait accompli: scanning
+                                          records what happened, it does not put a
+                                          source on the schedule. */}
+                                      {row.scan.couldPoll && <> · <b>not polling yet</b></>}
                                       {' — '}
                                       <a href="/admin/events?state=new" style={{ textDecoration: 'underline' }}>review →</a>
                                     </>

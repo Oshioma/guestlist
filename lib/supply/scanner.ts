@@ -232,7 +232,9 @@ export type ScanResult = {
   duplicates: number;
   error: string | null;
   // True when this scan is the one that put the source on a schedule.
-  startedPolling: boolean;
+  // True when this scan brought events back from a source that is NOT on the
+  // schedule — an offer for the desk, never an action taken on its own.
+  couldPoll: boolean;
   // Every extraction status this scan produced, counted. "0 extracted" is
   // not a diagnosis; "5 not_an_event" is.
   outcomes: OutcomeTally;
@@ -256,7 +258,7 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
   const scanId = scan!.id;
   const fetcher = ctx.fetcher ?? safeFetch;
 
-  const finish = async (r: Omit<ScanResult, 'scanId' | 'startedPolling' | 'outcomes'> & { outcomes?: OutcomeTally }): Promise<ScanResult> => {
+  const finish = async (r: Omit<ScanResult, 'scanId' | 'couldPoll' | 'outcomes'> & { outcomes?: OutcomeTally }): Promise<ScanResult> => {
     await query(
       `update source_scans set status = $2, method = $3, candidates_found = $4,
               new_candidates = $5, extracted = $6, failed = $7, duplicates = $8,
@@ -264,29 +266,28 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
         where id = $1`,
       [scanId, r.status, r.method, r.candidatesFound, r.newCandidates, r.extracted, r.failed, r.duplicates, r.error]
     );
-    // A source earns its schedule: the first scan that succeeds AND brings
-    // back an event switches polling on. `last_success_at is null` reads the
-    // pre-update row, so this fires exactly once — after that, whether a
-    // source polls is the admin's call and nothing here overrides it.
-    // SET expressions read the OLD row, but RETURNING reads the NEW one — so
-    // the "was this its first success?" answer is taken from a CTE snapshot
-    // rather than from a column this same statement has just overwritten.
-    const promoted = await queryOne<{ started: boolean }>(
-      `with prev as (select last_success_at from event_sources where id = $1)
-       update event_sources set last_checked_at = now(),
-              last_success_at = case when $2 then now() else event_sources.last_success_at end,
+    // WHETHER A SOURCE POLLS IS A PERSON'S DECISION.
+    //
+    // A successful scan used to switch polling on by itself. It reads as
+    // helpful and is not: a source that returns something once has proved it
+    // can be read, not that it is worth reading every few hours, and the
+    // admin who tested it never asked for it to be added to the schedule.
+    // Scanning records what happened; it does not change what the source is.
+    //
+    // The desk still knows: a scan that brought events back from a source
+    // that is not polling says so, and offers the switch (see `couldPoll`).
+    const wasSuccess = r.status === 'succeeded';
+    const worthPolling = wasSuccess && r.extracted > 0 && !source.polling_enabled;
+    await query(
+      `update event_sources set last_checked_at = now(),
+              last_success_at = case when $2 then now() else last_success_at end,
               failure_count = case when $2 then 0 else failure_count + 1 end,
               events_found = events_found + $3,
-              polling_enabled = case
-                when $2 and $3 > 0 and prev.last_success_at is null then true
-                else polling_enabled end,
               updated_at = now()
-         from prev
-        where event_sources.id = $1
-        returning ($2 and $3 > 0 and prev.last_success_at is null) as started`,
-      [sourceId, r.status === 'succeeded', r.extracted]
+        where id = $1`,
+      [sourceId, wasSuccess, r.extracted]
     );
-    return { scanId, ...r, outcomes: r.outcomes ?? {}, startedPolling: promoted?.started ?? false };
+    return { scanId, ...r, outcomes: r.outcomes ?? {}, couldPoll: worthPolling };
   };
 
   if (!source.active || source.trust === 'blocked') {

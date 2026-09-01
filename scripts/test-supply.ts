@@ -1249,7 +1249,7 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  console.log('\n— a source earns its polling schedule —');
+  console.log('\n— polling is a person\u2019s decision —');
   {
     const mk = async (name: string, url: string) => (await q(
       `insert into event_sources (source_type, name, url, trust) values ('promoter_website', $1, $2, 'trusted') returning id`,
@@ -1273,8 +1273,8 @@ async function main() {
       fetcher: mockFetcher({ 'https://quiet-earner.example/whats-on': { body: '<html><body><main><a href="/about">About</a></main></body></html>' } }),
       ai: noAI, delayMs: 1,
     });
-    check('a scan that finds nothing does not start polling',
-      quietScan.startedPolling === false && (await polling(quiet.id)) === false);
+    check('a scan that finds nothing has nothing to offer',
+      quietScan.couldPoll === false && (await polling(quiet.id)) === false);
 
     // A scan that brings back an event does.
     const good = await mk('Earning source', 'https://earner.example/whats-on');
@@ -1286,20 +1286,37 @@ async function main() {
       ai: mockAI({ 'https://earner.example/events/earned-night': eventProposal }),
       delayMs: 1,
     });
-    check('the first productive scan starts polling',
-      goodScan.extracted === 1 && goodScan.startedPolling === true && (await polling(good.id)) === true);
+    // A productive scan OFFERS the schedule. It does not take it: whether a
+    // source polls is a person's decision, and the admin who pressed "test"
+    // did not ask for it to be added to the rota.
+    check('a productive scan offers polling but never switches it on',
+      goodScan.extracted === 1 && goodScan.couldPoll === true
+      && (await polling(good.id)) === false);
 
-    // Once the admin has had their say, nothing here overrides it: an admin
-    // who switches polling off does not get it switched back on by a rescan.
-    await q(`update event_sources set polling_enabled = false where id = $1`, [good.id]);
+    // And once it IS polling, there is nothing left to offer.
+    await q(`update event_sources set polling_enabled = true where id = $1`, [good.id]);
     const rescan = await scanSource(good.id, {
       fetcher: mockFetcher({
         'https://earner.example/whats-on': { body: listing('https://earner.example') },
       }),
       ai: noAI, delayMs: 1,
     });
-    check('a later scan never overrides the admin turning polling off',
-      rescan.startedPolling === false && (await polling(good.id)) === false);
+    check('a source already on the schedule is left exactly as it is',
+      rescan.couldPoll === false && (await polling(good.id)) === true);
+
+    // An admin who switches polling off stays switched off, however many
+    // events a later scan brings back.
+    await q(`update event_sources set polling_enabled = false where id = $1`, [good.id]);
+    const afterOff = await scanSource(good.id, {
+      fetcher: mockFetcher({
+        'https://earner.example/whats-on': { body: listing('https://earner.example') },
+        'https://earner.example/events/earned-night': { body: '<html><title>Earned Night 2</title><body><main>x</main></body></html>' },
+      }),
+      ai: mockAI({ 'https://earner.example/events/earned-night': { ...eventProposal, title: 'Earned Night 2' } }),
+      delayMs: 1,
+    });
+    check('turning polling off stays off, whatever a later scan finds',
+      (await polling(good.id)) === false);
   }
 
   // -------------------------------------------------------------------------
