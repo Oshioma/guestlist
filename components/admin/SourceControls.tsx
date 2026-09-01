@@ -75,6 +75,10 @@ export function SourceControls({
     setScanning(true);
     setError('');
     setScanResult(null);
+    // A test fetch from a previous URL left on screen under a fresh scan
+    // reads as though it described the scan. It cost us two rounds of
+    // "why does it say HTML when I scanned the sitemap".
+    setTestResult(null);
     const res = await fetch(`/api/admin/sources/${id}/scan`, { method: 'POST' });
     setScanning(false);
     if (res.ok) {
@@ -89,6 +93,7 @@ export function SourceControls({
     setTesting(true);
     setError('');
     setTestResult(null);
+    setScanResult(null);
     const res = await fetch(`/api/admin/sources/${id}/test-fetch`, { method: 'POST' });
     setTesting(false);
     if (res.ok) setTestResult(await res.json());
@@ -230,7 +235,8 @@ export function SourceControls({
                 name: tagName, url: tagUrl, feedUrl: tagFeedUrl.trim() || null,
                 city: tagCity, country: tagCountry, genreIds: tagGenres,
               });
-              if (ok) setTagOpen(false);
+              // Both results describe the OLD URL the moment this saves.
+              if (ok) { setTagOpen(false); setTestResult(null); setScanResult(null); }
             }}
           >
             Save
