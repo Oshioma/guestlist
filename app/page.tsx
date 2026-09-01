@@ -71,8 +71,6 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
 
       <GuestlistNow />
 
-      <AskPanel isSignedIn placeholder="What should I actually do?" />
-
       {weekendPicks.length > 0 && (
         <RecShelf title="This weekend" surface="home_weekend" events={toRecCards(weekendPicks)} />
       )}
@@ -107,6 +105,10 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
           <Link href="/you" className="btnAccent">Set up your Guestlist →</Link>
         </div>
       )}
+
+      {/* Ask sits under the events: you look at what's on first, and ask
+          when the list has not answered it. */}
+      <AskPanel isSignedIn placeholder="What should I actually do?" />
 
       {danced.length > 0 && (
         <>
