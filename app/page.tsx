@@ -71,6 +71,7 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
       )}
 
       <GuestlistNow />
+      <HomeTonight />
 
       {weekendPicks.length > 0 && (
         <RecShelf title="This weekend" surface="home_weekend" events={toRecCards(weekendPicks)} />
