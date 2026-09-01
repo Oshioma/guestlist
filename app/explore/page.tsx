@@ -9,6 +9,7 @@
 import Link from 'next/link';
 import { getCurrentMember } from '@/lib/auth';
 import { liveDestinations } from '@/lib/locations';
+import { canonicalCountry } from '@/lib/countries';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +31,9 @@ export default async function ExplorePage({
   // put while a filter is applied.
   const byCountry = new Map<string, { cities: typeof destinations; events: number }>();
   for (const d of destinations) {
-    const key = d.country_name ?? d.country_code ?? NO_COUNTRY;
+    // Canonicalised at read time too: a row written before the cleanup
+    // still groups under the right country.
+    const key = canonicalCountry(d.country_name ?? d.country_code) ?? NO_COUNTRY;
     const group = byCountry.get(key) ?? { cities: [], events: 0 };
     group.cities.push(d);
     group.events += d.upcoming_events;
@@ -66,30 +69,29 @@ export default async function ExplorePage({
           {countries.length > 1 && (
             <div className="chipRow" style={{ marginBottom: 6 }}>
               <Link className={`chip${!countryFilter ? ' active' : ''}`} href={href(null)}>
-                Everywhere ({destinations.length})
+                Everywhere
               </Link>
-              {countries.map(([country, group]) => (
+              {countries.map(([country]) => (
                 <Link
                   key={country}
                   className={`chip${countryFilter === country ? ' active' : ''}`}
                   href={href(countryFilter === country ? null : country)}
                 >
-                  {country} ({group.cities.length})
+                  {country}
                 </Link>
               ))}
             </div>
           )}
 
           {shown.map(([country, group]) => (
-            <section key={country} style={{ marginBottom: 30 }}>
+            <section key={country} className="exploreCountry2">
               <div className="exploreCountryHead">
                 <h2>{country}</h2>
-                <span>
-                  {group.cities.length} cit{group.cities.length === 1 ? 'y' : 'ies'} ·{' '}
-                  {group.events} event{group.events === 1 ? '' : 's'}
-                </span>
+                {/* Events, not cities: the cities are right there to be
+                    counted, and what a visitor wants to know is how much is on. */}
+                <span>{`${group.events} event${group.events === 1 ? '' : 's'}`}</span>
               </div>
-              <div className="exploreGrid">
+              <div className="exploreCities">
                 {group.cities.map((d) => (
                   <Link key={d.id} href={`/${d.slug}`} className="exploreCard">
                     <span className="exploreName">{d.name}</span>

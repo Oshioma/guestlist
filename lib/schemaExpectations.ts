@@ -28,6 +28,7 @@ export const MIGRATION_FILES: string[] = [
   '021_memory_attendance.sql',
   '022_sitemap_scan_method.sql',
   '023_password_resets.sql',
+  '025_canonical_country_names.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [

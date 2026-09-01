@@ -1,3 +1,5 @@
+import { canonicalCountry } from './countries';
+
 export function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -134,6 +136,12 @@ export function cleanPlace(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const s = raw.trim().slice(0, 80);
   return s || null;
+}
+
+// Countries get canonicalised on the way in, so "UK" and "England" never
+// become separate countries again. See lib/countries.
+export function cleanCountry(raw: unknown): string | null {
+  return typeof raw === 'string' ? canonicalCountry(raw.slice(0, 80)) : null;
 }
 
 // Map genre NAMES (as a model or a source page reports them) onto the ids of

@@ -442,6 +442,9 @@ try {
       explore.includes('United Kingdom') && explore.includes('Tanzania'));
     const uk = await (await anon.fetch('/explore?country=United%20Kingdom')).text();
     check('a country filter keeps its own cities', uk.includes('London'));
+    // Cities are right there to be counted; what a visitor wants from the
+    // label is how much is on.
+    check('country labels count events, not cities', !uk.includes('6 cities'));
     check('and drops the others', !uk.includes('Zanzibar'));
     const nowhere = await (await anon.fetch('/explore?country=Atlantis')).text();
     check('an empty country says so rather than looking broken',
