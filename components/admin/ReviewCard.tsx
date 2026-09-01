@@ -69,16 +69,20 @@ function Evidence({ field, label, conf, src }: {
 
 // A sourced image that 404s must never show as a broken-image icon — the
 // desk falls back to the same "no image" tile it uses when there is none.
-function AdminThumb({ src }: { src: string | null }) {
+function AdminThumb({ src, onBroken }: { src: string | null; onBroken?: (b: boolean) => void }) {
   const [broken, setBroken] = useState(false);
+  const fail = () => { setBroken(true); onBroken?.(true); };
   // Images that 404 before hydration never fire onError — catch them on mount.
   const ref = (node: HTMLImageElement | null) => {
-    if (node && node.complete && node.naturalWidth === 0) setBroken(true);
+    if (node && node.complete && node.naturalWidth === 0) fail();
   };
-  if (!src || broken) return <div className="thumb empty">no image</div>;
+  // "Blocked" and "none" are different problems: one is a site refusing to
+  // serve us its artwork, the other is a page that never had any.
+  if (!src) return <div className="thumb empty">no image</div>;
+  if (broken) return <div className="thumb empty">image blocked</div>;
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img ref={ref} className="thumb" src={src} alt="" onError={() => setBroken(true)} />
+    <img ref={ref} className="thumb" src={src} alt="" onError={fail} />
   );
 }
 
@@ -87,6 +91,7 @@ export function ReviewCard({ event }: { event: AdminEventRow }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [imageBroken, setImageBroken] = useState(false);
 
   async function call(label: string, path: string, body?: unknown, method?: string) {
     setBusy(label);
@@ -112,7 +117,7 @@ export function ReviewCard({ event }: { event: AdminEventRow }) {
 
   return (
     <div className="reviewCard">
-      <AdminThumb src={event.primary_image_url} />
+      <AdminThumb src={event.primary_image_url} onBroken={setImageBroken} />
 
       <div>
         {event.possible_duplicate_of && (
@@ -227,6 +232,21 @@ export function ReviewCard({ event }: { event: AdminEventRow }) {
             type="button"
           >
             {busy === 'reprocess' ? '…' : 'Reprocess'}
+          </button>
+        )}
+        {/* Some venues serve their flyers only to their own pages. Clearing the
+            URL is not a loss: the event falls back to our genre artwork, which
+            is better than a broken frame — and the flyer is still on the
+            source page if it is ever worth re-adding by hand. */}
+        {event.primary_image_url && (
+          <button
+            className="btnGhost"
+            onClick={() => call('image', `/api/admin/events/${event.id}`, { primaryImageUrl: null })}
+            disabled={!!busy}
+            type="button"
+            title="Drop this event's image and show our own artwork instead"
+          >
+            {busy === 'image' ? '…' : imageBroken ? 'Use our artwork instead' : 'Use our artwork'}
           </button>
         )}
         {event.source_url && (

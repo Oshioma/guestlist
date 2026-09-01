@@ -512,6 +512,35 @@ console.log('\n— Sources admin —');
 }
 
 // ---------------------------------------------------------------------------
+// Venues routinely serve their flyers only to their own pages, so an imported
+// event can arrive with artwork nobody outside that site can load.
+console.log('\n— Replacing a blocked image with our own artwork —');
+{
+  const ev = (await q(
+    `insert into events (title, slug, start_at, timezone, status, event_type, primary_image_url)
+     values ('Blocked Art Night', 'blocked-art-night-verify', now() + interval '20 days',
+             'Europe/London', 'new', 'club_night', 'https://blocked.example/flyer.jpg')
+     returning id`
+  ))[0];
+
+  const queue = await (await admin.fetch('/admin/events?state=new')).text();
+  check('the review queue offers to swap in our artwork', queue.includes('Use our artwork'));
+
+  const cleared = await admin.fetch(`/api/admin/events/${ev.id}`, {
+    method: 'PATCH', body: JSON.stringify({ primaryImageUrl: null }),
+  });
+  check('an admin can clear a blocked image', cleared.status === 200);
+  const after = await q(`select primary_image_url from events where id = $1`, [ev.id]);
+  check('the blocked URL is gone', after[0].primary_image_url === null);
+
+  const member = await nadia.fetch(`/api/admin/events/${ev.id}`, {
+    method: 'PATCH', body: JSON.stringify({ primaryImageUrl: null }),
+  });
+  check('a member cannot', member.status === 403);
+  await q(`delete from events where id = $1`, [ev.id]);
+}
+
+// ---------------------------------------------------------------------------
 console.log('\n— Forgotten password —');
 {
   // A member of its own, so resetting a password does not sign out the
