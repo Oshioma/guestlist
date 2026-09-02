@@ -14,6 +14,10 @@ import { track } from '@/lib/analytics';
 import { refreshAdminReviewDigest } from '@/lib/adminNotify';
 import { businessSets, offerSets, uniqueBusinessSlug, type BusinessPatch, type OfferPatch } from '@/lib/market';
 import { queueMemberTransactional } from '@/lib/email';
+import { fillMissingBusinessImages } from '@/lib/marketImages';
+
+// Best effort: a slow or broken website must never block the desk.
+const fillImages = (id: string) => fillMissingBusinessImages(id).catch((err) => { console.error('market image discovery failed', err); return { hero: false, logo: false, error: String(err) }; });
 
 const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 
@@ -72,7 +76,8 @@ export async function POST(req: NextRequest) {
         await query(`insert into market_business_members (business_id, member_id, role) values ($1, $2, 'owner') on conflict do nothing`, [row!.id, owner.id]);
       }
       await audit('market_business_created', { actorId: admin.id, detail: { businessId: row!.id, status, via: 'admin' } });
-      return NextResponse.json({ ok: true, id: row!.id, slug });
+      const images = await fillImages(row!.id);
+      return NextResponse.json({ ok: true, id: row!.id, slug, images });
     }
 
     const businessId = typeof body.businessId === 'string' ? body.businessId : '';
@@ -94,8 +99,10 @@ export async function POST(req: NextRequest) {
       );
       if (decision === 'approve') {
         // Approving the business approves offers it applied with, so the
-        // listing is not empty on day one.
+        // listing is not empty on day one — and fills in the pictures it
+        // is missing from its own website.
         await query(`update market_offers set approval_status = 'approved', updated_at = now() where business_id = $1 and approval_status = 'pending'`, [businessId]);
+        await fillImages(businessId);
       }
       await audit('market_business_decided', { actorId: admin.id, detail: { businessId, decision, from: business.status, to: next, note } });
       await track('market_business_decided', { memberId: admin.id, metadata: { business_id: businessId, decision } });
@@ -118,7 +125,14 @@ export async function POST(req: NextRequest) {
         await query(`update market_businesses set ${sets.join(', ')}, updated_at = now() where id = $${args.length}`, args);
       }
       await audit('market_business_updated', { actorId: admin.id, detail: { businessId, fields: Object.keys(patch), via: 'admin' } });
-      return NextResponse.json({ ok: true });
+      const images = 'website' in patch ? await fillImages(businessId) : null;
+      return NextResponse.json({ ok: true, images });
+    }
+
+    if (action === 'find_images') {
+      const images = await fillImages(businessId);
+      await audit('market_business_updated', { actorId: admin.id, detail: { businessId, findImages: images } });
+      return NextResponse.json({ ok: true, images });
     }
 
     if (action === 'add_member') {

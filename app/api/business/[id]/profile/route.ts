@@ -8,6 +8,7 @@ import { query, queryOne } from '@/lib/db';
 import { requireBusinessRole } from '@/lib/marketAuth';
 import { businessSets, sanitizeHttpUrl, type BusinessPatch } from '@/lib/market';
 import { audit } from '@/lib/audit';
+import { fillMissingBusinessImages } from '@/lib/marketImages';
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -30,7 +31,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         ...(identityChanged ? { identity_change: { before, after: { name: body.name, website: body.website } } } : {}),
       },
     });
-    return NextResponse.json({ ok: true, identityChangeFlagged: !!identityChanged });
+    // Pictures the owner left blank come from their own website, best effort.
+    const images = 'website' in body || 'logoUrl' in body || 'heroImageUrl' in body
+      ? await fillMissingBusinessImages(business.id).catch(() => ({ hero: false, logo: false, error: 'lookup failed' }))
+      : null;
+    return NextResponse.json({ ok: true, identityChangeFlagged: !!identityChanged, images });
   } catch (err) {
     if (err instanceof AuthError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error(err);

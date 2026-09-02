@@ -33,7 +33,7 @@ export default async function AdminMarketPage() {
       {applications.map((b) => (
         <div className="reviewCard" key={b.id} style={{ gridTemplateColumns: 'minmax(0,1fr) auto' }}>
           <div>
-            <h3><Link href={`/admin/market/${b.id}`} style={{ textDecoration: 'underline' }}>{b.name}</Link> <span className="evChip amber" style={{ marginLeft: 8 }}>{b.status}</span></h3>
+            <h3><Link href={`/admin/market/${b.id}`} style={{ textDecoration: 'underline' }}>{b.name}</Link> <span className="evChip amber" style={{ marginLeft: 8 }}>{b.status}</span>{!b.hero_image_url && <span className="noImageChip">no photo</span>}</h3>
             <div className="facts">
               <span>{b.category_name ?? 'No category'}{b.city && ` · ${b.city}`}</span>
               {b.website && <span><a href={b.website} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'underline' }}>{b.website}</a></span>}
@@ -54,6 +54,7 @@ export default async function AdminMarketPage() {
             <Link href={`/admin/market/${b.id}`} style={{ textDecoration: 'underline' }}><b>{b.name}</b></Link>{' '}
             <span className={`evChip ${b.status === 'approved' ? 'green' : b.status === 'paused' || b.status === 'invited' ? 'amber' : 'red'}`}>{b.status}</span>
             {b.featured && <span className="evChip" style={{ marginLeft: 6 }}>featured</span>}
+            {!b.hero_image_url && <span className="noImageChip">no photo</span>}
             <span style={{ color: 'var(--text-faint)', fontSize: 12, marginLeft: 8 }}>{b.category_name ?? ''}{b.city && ` · ${b.city}`} · {b.live_offers} live offer{b.live_offers === 1 ? '' : 's'} · {b.claims} claims · {b.redemptions} redeemed</span>
           </span>
           <BusinessDecision businessId={b.id} status={b.status} />

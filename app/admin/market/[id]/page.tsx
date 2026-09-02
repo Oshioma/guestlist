@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { query, queryOne } from '@/lib/db';
 import { businessStats, getBusinessById, listCategories } from '@/lib/market';
-import { BusinessControls, BusinessDecision, TeamControls } from '@/components/admin/MarketDesk';
+import { BusinessControls, BusinessDecision, FindImages, TeamControls } from '@/components/admin/MarketDesk';
 import { BusinessProfileForm } from '@/components/business/BusinessProfileForm';
 import { OfferList } from '@/components/business/OfferEditor';
 
@@ -38,6 +38,8 @@ export default async function AdminMarketBusinessPage({ params }: { params: Prom
       <div className="deskGrid" style={{ marginTop: 18 }}>
         <div>
           <div className="sectionLabel">Listing</div>
+          {(!b.hero_image_url || !b.logo_url) && <p className="adminSub" style={{ marginBottom: 4 }}>{!b.hero_image_url ? 'No photo yet — members see fallback art. ' : ''}{!b.logo_url ? 'No logo yet.' : ''}</p>}
+          <FindImages businessId={b.id} hasWebsite={!!b.website} />
           <BusinessProfileForm
             businessId={b.id}
             endpoint="admin"
