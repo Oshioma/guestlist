@@ -3150,3 +3150,32 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 .sysEnvState { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 800; color: var(--text-faint); }
 .sysEnvState.set { color: var(--ok); }
 .sysEnvState.missing, .sysEnvState.danger { color: var(--danger); }
+
+/* /membership for a member: the welcome mat, not the pitch. */
+.mbHero.member::before {
+  background:
+    radial-gradient(circle at 15% 15%, rgba(124, 74, 158, 0.7), transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(201, 162, 232, 0.4), transparent 42%),
+    radial-gradient(circle at 60% 30%, rgba(255, 214, 120, 0.14), transparent 35%);
+}
+.mbHero.member .mbPrice { color: #c9a2e8; }
+.mbNowGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 10px; }
+.mbNowCard {
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+  border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius);
+  padding: 16px 18px; color: inherit; text-decoration: none; transition: border-color .15s, transform .15s;
+}
+.mbNowCard:hover { border-color: var(--accent); transform: translateY(-1px); }
+.mbNowCard.drop { background: var(--accent-soft); border-color: transparent; }
+.mbNowKind { font-size: 10.5px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800; color: var(--accent-ink); }
+.mbNowTitle { font-weight: 750; font-size: 16px; letter-spacing: -0.2px; line-height: 1.25; }
+.mbNowMeta { font-size: 12.5px; color: var(--text-muted); }
+.mbNowCard .reqChip, .mbNowCard .mbCode { margin-top: 4px; }
+.mbCode { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; letter-spacing: 1.5px; font-size: 14px; border: 1px dashed var(--accent); border-radius: 8px; padding: 4px 10px; color: var(--accent-ink); }
+.mbHow .mbBenefit { position: relative; padding-top: 30px; }
+.mbStep {
+  position: absolute; top: 16px; right: 18px; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center; font-weight: 800; font-size: 13px;
+  background: var(--accent); color: var(--on-accent);
+}
+.mbHow .mbBenefit p strong { color: var(--text); }

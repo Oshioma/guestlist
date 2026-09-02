@@ -30,6 +30,7 @@ type SourceRow = {
   trust: string;
   polling_enabled: boolean;
   render_js: boolean;
+  max_candidates: number | null;
   poll_frequency_hours: number;
   last_checked_at: string | null;
   last_success_at: string | null;
@@ -62,7 +63,7 @@ export default async function SourcesPage({
 
   const sources = await query<SourceRow>(
     `select s.id, s.source_type, s.name, s.url, s.feed_url, s.active, s.trust,
-            s.polling_enabled, s.poll_frequency_hours, s.render_js,
+            s.polling_enabled, s.poll_frequency_hours, s.render_js, s.max_candidates,
             s.last_checked_at::text, s.last_success_at::text,
             s.events_found, s.failure_count, s.city, s.country,
             coalesce(sg.genre_ids, '{}') as genre_ids,
@@ -321,6 +322,7 @@ export default async function SourcesPage({
                         trust={s.trust}
                         pollingEnabled={s.polling_enabled}
                         renderJs={s.render_js}
+                        maxCandidates={s.max_candidates}
                         pollFrequencyHours={s.poll_frequency_hours}
                         city={s.city}
                         country={s.country}

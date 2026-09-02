@@ -15,7 +15,7 @@ type ScanSummary = {
 };
 
 export function SourceControls({
-  id, name, url, feedUrl, active, trust, pollingEnabled, pollFrequencyHours, renderJs,
+  id, name, url, feedUrl, active, trust, pollingEnabled, pollFrequencyHours, renderJs, maxCandidates,
   city, country, genreIds, genres, countries,
 }: {
   id: string;
@@ -26,6 +26,7 @@ export function SourceControls({
   trust: string;
   pollingEnabled: boolean;
   renderJs: boolean;
+  maxCandidates: number | null;
   pollFrequencyHours: number;
   city: string | null;
   country: string | null;
@@ -151,6 +152,30 @@ export function SourceControls({
             disabled={busy}
           />
           render
+        </label>
+        {/* Forty suits a venue and truncates a festival. A source that needs a
+            different ceiling says so here rather than everyone getting one. */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+               title="How many candidate links one scan of this source may take. Blank uses the default of 40.">
+          max
+          <input
+            type="number"
+            min={1}
+            max={1000}
+            defaultValue={maxCandidates ?? ''}
+            placeholder="40"
+            disabled={busy}
+            onBlur={(e) => {
+              const raw = e.target.value.trim();
+              const next = raw === '' ? null : Number(raw);
+              if (next === (maxCandidates ?? null)) return;
+              patch({ maxCandidates: next });
+            }}
+            style={{
+              width: 52, background: 'var(--surface)', border: '1px solid var(--border)',
+              color: 'var(--text-soft)', borderRadius: 999, padding: '3px 6px', fontSize: 11,
+            }}
+          />
         </label>
         <select
           value={pollFrequencyHours}
