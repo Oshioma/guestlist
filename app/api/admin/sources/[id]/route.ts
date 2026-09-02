@@ -42,6 +42,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
     if (typeof body.active === 'boolean') set('active', body.active);
     if (typeof body.pollingEnabled === 'boolean') set('polling_enabled', body.pollingEnabled);
+    if (typeof body.renderJs === 'boolean') set('render_js', body.renderJs);
     if (body.pollFrequencyHours !== undefined) {
       const n = Number(body.pollFrequencyHours);
       if (!Number.isInteger(n) || n < 1 || n > 24 * 30) {

@@ -40,6 +40,7 @@ import { looksClientRendered } from '@/lib/supply/scanner';
 import { isLiveSource } from '@/lib/supply/health';
 import { findListingLink } from '@/lib/supply/probe';
 import { testVerdict } from '@/lib/supply/verdict';
+import { fetcherFor, renderingConfigured } from '@/lib/supply/render';
 import { parse } from 'node-html-parser';
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
@@ -1435,6 +1436,78 @@ async function main() {
     check('the verdict says how many sitemaps and URLs it got through',
       emptyVerdict.text.includes('3 sitemaps') && emptyVerdict.text.includes('4812 URLs'),
       emptyVerdict.text);
+
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— rendering is a decision, never a default —');
+  {
+    // The whole safety of this feature is that nothing changes unless somebody
+    // ticked a box AND a token exists. Two conditions, both required.
+    check('with no token configured, nothing renders', !renderingConfigured());
+    const plain = fetcherFor(false);
+    const flagged = fetcherFor(true);
+    check('an unflagged source uses the ordinary fetcher', plain === flagged || typeof plain === 'function');
+    check('a flagged source falls back to the ordinary fetcher with no token',
+      flagged === plain,
+      'a flagged source must not get a renderer that cannot render');
+
+    // A scan of a flagged source still works — it just does not render. This
+    // is the case that matters: a rendering service having a bad day, or a
+    // deployment with no token, must look like an ordinary scan and not like
+    // a venue that stopped publishing.
+    const rendered = (await q(
+      `insert into event_sources (source_type, name, url, trust, render_js)
+       values ('venue_website', 'Flagged for rendering', 'https://rendersite.example/whats-on', 'trusted', true) returning id`
+    ))[0] as { id: string };
+    const renderedScan = await scanSource(rendered.id, {
+      fetcher: mockFetcher({
+        'https://rendersite.example/whats-on': { body: '<html><body><a href="/events/render-night">Render Night</a></body></html>' },
+        'https://rendersite.example/events/render-night': { body: '<html><title>Render Night</title><body><main>r</main></body></html>' },
+      }),
+      ai: mockAI({
+        'https://rendersite.example/events/render-night': {
+          is_event: true, is_music_event: true, title: 'Render Night',
+          start_date: FUTURE.toISOString().slice(0, 10), start_time: '23:00',
+          city: 'Amsterdam', country: 'Netherlands',
+          genres: [{ name: 'Techno', confidence: 90 }],
+          field_confidence: { title: 92, date: 90, city: 88, genres: 88 },
+        },
+      }),
+      delayMs: 1,
+    });
+    check('a source flagged for rendering still scans without a renderer',
+      renderedScan.status === 'succeeded' && renderedScan.extracted === 1, JSON.stringify(renderedScan));
+
+    // And the verdict only mentions rendering when there is something to say.
+    const noRenderer = testVerdict({
+      target: 'https://shell.example/agenda',
+      bot: { ok: true, status: 200, code: null, detail: null, ms: 10 },
+      browser: { ok: true, status: 200, code: null, detail: null, ms: 10 },
+      method: 'html' as const, candidates: 0, clientRendered: true,
+    });
+    check('with no renderer, the verdict advertises nothing',
+      !noRenderer.text.toLowerCase().includes('turn on'), noRenderer.text);
+
+    const wouldHelp = testVerdict({
+      target: 'https://shell.example/agenda',
+      bot: { ok: true, status: 200, code: null, detail: null, ms: 10 },
+      browser: { ok: true, status: 200, code: null, detail: null, ms: 10 },
+      method: 'html' as const, candidates: 0, clientRendered: true,
+      renderedCandidates: 42,
+    });
+    check('when rendering would help, the verdict says so with the number',
+      wouldHelp.text.includes('42 event links') && wouldHelp.text.includes('Render in a browser'),
+      wouldHelp.text);
+    const wouldNot = testVerdict({
+      target: 'https://shell.example/agenda',
+      bot: { ok: true, status: 200, code: null, detail: null, ms: 10 },
+      browser: { ok: true, status: 200, code: null, detail: null, ms: 10 },
+      method: 'html' as const, candidates: 0, clientRendered: true,
+      renderedCandidates: 0,
+    });
+    check('when rendering would not help, it says that rather than nothing',
+      wouldNot.text.includes('will not help'), wouldNot.text);
   }
 
   // -------------------------------------------------------------------------

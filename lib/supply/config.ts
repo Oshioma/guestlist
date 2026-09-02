@@ -7,6 +7,16 @@ const num = (env: string | undefined, fallback: number) => {
 };
 
 export const supplyConfig = {
+  // A hosted browser, for the handful of sources that build their listings in
+  // the browser and hand a bot an empty shell. Off unless a token is set: no
+  // token, no rendering, no behaviour change anywhere.
+  render: {
+    token: process.env.SUPPLY_RENDER_TOKEN ?? '',
+    endpoint: process.env.SUPPLY_RENDER_ENDPOINT ?? 'https://production-sfo.browserless.io',
+    timeoutMs: num(process.env.SUPPLY_RENDER_TIMEOUT_MS, 30_000),
+    // A pause after the network goes quiet, for the last paint.
+    waitMs: num(process.env.SUPPLY_RENDER_WAIT_MS, 1_500),
+  },
   fetch: {
     timeoutMs: num(process.env.SUPPLY_FETCH_TIMEOUT_MS, 12_000),
     maxBytes: num(process.env.SUPPLY_FETCH_MAX_BYTES, 2_000_000),

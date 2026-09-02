@@ -54,6 +54,10 @@ export type ProbeResult = {
   // deserves to know whether that was out of five URLs or five thousand.
   urlsSeen?: number;
   sitemapsRead?: number;
+  // What the same page yields when a browser runs it. Answered by the probe
+  // rather than left for an admin to discover by ticking a box.
+  renderedCandidates?: number | null;
+  renderNote?: string | null;
   // A sitemap with more event pages than the listing page gave us. Offered
   // rather than substituted: the admin was looking at a filtered view, and the
   // sitemap is the whole site.
@@ -68,6 +72,21 @@ export const probeLabel = (p: FetchProbe) =>
   p.ok ? `HTTP ${p.status}` : `${p.code}${p.detail ? ` (${p.detail})` : ''}`;
 
 // Turn the two probes into the sentence an admin actually needs.
+// What to say about rendering, if anything. A page we actually rendered has
+// a number attached; a page we could not render says why; a deployment with
+// no renderer configured says nothing at all rather than advertising a
+// feature that is not switched on.
+function renderAdvice(t: ProbeResult): string {
+  if (t.renderedCandidates && t.renderedCandidates > 0) {
+    return ` Run in a browser it gives ${t.renderedCandidates} event link${t.renderedCandidates === 1 ? '' : 's'} — turn on \u201cRender in a browser\u201d for this source.`;
+  }
+  if (t.renderedCandidates === 0) {
+    return ' Running it in a browser gives no more than this, so rendering will not help here.';
+  }
+  if (t.renderNote) return ` We tried running it in a browser and could not: ${t.renderNote}.`;
+  return ' Use the site\u2019s sitemap, or a page that lists events without filtering.';
+}
+
 export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
   // Said before anything else, because it changes what every other sentence
   // would mean: the page we are describing is not the page you are looking at.
@@ -105,10 +124,10 @@ export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
           : t.method === 'sitemap'
           ? `We read ${t.sitemapsRead ?? 1} sitemap${(t.sitemapsRead ?? 1) === 1 ? '' : 's'} — the one you gave us, the section sitemaps it points at, and any others the site declares in its robots.txt — holding ${t.urlsSeen ?? 0} URL${(t.urlsSeen ?? 0) === 1 ? '' : 's'} between them. None of them look like event pages.${t.sampleUrls?.length ? ` They look like this: ${t.sampleUrls.slice(0, 5).join(', ')}.` : ''}${t.skippedSitemaps?.length ? ` ${t.skippedSitemaps.length} section sitemap${t.skippedSitemaps.length === 1 ? '' : 's'} could not be read at all: ${t.skippedSitemaps.slice(0, 3).join(', ')}.` : ''} Point the source at the sitemap for the programme section, if the site has one.`
           : t.clientRendered
-            ? `Reachable, but this page builds its listings in the browser — the event list is empty in the HTML we are served.${t.ownFilters ? ` The only event-shaped links on it are ${t.ownFilters} of its own filter tabs.` : ''} Use the site\u2019s sitemap, or a page that lists events without filtering.`
+            ? `Reachable, but this page builds its listings in the browser — the event list is empty in the HTML we are served.${t.ownFilters ? ` The only event-shaped links on it are ${t.ownFilters} of its own filter tabs.` : ''}${renderAdvice(t)}`
             : t.ownFilters
             ? `Reachable, but the only event-shaped links on this page are ${t.ownFilters} of its own filter tabs — the same page again, re-queried. The listings themselves are not in the HTML we are served.`
-            : 'Reachable, but no event links found in the raw HTML — the page may render its listings with JavaScript, or its link paths are unrecognised',
+            : `Reachable, but no event links found in the raw HTML — the page may render its listings with JavaScript, or its link paths are unrecognised.${renderAdvice(t)}`,
       bad: true,
     };
   }
