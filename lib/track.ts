@@ -22,7 +22,13 @@ export type ClientTrackType =
   | 'notification_clicked'
   | 'archive_viewed'
   | 'archive_item_viewed'
-  | 'archive_to_event_click';
+  | 'archive_to_event_click'
+  // Membership + Market page views
+  | 'membership_page_viewed'
+  | 'get_me_in_viewed'
+  | 'market_viewed'
+  | 'market_business_viewed'
+  | 'member_drop_viewed';
 
 // Stable anonymous id (per browser) so unique-viewer counts work without
 // accounts. Random UUID, no fingerprinting.

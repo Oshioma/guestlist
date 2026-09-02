@@ -89,6 +89,22 @@ export default async function NotificationsPage() {
         text = `${n.actor_name ?? 'Someone'} messaged the room${n.event_title ? ` at ${n.event_title}` : ''}`;
         href = n.event_id ? `/clubmessenger/events/${n.event_id}` : '/clubmessenger';
         break;
+      // Membership. The friendly title is stored on the row so the wording
+      // the member was emailed is the wording they see here.
+      case 'membership_started':
+        text = 'You’re in. Welcome to Guestlist membership.';
+        href = '/you/membership';
+        break;
+      case 'membership_request_update':
+        text = `${p.title ?? 'Update'} — ${n.event_title ?? p.event_title ?? 'your request'}`;
+        href = '/you/membership';
+        break;
+      case 'market_application_update':
+        text = p.decision === 'approved'
+          ? `${p.name ?? 'Your business'} is in Guestlist Market`
+          : `About ${p.name ?? 'your business'} and Guestlist Market`;
+        href = '/business';
+        break;
       // Admin lines. These are about the site rather than about you, so they
       // say so and go straight to the desk that fixes them.
       case 'admin_new_member':

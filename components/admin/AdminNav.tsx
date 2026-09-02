@@ -36,6 +36,15 @@ const GROUPS: { name: string; items: Item[] }[] = [
     ],
   },
   {
+    name: 'Membership',
+    items: [
+      { href: '/admin/getmein', label: 'Requests' },
+      { href: '/admin/members', label: 'Members' },
+      { href: '/admin/market', label: 'Market' },
+      { href: '/admin/drops', label: 'Drops' },
+    ],
+  },
+  {
     name: 'Comms',
     items: [
       { href: '/admin/email', label: 'Email' },

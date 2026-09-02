@@ -2830,3 +2830,245 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 @media (max-width: 1220px) { .cityPrompt { margin: 14px 20px 0; } }
 .cityPromptActions { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
 .cityPrompt .btnAccent, .cityPrompt .btnGhost { padding: 8px 16px; font-size: 12px; }
+
+/* =========================================================================
+   GUESTLIST MEMBERSHIP — GET IN. £30/month.
+   The sales page, the GET ME IN card on an event, the member badge, the
+   member area and the Market. Purple is the membership colour because it is
+   the brand colour: being a member is being part of Guestlist, not a tier.
+   ========================================================================= */
+
+.mbHero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: #0d0b12;
+  color: #f2f1ec;
+  padding: clamp(46px, 8vw, 96px) clamp(22px, 5vw, 64px);
+  margin-top: 22px;
+}
+.mbHero::before {
+  content: "";
+  position: absolute; inset: -40%;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(124, 74, 158, 0.55), transparent 42%),
+    radial-gradient(circle at 80% 70%, rgba(201, 162, 232, 0.28), transparent 40%);
+  pointer-events: none;
+}
+.mbHero > * { position: relative; z-index: 1; }
+.mbKicker {
+  font-size: 12px; letter-spacing: 2.6px; text-transform: uppercase; font-weight: 700;
+  color: #c9a2e8; margin-bottom: 18px;
+}
+.mbTitle {
+  font-size: clamp(56px, 13vw, 150px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.88;
+  margin: 0 0 18px;
+  text-transform: uppercase;
+}
+.mbPrice { font-size: clamp(17px, 2.4vw, 22px); font-weight: 650; letter-spacing: -0.2px; margin: 0 0 12px; }
+.mbLead { max-width: 58ch; font-size: clamp(15.5px, 2vw, 18px); line-height: 1.6; color: rgba(242,241,236,0.82); margin: 0 0 30px; }
+.mbCtaRow { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.mbCta {
+  display: inline-block;
+  padding: 16px 28px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mbCta:hover { filter: brightness(1.08); }
+.mbCta:disabled { opacity: 0.6; cursor: default; }
+.mbHero .btnGhost { border-color: rgba(255,255,255,0.4); color: #f2f1ec; }
+.mbQualifier { font-size: 12.5px; color: var(--text-faint); margin-top: 12px; }
+.mbHero .mbQualifier { color: rgba(242,241,236,0.6); }
+.mbWaitForm { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.mbWaitForm input {
+  min-width: 240px; padding: 14px 16px; border-radius: 999px;
+  border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); font-size: 14px;
+}
+.mbWaitForm input:focus { outline: none; border-color: var(--accent-ink); }
+.mbHero .mbWaitForm input { border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.08); color: #fff; }
+.mbHero .mbWaitForm input:focus { border-color: #c9a2e8; }
+.mbHero .mbWaitForm input::placeholder { color: rgba(242,241,236,0.5); }
+.mbOk { font-size: 14px; font-weight: 600; color: var(--accent-ink); }
+.mbHero .mbOk { color: #c9a2e8; }
+.mbErr { font-size: 13px; color: var(--danger); }
+.mbHero .mbErr { color: #ffb3a8; }
+
+.mbBenefits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin: 26px 0 10px;
+}
+.mbBenefit {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 26px 24px;
+}
+.mbBenefit.lead { grid-column: 1 / -1; background: var(--accent-soft); border-color: transparent; }
+.mbBenefit h3 {
+  margin: 0 0 8px; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800; color: var(--accent-ink);
+}
+.mbBenefit.lead h3 { font-size: clamp(26px, 5vw, 44px); letter-spacing: -1px; color: var(--text); }
+.mbBenefit p { margin: 0; color: var(--text-soft); line-height: 1.6; font-size: 15px; max-width: 52ch; }
+.mbBenefit .small { font-size: 12.5px; color: var(--text-faint); margin-top: 10px; }
+
+.mbStatement {
+  margin: 60px 0 20px;
+  font-size: clamp(24px, 4.5vw, 40px);
+  font-weight: 750;
+  letter-spacing: -1px;
+  line-height: 1.15;
+  max-width: 24ch;
+}
+.mbStatement span { color: var(--accent-ink); }
+
+.mbFoot {
+  margin: 40px 0 70px;
+  border-top: 1px solid var(--border);
+  padding-top: 26px;
+  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center;
+}
+
+/* GET ME IN — the card on an event page. One press on a phone. */
+.getMeIn {
+  border-radius: var(--radius);
+  padding: 22px;
+  margin-bottom: 18px;
+  background: linear-gradient(160deg, rgba(124,74,158,0.22), rgba(124,74,158,0.06));
+  border: 1px solid rgba(124,74,158,0.35);
+}
+.getMeInKicker { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800; color: var(--accent-ink); }
+.getMeInTitle { font-size: 26px; font-weight: 800; letter-spacing: -0.8px; line-height: 1; margin: 6px 0 8px; text-transform: uppercase; }
+.getMeInSub { color: var(--text-soft); font-size: 14px; line-height: 1.5; margin: 0 0 14px; }
+.getMeInBtn {
+  display: block; width: 100%; text-align: center;
+  padding: 17px 20px; border-radius: 14px; border: none; cursor: pointer;
+  background: var(--accent); color: #fff;
+  font-size: 15px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
+}
+.getMeInBtn:hover { filter: brightness(1.08); }
+.getMeInBtn:disabled { opacity: 0.6; cursor: default; }
+.placesToggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
+.placesToggle button {
+  padding: 12px 8px; border-radius: 12px; cursor: pointer; font-weight: 700; font-size: 12.5px; letter-spacing: 1.2px; text-transform: uppercase;
+  background: transparent; border: 1px solid var(--border-strong); color: var(--text-soft);
+}
+.placesToggle button.active { background: var(--accent-soft); border-color: var(--accent-ink); color: var(--accent-ink); }
+.getMeInNote { width: 100%; margin: 0 0 12px; padding: 11px 13px; border-radius: 12px; border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); font-size: 14px; }
+.getMeInNote:focus { outline: none; border-color: var(--accent-ink); }
+.getMeInQualifier { font-size: 11.5px; color: var(--text-faint); margin: 10px 0 0; text-align: center; }
+.getMeInLink { background: none; border: none; color: var(--text-muted); font-size: 12.5px; cursor: pointer; padding: 8px 0 0; text-decoration: underline; }
+
+/* The four friendly states — used on the event card and in the member area. */
+.reqState { border-radius: 14px; padding: 16px 18px; border: 1px solid var(--border); background: var(--surface); }
+.reqState .t { font-size: 17px; font-weight: 800; letter-spacing: -0.2px; text-transform: uppercase; margin: 0 0 4px; }
+.reqState .b { font-size: 13.5px; color: var(--text-soft); line-height: 1.5; margin: 0; }
+.reqState.working .t { color: var(--accent-ink); }
+.reqState.guestlisted { background: rgba(69,112,76,0.12); border-color: rgba(69,112,76,0.4); }
+.reqState.guestlisted .t { color: var(--ok); }
+.reqState.discount { background: var(--accent-soft); border-color: rgba(124,74,158,0.4); }
+.reqState.discount .t { color: var(--accent-ink); }
+.reqState.sorry .t { color: var(--text-muted); }
+.reqState.cancelled .t { color: var(--text-faint); font-size: 14px; }
+
+/* GUESTLIST MEMBER — a mark of belonging, not a loyalty card. */
+.memberBadge {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 10.5px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800;
+  color: var(--accent-ink); border: 1px solid rgba(124,74,158,0.45); border-radius: 999px; padding: 5px 12px;
+  background: var(--accent-soft);
+}
+.memberBadge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+/* Member area */
+.memberHead { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 30px 0 6px; }
+.memberHead .pageTitle { margin: 0; }
+.memberGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 18px; }
+.memberGrid .youPanel { margin: 0; }
+.memberGrid .youPanel.wide { grid-column: 1 / -1; }
+.requestRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--border); }
+.requestRow:first-child { border-top: none; }
+.requestRow .title { font-weight: 700; font-size: 15px; }
+.requestRow .meta { color: var(--text-muted); font-size: 12.5px; margin-top: 2px; }
+.reqChip { font-size: 10.5px; letter-spacing: 1.4px; text-transform: uppercase; font-weight: 800; border-radius: 999px; padding: 5px 10px; border: 1px solid var(--border-strong); white-space: nowrap; }
+.reqChip.working { color: var(--accent-ink); border-color: rgba(124,74,158,0.4); }
+.reqChip.guestlisted { color: var(--ok); border-color: rgba(69,112,76,0.5); }
+.reqChip.discount { color: var(--accent-ink); background: var(--accent-soft); border-color: transparent; }
+.reqChip.sorry, .reqChip.cancelled { color: var(--text-faint); }
+.impactBox { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 18px; color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+
+/* GUESTLIST MARKET */
+.marketHead { margin: 34px 0 10px; }
+.marketGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin: 18px 0 40px; }
+.marketCard {
+  display: block; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); overflow: hidden;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.marketCard:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+.marketCard .art { aspect-ratio: 4 / 3; background: var(--surface-hover); position: relative; }
+.marketCard .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.marketCard .art .logo { position: absolute; left: 14px; bottom: -18px; width: 48px; height: 48px; border-radius: 12px; object-fit: cover; border: 2px solid var(--bg); background: var(--bg); }
+.marketCard .body { padding: 26px 18px 18px; }
+.marketCategory { font-size: 10.5px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-faint); font-weight: 700; }
+.marketCard h3 { margin: 4px 0 8px; font-size: 19px; letter-spacing: -0.3px; }
+.marketOfferLine { font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; font-weight: 800; color: var(--accent-ink); }
+.marketCard .place { color: var(--text-muted); font-size: 12.5px; margin-top: 8px; }
+.marketFeatured { position: absolute; top: 12px; left: 12px; font-size: 10px; letter-spacing: 1.6px; text-transform: uppercase; font-weight: 800; background: var(--accent); color: #fff; padding: 4px 9px; border-radius: 999px; }
+
+.offerCard { border: 1px solid rgba(124,74,158,0.4); background: var(--accent-soft); border-radius: var(--radius); padding: 24px; margin: 18px 0; }
+.offerCard .headline { font-size: clamp(22px, 4vw, 32px); font-weight: 800; letter-spacing: -0.6px; line-height: 1.05; text-transform: uppercase; margin: 0 0 10px; }
+.offerCard p { margin: 0 0 10px; color: var(--text-soft); line-height: 1.55; }
+.offerCard .small { font-size: 12.5px; color: var(--text-muted); }
+
+/* The claim screen — held up at a counter, read from a metre away. */
+.claimScreen { max-width: 520px; margin: 30px auto 60px; text-align: center; }
+.claimCode {
+  font-size: clamp(34px, 9vw, 56px); font-weight: 800; letter-spacing: 0.08em; font-variant-numeric: tabular-nums;
+  background: var(--accent); color: #fff; border-radius: var(--radius); padding: 26px 16px; margin: 18px 0 10px;
+}
+.claimCode.spent { background: var(--surface); color: var(--text-faint); text-decoration: line-through; }
+.claimMeta { color: var(--text-muted); font-size: 13.5px; }
+.claimBusiness { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 18px; }
+.claimBusiness img { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; }
+
+/* Business portal redeem box */
+.redeemBox { max-width: 440px; }
+.redeemBox input { font-size: 24px; letter-spacing: 0.12em; text-transform: uppercase; text-align: center; font-variant-numeric: tabular-nums; }
+.redeemResult { border-radius: var(--radius-sm); padding: 18px; margin-top: 14px; font-weight: 700; }
+.redeemResult.ok { background: rgba(69,112,76,0.14); color: var(--ok); }
+.redeemResult.bad { background: rgba(179,66,58,0.12); color: var(--danger); }
+
+/* Admin desk bits */
+.deskGrid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 900px) { .deskGrid { grid-template-columns: 1fr; } }
+.deskActions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.deskActions .btnGhost, .deskActions .btnAccent { padding: 8px 13px; font-size: 11px; }
+.deskForm { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; margin: 10px 0; background: var(--bg); }
+.deskForm label { display: block; font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-muted); margin: 8px 0 4px; }
+.deskForm input, .deskForm select, .deskForm textarea {
+  width: 100%; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); font-size: 14px;
+}
+.deskForm .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.timeline { list-style: none; padding: 0; margin: 0; }
+.timeline li { padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.timeline li:first-child { border-top: none; }
+.timeline .when { color: var(--text-faint); font-size: 11.5px; }
+.flagChip { font-size: 10.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--danger); border: 1px solid rgba(179,66,58,0.4); border-radius: 999px; padding: 3px 8px; margin-right: 6px; }
+
+/* On a phone the event's aside — date, tickets and GET ME IN — comes before
+   the long read. The way in should never be a scroll away. */
+@media (max-width: 900px) {
+  .detailColumns > aside { order: -1; }
+}

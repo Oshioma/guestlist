@@ -13,6 +13,8 @@ import { fmtEventDate } from '@/lib/util';
 import { ConnectButton } from '@/components/v2c/ConnectButton';
 import { MemberActions } from '@/components/v2c/MemberActions';
 import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
+import { isActiveMember } from '@/lib/membership';
+import { MemberBadge } from '@/components/membership/MemberBadge';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +40,9 @@ export default async function MemberProfilePage({ params }: { params: Promise<{ 
   if (!privacy.profile_public && !isSelf && viewer?.role !== 'admin') notFound();
   if (viewer && !isSelf && (await isBlockedEitherWay(viewer.id, member.id))) notFound();
 
+  // GUESTLIST MEMBER — the badge, and only the badge, for now. "Member
+  // since" and the rest of public identity are a deliberate later design.
+  const guestlistMember = await isActiveMember(member.id);
   const [taste, history, upcoming, following, connection, viewerClose, shared, viewerBlocks] = await Promise.all([
     privacy.show_taste || isSelf
       ? query<{ name: string; slug: string }>(
@@ -107,6 +112,7 @@ export default async function MemberProfilePage({ params }: { params: Promise<{ 
         )}
         <div className="profileHeadBody">
           <h1 className="profileName">{member.display_name}</h1>
+          {guestlistMember && <div style={{ margin: '0 0 8px' }}><MemberBadge /></div>}
           {location && <div className="profileLocation">{location}</div>}
           {member.raving_since && (
             <div className="profileRavingSince">{`Raving since ${member.raving_since}`}</div>

@@ -66,6 +66,33 @@ fictional test data and it truncates tables.
    Never set `SUPPLY_FETCH_ALLOW_HOSTS` in production (dev/test only).
 3. Deploy, and check the preview URL loads `/events`.
 
+### Switching on Guestlist Membership payments (Stripe)
+
+`/membership` is live from the first deploy — without Stripe it reads
+COMING SOON and collects a waitlist, which you can see on `/admin/members`.
+To take money:
+
+1. In Stripe, create a product **Guestlist Membership** with a recurring
+   price of **£30 / month**. Copy the price id (`price_…`).
+2. Developers → Webhooks → add endpoint
+   `https://www.guestlist.net/api/webhooks/stripe` listening to
+   `checkout.session.completed`, `customer.subscription.created`,
+   `customer.subscription.updated`, `customer.subscription.deleted`,
+   `invoice.paid`, `invoice.payment_failed`. Copy the signing secret.
+3. Settings → Billing → Customer portal: enable it, allow customers to
+   cancel subscriptions and update payment methods.
+4. Add to Vercel: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`,
+   `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_MEMBERSHIP_MONTHLY`, and `SITE_URL`
+   (the absolute URL Stripe redirects back to). Redeploy.
+5. Optionally mirror the price id into the database so it survives an env
+   change: `update membership_plans set stripe_price_id = 'price_…' where code = 'member_monthly';`
+6. Test with a Stripe test card, then check `/admin/members` shows the
+   member as *Active · stripe* and `/you/membership` opens the Billing
+   Portal.
+
+Membership pages, GET ME IN, the Market and the admin desks work with or
+without Stripe; only the JOIN button depends on it.
+
 ## 5. Point the domain
 
 In Vercel → project → *Domains*, add `guestlist.net` (and `www`), then

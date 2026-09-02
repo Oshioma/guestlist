@@ -22,6 +22,8 @@ const DESKS: Desk[] = [
   { key: 'corrections', one: 'correction', href: '/admin/archive' },
   { key: 'reports', one: 'report', href: '/admin/network' },
   { key: 'genreSuggestions', one: 'genre suggestion', href: '/admin/genre-suggestions' },
+  { key: 'accessRequests', one: 'GET ME IN request', href: '/admin/getmein' },
+  { key: 'marketApplications', one: 'Market application', href: '/admin/market' },
 ];
 
 export async function ReviewQueueBar() {

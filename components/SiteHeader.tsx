@@ -4,10 +4,15 @@ import { getMemberPromoters } from '@/lib/promoterAuth';
 import { queryOne } from '@/lib/db';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { getNavVisibility } from '@/lib/settings';
+import { getMembership, membershipIsActive } from '@/lib/membership';
+import { getMemberBusinesses } from '@/lib/marketAuth';
 
 export async function SiteHeader() {
   const member = await getCurrentMember();
-  const promoterships = member ? await getMemberPromoters(member.id) : [];
+  const [promoterships, businesses, membership] = member
+    ? await Promise.all([getMemberPromoters(member.id), getMemberBusinesses(member.id), getMembership(member.id)])
+    : [[], [], null];
+  const isMember = membershipIsActive(membership);
   const nav = await getNavVisibility();
   const unread = member
     ? (await queryOne<{ n: number }>(
@@ -33,8 +38,13 @@ export async function SiteHeader() {
             <Link href="/archive">Archive</Link>
             <Link href="/balance">Balance</Link>
             <Link href="/promoters">Promoters</Link>
+            <Link href="/market">Market</Link>
+            {/* Membership is sold to people who don't have it; members find
+                theirs under You. */}
+            {!isMember && <Link href="/membership">Membership</Link>}
             {member && <Link href="/you">You</Link>}
             {promoterships.length > 0 && <Link href="/promoter">Dashboard</Link>}
+            {businesses.length > 0 && <Link href="/business">Business</Link>}
           </nav>
           <div className="headerRight">
             <ThemeToggle />
