@@ -32,6 +32,12 @@ export type ProbeResult = {
   // What a sitemap DID contain, when none of it looked like event pages.
   // Shown so the shape of the site's URLs is visible instead of guessed at.
   sampleUrls?: string[];
+  // The same page read again with a browser user agent. Both requests were
+  // already being made; only the status codes were ever compared.
+  browserCandidates?: number | null;
+  // The browser got a real listing and we got a shell. Same 200, different
+  // page — a wall that a status-code comparison walks straight past.
+  servesBrowsersMore?: boolean;
   // A sitemap with more event pages than the listing page gave us. Offered
   // rather than substituted: the admin was looking at a filtered view, and the
   // sitemap is the whole site.
@@ -47,6 +53,14 @@ export const probeLabel = (p: FetchProbe) =>
 
 // Turn the two probes into the sentence an admin actually needs.
 export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
+  // Said before anything else, because it changes what every other sentence
+  // would mean: the page we are describing is not the page you are looking at.
+  if (t.servesBrowsersMore) {
+    return {
+      text: `This site serves us a different page from the one you see: ${t.browserCandidates} event links with a browser user agent, ${t.candidates ?? 0} for GuestlistBot — same HTTP 200 both times, so nothing looked wrong until now. It is not JavaScript, it is the site choosing. Its sitemap is the honest way in${t.sitemapAlternative ? `: use ${t.sitemapAlternative.url}, which lists ${t.sitemapAlternative.found} event pages` : ', if it has one with event pages in it'}.`,
+      bad: true,
+    };
+  }
   if (t.bot.ok && (t.candidates ?? 0) > 0) {
     return {
       text: t.foundVia?.viaSitemap

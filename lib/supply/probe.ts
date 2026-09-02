@@ -103,9 +103,28 @@ export async function probeTarget(
   // Only ever asked of HTML. A sitemap is XML: it has no shell to be empty.
   const clientRendered = asBot.ok && method === 'html' && looksClientRendered(asBot.body);
 
+  // WE ALREADY FETCHED THIS PAGE TWICE. Until now we only compared the two
+  // status codes, which catches a site that BLOCKS our bot and misses the
+  // more common thing a big site does: serve it a different page. Same 200,
+  // same content type, a shell instead of the listings. Reading both bodies
+  // costs nothing and is the difference between "this page renders in the
+  // browser" and "this page renders in the browser FOR US".
+  //
+  // Knowing is not doing: the scanner still never masquerades as a browser.
+  // But an admin cannot decide what to do about a wall nobody has named.
+  let browserCandidates: number | null = null;
+  if (asBrowser.ok && method === 'html') {
+    browserCandidates = identifyCandidateLinks(asBrowser.body, asBrowser.finalUrl).length;
+  }
+  // A couple more links is noise — a nav that differs, a cookie banner. A
+  // page of listings against a handful is a different page.
+  const servesBrowsersMore =
+    browserCandidates !== null && browserCandidates >= 5 && browserCandidates >= (candidates ?? 0) * 3;
+
   const result: ProbeResult = {
     target, bot: toProbe(asBot), browser: toProbe(asBrowser), method, candidates,
-    candidateUrls, clientRendered, embedded, sampleUrls,
+    candidateUrls, clientRendered, embedded, sampleUrls, browserCandidates,
+    servesBrowsersMore,
   };
 
   // The page is missing, or it loads but has no event links on it: in both

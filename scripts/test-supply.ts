@@ -1570,6 +1570,19 @@ async function main() {
       testVerdict(emptySitemap).text);
     check('a sitemap full of event pages reads as OK',
       !testVerdict({ ...probe(true, 40), method: 'sitemap' as const }).bad);
+
+    // The wall a status-code comparison walks straight past: same HTTP 200
+    // both times, but the browser was handed the listings and we were not.
+    const twoFaced = { ...probe(true, 4), browserCandidates: 38, servesBrowsersMore: true };
+    check('a site that serves browsers a different page is named as that',
+      testVerdict(twoFaced).bad
+      && testVerdict(twoFaced).text.includes('different page')
+      && testVerdict(twoFaced).text.includes('38'),
+      testVerdict(twoFaced).text);
+    check('and it is not blamed on JavaScript',
+      !testVerdict({ ...twoFaced, clientRendered: true }).text.includes('builds its listings'));
+    check('a browser seeing a couple more links is not called a different page',
+      !testVerdict({ ...probe(true, 4), browserCandidates: 6 }).text.includes('different page'));
   }
 
   // -------------------------------------------------------------------------
