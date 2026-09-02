@@ -1,0 +1,205 @@
+// /membership for someone who has already joined. The sales page has done
+// its job; this is the welcome mat — what is live for them right now, how
+// to use the membership, and everything they have got, in the present tense.
+
+import Link from 'next/link';
+import { formatPence, membershipLabel, type MemberWithMembership } from '@/lib/membership';
+import { memberRequests, type MemberRequest } from '@/lib/accessRequests';
+import { listApprovedBusinesses, memberClaims } from '@/lib/market';
+import { liveDrops, liveGoodCauses } from '@/lib/drops';
+import { fmtEventDate } from '@/lib/util';
+import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
+import { MarketArt } from '@/components/market/MarketArt';
+
+// Live asks: anything we are still working on or have sorted, for an
+// event that has not finished (or has no date yet). Kept out of the
+// component so the clock is read once, at request time.
+function liveAsks(requests: MemberRequest[], limit = 4): MemberRequest[] {
+  const now = Date.now();
+  return requests.filter((r) => {
+    if (r.friendly.key === 'cancelled' || r.friendly.key === 'sorry') return false;
+    const ends = r.end_at ?? r.start_at;
+    return !ends || new Date(ends).getTime() + 6 * 3600 * 1000 > now;
+  }).slice(0, limit);
+}
+
+const monthYear = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : null;
+const dayMonth = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : null;
+
+export async function MemberHome({ me }: { me: MemberWithMembership }) {
+  const [requests, claims, drops, causes, businesses] = await Promise.all([
+    memberRequests(me.id, 12), memberClaims(me.id, 6), liveDrops(6), liveGoodCauses(),
+    listApprovedBusinesses({ featuredOnly: true, limit: 4 }),
+  ]);
+  const open = liveAsks(requests);
+  const liveClaims = claims.filter((c) => c.status === 'claimed').slice(0, 3);
+  const m = me.membership;
+  const first = me.display_name.split(' ')[0];
+  const since = monthYear(m?.member_since ?? null);
+  const status = membershipLabel(m);
+  const renewal = m?.billing_source === 'stripe' && m.current_period_end
+    ? `${m.cancel_at_period_end ? 'Ends' : 'Renews'} ${dayMonth(m.current_period_end)}`
+    : m?.billing_source === 'lifetime' ? 'For life'
+    : m?.current_period_end ? `Until ${dayMonth(m.current_period_end)}` : null;
+  const hasNow = open.length > 0 || liveClaims.length > 0 || drops.length > 0;
+
+  return (
+    <main className="wrap">
+      <ClubTrack type="membership_page_viewed" />
+      <section className="mbHero member">
+        <div className="mbKicker">Guestlist Membership · {status}</div>
+        <h1 className="mbTitle">You’re in.</h1>
+        <p className="mbPrice">{first}, you’re a Guestlist member{since ? ` · since ${since}` : ''}.</p>
+        <p className="mbLead">
+          See something you want to go to? Ask, and we’ll try to get you in. Claim offers from independent businesses we like.
+          Hear about drops first. This is how to use it.
+        </p>
+        <div className="mbCtaRow">
+          <Link href="/events" className="mbCta">Find something to go to</Link>
+          <Link href="/you/ask" className="btnGhost">Ask Guestlist</Link>
+          <Link href="/you/membership" className="btnGhost">Your membership</Link>
+        </div>
+      </section>
+
+      {hasNow && (
+        <section style={{ marginTop: 26 }}>
+          <div className="sectionLabel">Right now</div>
+          <div className="mbNowGrid">
+            {open.map((r) => (
+              <Link key={r.id} href="/you/membership" className="mbNowCard">
+                <div className="mbNowKind">{r.request_type === 'event_access' ? 'Get me in' : 'Ask Guestlist'}{r.places > 1 ? ' · +1' : ''}</div>
+                <div className="mbNowTitle">{r.title}</div>
+                <div className="mbNowMeta">
+                  {r.start_at ? fmtEventDate(r.start_at, r.end_at, r.timezone ?? 'Europe/London') : 'Date to come'}
+                  {r.venue_name ? ` · ${r.venue_name}` : r.city ? ` · ${r.city}` : ''}
+                </div>
+                <span className={`reqChip ${r.friendly.key}`}>
+                  {r.friendly.key === 'working' ? 'Working on it' : r.friendly.key === 'discount' && r.member_price_pence != null ? `${formatPence(r.member_price_pence, r.currency)} for you` : r.friendly.title}
+                </span>
+              </Link>
+            ))}
+            {liveClaims.map((c) => (
+              <Link key={c.id} href="/you/membership" className="mbNowCard">
+                <div className="mbNowKind">Market · your code</div>
+                <div className="mbNowTitle">{c.business_name}</div>
+                <div className="mbNowMeta">{c.offer_title}{c.expires_at ? ` · until ${dayMonth(c.expires_at)}` : ''}</div>
+                <span className="mbCode">{c.code}</span>
+              </Link>
+            ))}
+            {drops.map((d) => (
+              <Link key={d.id} href="/you/membership" className="mbNowCard drop">
+                <div className="mbNowKind">Member drop</div>
+                <div className="mbNowTitle">{d.title}</div>
+                <div className="mbNowMeta">{d.event_title ?? (d.places ? `${d.places} places` : 'Members first')}{d.ends_at ? ` · until ${dayMonth(d.ends_at)}` : ''}</div>
+                <span className="reqChip guestlisted">Live now</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="sectionLabel" style={{ marginTop: 34 }}>How to use it</div>
+      <div className="mbBenefits mbHow" style={{ marginTop: 10 }}>
+        <div className="mbBenefit">
+          <span className="mbStep">1</span>
+          <h3>Get me in</h3>
+          <p>On any event page, press <strong>GET ME IN</strong> — just you, or you +1. We go to the promoter, the venue or our own allocations, and come back with <strong>YOU’RE ON THE GUESTLIST</strong>, a member price, or straight talk.</p>
+          <div className="small"><Link href="/events" style={{ textDecoration: 'underline' }}>Browse events →</Link></div>
+        </div>
+        <div className="mbBenefit">
+          <span className="mbStep">2</span>
+          <h3>Ask Guestlist</h3>
+          <p>Not on Guestlist yet? Paste any link — a Resident Advisor page, an Instagram post, a venue site — and we’ll work on it. Sold out, plus-ones, “what’s good on Saturday”: ask.</p>
+          <div className="small"><Link href="/you/ask" style={{ textDecoration: 'underline' }}>Ask now →</Link></div>
+        </div>
+        <div className="mbBenefit">
+          <span className="mbStep">3</span>
+          <h3>The Market</h3>
+          <p>Independent businesses we like, giving members something extra. Open a listing, press <strong>CLAIM</strong>, show the code. One live code per member at a time — they’re personal and they expire.</p>
+          <div className="small"><Link href="/market" style={{ textDecoration: 'underline' }}>Browse the Market →</Link></div>
+        </div>
+      </div>
+
+      <div className="sectionLabel" style={{ marginTop: 34 }}>What you’ve got</div>
+      <div className="mbBenefits" style={{ marginTop: 10 }}>
+        <div className="mbBenefit lead">
+          <h3>Get in free</h3>
+          <p>Free entrance to parties whenever we can make it happen — through the promoter, the venue, our own allocations, or by buying access where that’s reasonable. When we can’t, we’ll say so, and often find a member price instead.</p>
+          <div className="small">Subject to availability and fair use.</div>
+        </div>
+        <div className="mbBenefit">
+          <h3>Queue jump</h3>
+          <p>Priority and fast-track entrance where available, through participating events and venues. Less time on the pavement, more time inside.</p>
+        </div>
+        <div className="mbBenefit">
+          <h3>Member prices</h3>
+          <p>When free isn’t possible, a discounted ticket or a special Guestlist price often is. It shows on your membership page the moment we have it.</p>
+        </div>
+        <div className="mbBenefit">
+          <h3>Guestlist Market</h3>
+          <p>Restaurants, bars, record shops, studios, clothing, places to stay — chosen by Guestlist, not listed by anyone. Your offers are live now.</p>
+          <div className="small"><Link href="/market" style={{ textDecoration: 'underline' }}>Browse the Market →</Link></div>
+        </div>
+        <div className="mbBenefit">
+          <h3>Member drops</h3>
+          <p>Surprise tickets, last-minute guestlists, special events, secret parties. You hear first — on your membership page and by email.</p>
+          <div className="small">{drops.length > 0 ? `${drops.length} live now` : 'Nothing live at the moment — you’ll know first.'}</div>
+        </div>
+        <div className="mbBenefit">
+          <h3>Do good for others</h3>
+          <p>Being part of Guestlist contributes something positive. Members support community projects chosen with the community — and see exactly what those projects are.</p>
+          {causes.length > 0 ? (
+            <div className="small">{causes.map((c) => c.title).join(' · ')}</div>
+          ) : (
+            <div className="small">The first projects will be announced to members. Nothing is claimed here until it’s real.</div>
+          )}
+        </div>
+      </div>
+
+      {businesses.length > 0 && (
+        <section style={{ marginTop: 30 }}>
+          <div className="sectionLabel">In the Market</div>
+          <div className="marketGrid" style={{ marginTop: 10 }}>
+            {businesses.map((b) => (
+              <Link key={b.id} href={`/market/${b.slug}`} className="marketCard">
+                <div className="art">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {b.hero_image_url ? <img src={b.hero_image_url} alt="" /> : <MarketArt name={b.name} category={b.category_name} />}
+                </div>
+                <div className="body">
+                  <div className="marketCategory">{b.category_name ?? 'Independent'}</div>
+                  <h3>{b.name}</h3>
+                  {b.offer && <div className="marketOfferLine">{b.offer.title}</div>}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <p className="mbStatement">
+        I go out. I discover things. Guestlist gets me into things. I support independent businesses.
+        I get looked after. <span>And being part of it does something positive.</span>
+      </p>
+
+      <div className="mbBenefits" style={{ marginTop: 10 }}>
+        <div className="mbBenefit lead" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 18 }}>
+          <div>
+            <h3 style={{ fontSize: 'clamp(22px, 4vw, 34px)' }}>Your membership</h3>
+            <p>{status}{renewal ? ` · ${renewal}` : ''}. Your asks, codes and billing live on your membership page. Manage or cancel any time — no questions.</p>
+          </div>
+          <div className="mbCtaRow">
+            <Link href="/you/membership" className="mbCta">Your membership →</Link>
+          </div>
+        </div>
+      </div>
+
+      <div className="mbFoot">
+        <span className="adminSub" style={{ margin: 0 }}>
+          Free entrance is subject to availability and fair use; not every event is included, and organisers keep the final say at the door.
+        </span>
+        <Link href="/membership/terms" className="btnGhost">Membership terms</Link>
+      </div>
+    </main>
+  );
+}
