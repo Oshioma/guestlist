@@ -14,13 +14,17 @@ import { listApprovedBusinesses } from '@/lib/market';
 import { JoinCta } from '@/components/membership/JoinCta';
 import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
 import { MarketArt } from '@/components/market/MarketArt';
+import { MemberHome } from '@/components/membership/MemberHome';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Guestlist Membership — GET IN.' };
 
 export default async function MembershipPage({ searchParams }: { searchParams: Promise<{ cancelled?: string }> }) {
-  const [me, plan, live, causes, businesses, sp] = await Promise.all([
-    currentMemberWithMembership(), getPlan(), Promise.resolve(billingEnabled()), liveGoodCauses(),
+  const me = await currentMemberWithMembership();
+  // Someone who has joined does not need selling to. Same address, their page.
+  if (me?.isMember) return <MemberHome me={me} />;
+  const [plan, live, causes, businesses, sp] = await Promise.all([
+    getPlan(), Promise.resolve(billingEnabled()), liveGoodCauses(),
     listApprovedBusinesses({ featuredOnly: true, limit: 4 }), searchParams,
   ]);
   const price = formatPence(plan?.price_pence ?? 3000, plan?.currency ?? 'GBP');

@@ -316,6 +316,11 @@ try {
     check('member reads YOU’RE ON THE GUESTLIST', nadiaPage.includes('ON THE GUESTLIST') && nadiaPage.includes('Bring ID'));
     const you = await nadia.html('/you/membership');
     check('member area lists the event as guestlisted', you.includes('GMI Test: Closed List') && you.includes('ON THE GUESTLIST'));
+    const mbMember = await nadia.html('/membership');
+    check('/membership becomes the member view once joined', mbMember.includes('You’re in.') && mbMember.includes('How to use it') && mbMember.includes('What you’ve got')
+      && !mbMember.includes('Join the waitlist') && !mbMember.includes('Join Guestlist —'));
+    check('member view shows what is live right now', mbMember.includes('Right now') && mbMember.includes('GMI Test: Closed List') && mbMember.includes('ON THE GUESTLIST'));
+    check('member view keeps the six benefits and the qualifier', ['Get in free', 'Queue jump', 'Member prices', 'Guestlist Market', 'Member drops', 'Do good for others'].every((s) => mbMember.includes(s)) && mbMember.includes('fair use'));
     const timeline = await q(`select count(*)::int as n from member_access_request_events where request_id = $1`, [reqId]);
     check('full timeline kept', timeline[0].n >= 4);
     check('desk actions audited', (await q(`select count(*)::int as n from audit_log where action in ('access_request_updated','promoter_outreach_logged','promoter_contact_added','promoter_relationship_changed')`))[0].n >= 5);
@@ -330,7 +335,7 @@ try {
     check('another member cannot cancel it', (await marcus.json(`/api/membership/requests/${reqId}`, 'POST', { action: 'cancel' })).status === 404);
     const members = await oshi.html('/admin/members');
     check('members desk shows ledger + fair-use columns, no automation', members.includes('Every membership') && members.includes('Nothing is restricted automatically'));
-    check('no credit/token language anywhere member-facing', !/credits?\b|tokens?\b|\d+ free events per month/i.test(you + nadiaPage + (await anon.html('/membership'))));
+    check('no credit/token language anywhere member-facing', !/credits?\b|tokens?\b|\d+ free events per month/i.test(you + nadiaPage + (await anon.html('/membership')) + (await nadia.html('/membership'))));
   }
 
   // -------------------------------------------------------------------------
