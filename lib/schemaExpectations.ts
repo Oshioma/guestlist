@@ -38,6 +38,7 @@ export const MIGRATION_FILES: string[] = [
   '031_ask_guestlist.sql',
   '032_rendered_sources.sql',
   '033_json_scan_method.sql',
+  '034_source_scan_cap.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
@@ -166,6 +167,7 @@ export const EXPECTED_COLUMNS: string[] = [
   'event_sources.city',
   'event_sources.country',
   'event_sources.feed_url',
+  'event_sources.max_candidates',
   'event_sources.poll_frequency_hours',
   'event_sources.polling_enabled',
   'event_sources.render_js',

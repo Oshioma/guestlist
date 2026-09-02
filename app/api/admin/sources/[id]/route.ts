@@ -43,6 +43,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (typeof body.active === 'boolean') set('active', body.active);
     if (typeof body.pollingEnabled === 'boolean') set('polling_enabled', body.pollingEnabled);
     if (typeof body.renderJs === 'boolean') set('render_js', body.renderJs);
+    // Null puts the source back on the platform default rather than pinning it
+    // to whatever the default happens to be today.
+    if (body.maxCandidates === null) set('max_candidates', null);
+    else if (Number.isInteger(body.maxCandidates)) {
+      const n = Number(body.maxCandidates);
+      if (n < 1 || n > 1000) {
+        return NextResponse.json({ error: 'Max per scan must be between 1 and 1000' }, { status: 400 });
+      }
+      set('max_candidates', n);
+    }
     if (body.pollFrequencyHours !== undefined) {
       const n = Number(body.pollFrequencyHours);
       if (!Number.isInteger(n) || n < 1 || n > 24 * 30) {

@@ -30,7 +30,7 @@ import { zonedTimeToUtc, parseLocalInTimezone, parseFoundDate, resolveEndCrossin
 import { mapGenreProposals, loadGenres } from '@/lib/supply/genres';
 import { computeOverallConfidence, canAutoPublish } from '@/lib/supply/confidence';
 import { runExtractionPipeline } from '@/lib/supply/pipeline';
-import { scanSource, nextPageUrl, isPaged, identifyJsonLinks, looksLikeJson, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, countSitemapUrls, sitemapEventUrls, sitemapIndexUrls, sitemapsFromRobots } from '@/lib/supply/scanner';
+import { scanSource, candidateCap, nextPageUrl, isPaged, identifyJsonLinks, looksLikeJson, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, countSitemapUrls, sitemapEventUrls, sitemapIndexUrls, sitemapsFromRobots } from '@/lib/supply/scanner';
 import { explainScan, outcomeLabel } from '@/lib/supply/outcomes';
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
@@ -1741,6 +1741,38 @@ async function main() {
     });
     check('a JSON listing scans, whatever its content-type claims',
       jsonScan.method === 'json' && jsonScan.extracted === 2, JSON.stringify(jsonScan));
+
+    // Forty suits a venue and truncates a festival programme. A source that
+    // needs a different ceiling carries its own; everything else keeps the
+    // default without having to know the setting exists.
+    check('a source with no ceiling of its own uses the default', candidateCap(null) === 40);
+    check('and one that carries a ceiling uses it', candidateCap({ max_candidates: 300 }) === 300);
+    check('a nonsense ceiling falls back rather than taking nothing',
+      candidateCap({ max_candidates: 0 }) === 40);
+
+    const wide = (await q(
+      `insert into event_sources (source_type, name, url, trust, max_candidates)
+       values ('venue_website', 'Wide festival', 'https://wide.example/api/list/?page=0', 'trusted', 60)
+       returning id`
+    ))[0] as { id: string };
+    // Fifty events across two pages: over the default of forty, under this
+    // source's sixty. Truncation at forty would be silent, so the count is
+    // the assertion.
+    const many = (from: number, to: number) =>
+      `{"data":[${Array.from({ length: to - from }, (_, i) =>
+        `{"url":"https://wide.example/events/act-${from + i}/"}`).join(',')}]}`;
+    const wideBodies: Record<string, { body: string }> = {
+      'https://wide.example/api/list/?page=0': { body: many(0, 25) },
+      'https://wide.example/api/list/?page=1': { body: many(25, 50) },
+      'https://wide.example/api/list/?page=2': { body: many(25, 50) },
+    };
+    const wideScan = await scanSource(wide.id, {
+      fetcher: mockFetcher(wideBodies),
+      ai: mockAI({}),
+      delayMs: 1,
+    });
+    check('a source with a wider ceiling takes more than the default forty',
+      wideScan.candidatesFound === 50, JSON.stringify(wideScan));
 
   }
 
