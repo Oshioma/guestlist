@@ -293,6 +293,12 @@ export function parseFeedLinks(xml: string, baseUrl: string): string[] {
 // without pretending to be a browser.
 const SITEMAP_PATHS = ['/sitemap.xml', '/sitemap_index.xml'];
 
+// How a sitemap is asked for, in one place: XML, and a budget that fits one.
+export const sitemapFetchOptions = (): SafeFetchOptions => ({
+  accept: 'application/xml,text/xml',
+  maxBytes: supplyConfig.fetch.maxSitemapBytes,
+});
+
 export function sitemapEventUrls(xml: string, baseUrl: string, limit: number): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -353,11 +359,12 @@ export async function findSitemapEvents(
   origin: string,
   fetcher: (url: string, options?: SafeFetchOptions) => Promise<SafeFetchResult>,
   delayMs = supplyConfig.scan.delayBetweenFetchesMs
-): Promise<{ url: string; found: number; urls: string[]; sample?: string[] } | null> {
+): Promise<{ url: string; found: number; urls: string[]; sample?: string[]; skipped?: string[] } | null> {
   let sample: string[] = [];
+  let skipped: string[] = [];
   for (const path of SITEMAP_PATHS) {
     const target = `${origin}${path}`;
-    const res = await fetcher(target, { accept: 'application/xml,text/xml' });
+    const res = await fetcher(target, sitemapFetchOptions());
     if (!res.ok || !/<(urlset|sitemapindex)[\s>]/i.test(res.body)) continue;
 
     const walked = await walkSitemap(res, fetcher, delayMs);
@@ -365,8 +372,11 @@ export async function findSitemapEvents(
       return { url: walked.url, found: walked.found.length, urls: walked.found, sample: walked.sample };
     }
     if (walked.sample.length) sample = walked.sample;
+    if (walked.skipped.length) skipped = walked.skipped;
   }
-  return sample.length ? { url: `${origin}${SITEMAP_PATHS[0]}`, found: 0, urls: [], sample } : null;
+  return sample.length || skipped.length
+    ? { url: `${origin}${SITEMAP_PATHS[0]}`, found: 0, urls: [], sample, skipped }
+    : null;
 }
 
 // Read one sitemap response for event URLs, stepping into an index when the
@@ -376,28 +386,32 @@ export async function walkSitemap(
   res: { body: string; finalUrl: string },
   fetcher: (url: string, options?: SafeFetchOptions) => Promise<SafeFetchResult>,
   delayMs = supplyConfig.scan.delayBetweenFetchesMs
-): Promise<{ url: string; found: string[]; sample: string[] }> {
+): Promise<{ url: string; found: string[]; sample: string[]; skipped: string[] }> {
   const cap = supplyConfig.scan.maxCandidatesPerScan;
   const direct = sitemapEventUrls(res.body, res.finalUrl, cap);
-  if (direct.length) return { url: res.finalUrl, found: direct, sample: [] };
+  if (direct.length) return { url: res.finalUrl, found: direct, sample: [], skipped: [] };
 
   const children = sitemapIndexUrls(res.body, res.finalUrl, SITEMAP_CHILDREN_TO_FETCH);
   // Not an index, just a sitemap with nothing event-shaped in it. Report what
   // it DOES list, so the shape of the site's URLs is visible.
   if (!children.length) {
-    return { url: res.finalUrl, found: [], sample: sitemapAllUrls(res.body, res.finalUrl, 5) };
+    return { url: res.finalUrl, found: [], sample: sitemapAllUrls(res.body, res.finalUrl, 5), skipped: [] };
   }
 
   let sample: string[] = [];
+  const skipped: string[] = [];
   for (const child of children) {
     await sleep(delayMs);
-    const sub = await fetcher(child, { accept: 'application/xml,text/xml' });
-    if (!sub.ok) continue;
+    const sub = await fetcher(child, sitemapFetchOptions());
+    // A child we could not read is not the same as a child with no events in
+    // it, and swallowing the difference is how "too big to fetch" came back
+    // as "this site has no events".
+    if (!sub.ok) { skipped.push(`${child} (${sub.code})`); continue; }
     const found = sitemapEventUrls(sub.body, sub.finalUrl, cap);
-    if (found.length) return { url: sub.finalUrl, found, sample: [] };
+    if (found.length) return { url: sub.finalUrl, found, sample: [], skipped };
     if (!sample.length) sample = sitemapAllUrls(sub.body, sub.finalUrl, 5);
   }
-  return { url: res.finalUrl, found: [], sample };
+  return { url: res.finalUrl, found: [], sample, skipped };
 }
 
 

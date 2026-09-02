@@ -10,6 +10,12 @@ export const supplyConfig = {
   fetch: {
     timeoutMs: num(process.env.SUPPLY_FETCH_TIMEOUT_MS, 12_000),
     maxBytes: num(process.env.SUPPLY_FETCH_MAX_BYTES, 2_000_000),
+    // Sitemaps are the exception to the page budget. 2MB is generous for a
+    // web page and small for a list of every URL on a large site — the
+    // sitemap protocol itself allows 50MB and 50,000 URLs per file. A
+    // programme sitemap that overran the page budget was being dropped
+    // silently, which reads as "this site has no events".
+    maxSitemapBytes: num(process.env.SUPPLY_SITEMAP_MAX_BYTES, 15_000_000),
     maxRedirects: num(process.env.SUPPLY_FETCH_MAX_REDIRECTS, 5),
     userAgent:
       process.env.SUPPLY_USER_AGENT ??
