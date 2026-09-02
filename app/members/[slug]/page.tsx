@@ -5,6 +5,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
+import { profileRobots } from '@/lib/profileVisibility';
 import { DeleteMember } from '@/components/admin/DeleteMember';
 import { query, queryOne } from '@/lib/db';
 import { getPrivacy } from '@/lib/privacy';
@@ -18,6 +19,29 @@ import { isActiveMember } from '@/lib/membership';
 import { MemberBadge } from '@/components/membership/MemberBadge';
 
 export const dynamic = 'force-dynamic';
+
+// A page nobody has written anything on is not offered to search engines.
+// A spam signup exists to be indexed; take the indexing away and most of the
+// reason to make one goes with it. Everything else about the page is
+// unchanged — the link still works, members still find them.
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const member = await queryOne<{
+    display_name: string; avatar_url: string | null; bio: string | null;
+    home_city: string | null; now_doing: string | null; looking_for: string | null;
+    raving_since: number | null; email_verified_at: string | null;
+  }>(
+    `select display_name, avatar_url, bio, home_city, now_doing, looking_for, raving_since,
+            email_verified_at::text
+       from members where slug = $1`,
+    [slug]
+  );
+  if (!member) return { title: 'Member — Guestlist' };
+  return {
+    title: `${member.display_name} — Guestlist`,
+    robots: profileRobots(member),
+  };
+}
 
 export default async function MemberProfilePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

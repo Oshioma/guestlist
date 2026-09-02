@@ -58,9 +58,21 @@ export async function updatePrivacy(memberId: string, patch: Partial<MemberPriva
 
 // SQL fragment: member alias m is discoverable in people surfaces
 // (profile public + scene discovery on, defaults when no row).
+// SQL fragment: member alias m may be shown to other people.
+//
+// Two conditions, and the second one is the anti-spam wall. A member who has
+// not proved their address is not offered to anybody: not in the directory,
+// not in scene suggestions, not on a club's page. They can still sign in,
+// look around, save events and set their city — being unverified is not being
+// locked out. What it is, is not being PUBLISHED, which is the only thing a
+// spam signup actually wanted.
+//
+// Everyone who joined before verification existed was backfilled as verified
+// in migration 036. Nobody loses a profile because we changed our minds.
 export function discoverableSql(m = 'm'): string {
-  return `coalesce((select mp.profile_public and mp.scene_discovery
-                      from member_privacy mp where mp.member_id = ${m}.id), true)`;
+  return `(${m}.email_verified_at is not null
+           and coalesce((select mp.profile_public and mp.scene_discovery
+                           from member_privacy mp where mp.member_id = ${m}.id), true))`;
 }
 
 // SQL fragment: member alias m appears in Who's Going lists.
