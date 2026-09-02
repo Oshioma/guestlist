@@ -5,6 +5,8 @@ import { memberSlug } from '@/lib/members';
 import { notifyAdminsNewMember } from '@/lib/adminNotify';
 import { findOrCreateCity } from '@/lib/locations';
 import { canonicalCity } from '@/lib/cityNames';
+import { queueEmail } from '@/lib/email';
+import { createVerificationToken, verificationEmail } from '@/lib/emailVerification';
 import { HONEYPOT_FIELD, hashIp, looksAutomated, requestIp, signupsFromIp, SIGNUPS_PER_IP_PER_DAY } from '@/lib/botCheck';
 
 export async function POST(req: NextRequest) {
@@ -67,6 +69,26 @@ export async function POST(req: NextRequest) {
       // A place we cannot resolve is not a reason to fail somebody's signup.
       console.error('could not resolve signup city', err);
     }
+  }
+
+  // Ask them to prove the address. Never blocking, for the same reason the
+  // admin notification is not: an email service having a bad afternoon must
+  // not stop somebody joining. They can ask for another link any time.
+  try {
+    const issued = await createVerificationToken(member!.id);
+    if (issued.issued) {
+      const site = process.env.SITE_URL ?? 'https://www.guestlist.net';
+      const mail = verificationEmail(issued.displayName, `${site}/verify?token=${encodeURIComponent(issued.token)}`);
+      await queueEmail({
+        recipientEmail: issued.email,
+        memberId: member!.id,
+        emailType: 'transactional:verify_email',
+        subject: mail.subject,
+        bodyText: mail.bodyText,
+      });
+    }
+  } catch (err) {
+    console.error('could not send verification email', err);
   }
 
   // The admins hear about it. Never blocking: a notification that cannot be

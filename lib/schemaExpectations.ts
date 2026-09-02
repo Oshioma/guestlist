@@ -40,6 +40,7 @@ export const MIGRATION_FILES: string[] = [
   '033_json_scan_method.sql',
   '034_source_scan_cap.sql',
   '035_signup_provenance.sql',
+  '036_email_verification.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
@@ -76,6 +77,7 @@ export const EXPECTED_TABLES: string[] = [
   'editorial_sections',
   'email_outbox',
   'email_suppressions',
+  'email_verifications',
   'event_artists',
   'event_claims',
   'event_classifications',
@@ -195,6 +197,7 @@ export const EXPECTED_COLUMNS: string[] = [
   'member_email_prefs.promoter_announcements',
   'members.bio',
   'members.club_suspended_at',
+  'members.email_verified_at',
   'members.home_location_id',
   'members.looking_for',
   'members.now_doing',
