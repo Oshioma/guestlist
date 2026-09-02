@@ -14,6 +14,7 @@
     "test:supply": "tsx scripts/test-supply.ts",
     "verify:v2b": "node scripts/verify-v2b.mjs",
     "verify:membership": "node scripts/verify-membership.mjs",
+    "verify:reconcile": "tsx scripts/verify-reconcile.mts",
     "schema:snapshot": "node scripts/schema-snapshot.mjs"
   },
   "dependencies": {
