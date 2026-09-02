@@ -44,7 +44,8 @@ export default async function AdminEventsPage({
               coalesce(lu.lineup, '[]'::json) as lineup,
               ex.field_confidence, ex.field_sources, ex.warnings as extraction_warnings,
               ex.duplicate_state, ex.duplicate_score, ex.ai_used, ex.structured_data_found,
-              coalesce(sl.source_count, 0) as source_count
+              coalesce(sl.source_count, 0) as source_count,
+              coalesce(sl.source_names, '[]'::json) as source_names
          from events e
          left join venues v on v.id = e.venue_id
          left join promoters p on p.id = e.promoter_id
@@ -64,7 +65,11 @@ export default async function AdminEventsPage({
             order by x.created_at desc limit 1
          ) ex on true
          left join lateral (
-           select count(*)::int as source_count from event_source_links l where l.event_id = e.id
+           select count(*)::int as source_count,
+                  json_agg(distinct s.name) filter (where s.name is not null) as source_names
+             from event_source_links l
+             left join event_sources s on s.id = l.source_id
+            where l.event_id = e.id
          ) sl on true
         where ${cond}
         order by e.created_at desc

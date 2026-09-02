@@ -45,6 +45,10 @@ export type AdminEventRow = {
   ai_used: boolean | null;
   structured_data_found: boolean | null;
   source_count: number;
+  // WHICH sources brought this in, not just what kind of thing they are.
+  // "Venue website" says nothing when eight of them are open; "ADE
+  // programme" tells you whether to trust the row without opening it.
+  source_names?: string[] | null;
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -153,7 +157,11 @@ export function ReviewCard({ event }: { event: AdminEventRow }) {
             </span>
           )}
           <span>
-            Source: <b>{sourceTypeLabel(event.source_type)}</b>
+            Source:{' '}
+            <b>{event.source_names?.length
+              ? event.source_names.join(', ')
+              : sourceTypeLabel(event.source_type)}</b>
+            {event.source_names?.length ? <> ({sourceTypeLabel(event.source_type)})</> : null}
             {event.source_count > 1 && <b> ×{event.source_count}</b>}
           </span>
         </div>

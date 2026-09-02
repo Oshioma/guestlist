@@ -835,6 +835,59 @@ console.log('\n— Articles ↔ events —');
 
 
 // ---------------------------------------------------------------------------
+// WHICH source, not just what kind. "Venue website" says nothing when eight
+// of them are open; the name is what tells you whether to trust a row.
+console.log('\n— The review queue names its sources —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  const [src] = await q(
+    `insert into event_sources (source_type, name, url, trust)
+     values ('venue_website', 'ADE programme', 'https://named-source.example/api/program/', 'trusted')
+     returning id`
+  );
+  const [ev] = await q(
+    `insert into events (slug, title, title_normalized, start_at, timezone, status, city, country, source_type, source_url)
+     values ('named-source-night', 'Named Source Night', 'named source night',
+             now() + interval '18 days', 'Europe/Amsterdam', 'new', 'Amsterdam', 'Netherlands',
+             'venue_website', 'https://named-source.example/en/program/2026/x/1/')
+     returning id`
+  );
+  await q(`insert into event_source_links (event_id, source_id, url, kind)
+           values ($1, $2, 'https://named-source.example/en/program/2026/x/1/', 'source_scan')`,
+          [ev.id, src.id]);
+
+  const page = await (await desk.fetch('/admin/events?state=new')).text();
+  check('the review card names the source that brought the event in',
+    page.includes('ADE programme'));
+  check('and still says what kind of source it was',
+    page.includes('Venue Website'));
+
+  await q(`delete from event_source_links where event_id = $1`, [ev.id]);
+  await q(`delete from events where id = $1`, [ev.id]);
+  await q(`delete from event_sources where id = $1`, [src.id]);
+}
+
+// A source is never put on a schedule by anything but a person.
+console.log('\n— Nothing schedules itself —');
+{
+  const [row] = await q(
+    `select column_default from information_schema.columns
+      where table_name = 'event_sources' and column_name = 'polling_enabled'`
+  );
+  check('a new source does not poll unless somebody says so',
+    String(row?.column_default ?? '').includes('false'), JSON.stringify(row));
+
+  const [made] = await q(
+    `insert into event_sources (source_type, name, url, trust)
+     values ('venue_website', 'Unscheduled', 'https://unscheduled.example/whats-on', 'trusted')
+     returning polling_enabled`
+  );
+  check('and an added source starts off the schedule', made.polling_enabled === false);
+  await q(`delete from event_sources where url = 'https://unscheduled.example/whats-on'`);
+}
+
 // Publish all: the review queue cleared in one press, without sweeping up
 // the two things a person still has to decide about.
 console.log('\n— Publish all —');
