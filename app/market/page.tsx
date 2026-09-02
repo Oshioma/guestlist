@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { listApprovedBusinesses, listCategories, offerHeadline } from '@/lib/market';
 import { billingEnabled, currentMemberWithMembership } from '@/lib/membership';
 import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
+import { MarketArt } from '@/components/market/MarketArt';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Guestlist Market' };
@@ -50,7 +51,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
             <Link key={b.id} href={`/market/${b.slug}`} className="marketCard">
               <div className="art">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                {b.hero_image_url && <img src={b.hero_image_url} alt="" />}
+                {b.hero_image_url ? <img src={b.hero_image_url} alt="" /> : <MarketArt name={b.name} category={b.category_name} />}
                 {b.featured && <span className="marketFeatured">Featured</span>}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 {b.logo_url && <img className="logo" src={b.logo_url} alt="" />}

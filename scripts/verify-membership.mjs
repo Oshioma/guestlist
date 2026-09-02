@@ -337,12 +337,14 @@ try {
   console.log('\n— Guestlist Market: curated, typed offers, single-use codes —');
   {
     check('empty market has an honest empty state', (await anon.html('/market')).includes('being chosen'));
-    const apply = await jules.json('/api/market/apply', 'POST', { name: 'Example Records', tagline: 'Independent record shop', city: 'London', website: 'examplerecords.example' });
+    const apply = await jules.json('/api/market/apply', 'POST', { name: 'Example Records', tagline: 'Independent record shop', city: 'London', website: 'examplerecords.example', logoUrl: 'https://cdn.example/records-logo.png' });
     check('a business can apply', apply.status === 200 && !!apply.data.id);
     const bizId = apply.data.id;
     check('application lands as applied, applicant is owner', (await q(`select status from market_businesses where id = $1`, [bizId]))[0].status === 'applied'
       && (await q(`select role from market_business_members where business_id = $1 and member_id = $2`, [bizId, ids.jules]))[0].role === 'owner');
     check('website normalised to https', (await q(`select website from market_businesses where id = $1`, [bizId]))[0].website.startsWith('https://'));
+    check('logo link from the application is kept', (await q(`select logo_url from market_businesses where id = $1`, [bizId]))[0].logo_url === 'https://cdn.example/records-logo.png');
+    check('nothing was fetched because a member applied', (await q(`select hero_image_url from market_businesses where id = $1`, [bizId]))[0].hero_image_url === null);
     check('applied business is NOT public', (await anon.fetch('/market/example-records')).status === 404);
     check('portal open to the applicant, redeem locked', (await jules.html('/business')).includes('Your application is with Guestlist') && (await jules.html('/business/redeem')).includes('switches on once'));
     const offer = await jules.json(`/api/business/${bizId}/offers`, 'POST', { title: '15% off everything', offerType: 'percentage', discountPercent: 15, redemptionInstructions: 'Show your code at the counter.' });
@@ -359,6 +361,8 @@ try {
     await oshi.json('/api/admin/market', 'POST', { action: 'update', businessId: bizId, business: { featured: true, sortOrder: 1 } });
     const market = await anon.html('/market');
     check('approved business is public with its offer headline', market.includes('Example Records') && market.includes('15% OFF FOR GUESTLIST MEMBERS') && market.includes('Featured'));
+    check('no photo → designed fallback art, never a grey box', market.includes('marketArt') && market.includes('marketArtInitials') && market.includes('>ER<'));
+    check('admin list flags the missing photo', (await oshi.html('/admin/market')).includes('no photo'));
     const page = await anon.html('/market/example-records');
     check('business page renders the offer and asks visitors to sign in', page.includes('15% OFF FOR GUESTLIST MEMBERS') && page.includes('Sign in to claim'));
     check('non-member sees membership prompt, not the code', (await jules.html('/market/example-records')).includes('coming soon'));
@@ -401,6 +405,32 @@ try {
     check('paused business hidden from the Market', !(await anon.html('/market')).includes('Example Records'));
     const manual = await oshi.json('/api/admin/market', 'POST', { action: 'create', business: { name: 'Hand Added Café', city: 'Bristol' }, approve: true });
     check('admin adds a business by hand, approved', manual.status === 200 && (await q(`select status from market_businesses where id = $1`, [manual.data.id]))[0].status === 'approved');
+
+    // Images from the business's own website: og:image for the photo, the
+    // apple-touch-icon for the logo — read through the hardened fetcher.
+    const site = http.createServer((req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Fixture Café</title>
+        <meta property="og:image" content="/images/hero.jpg">
+        <link rel="icon" href="/favicon.ico">
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+      </head><body><h1>Fixture Café</h1></body></html>`);
+    });
+    await new Promise((r) => site.listen(4597, '127.0.0.1', r));
+    try {
+      const withSite = await oshi.json('/api/admin/market', 'POST', { action: 'create', business: { name: 'Fixture Café', city: 'Leeds', website: 'http://127.0.0.1:4597/' }, approve: true });
+      check('creating with a website fills photo + logo from the site', withSite.status === 200 && withSite.data.images?.hero === true && withSite.data.images?.logo === true);
+      const [img] = await q(`select hero_image_url, logo_url from market_businesses where id = $1`, [withSite.data.id]);
+      check('og:image → photo, apple-touch-icon → logo (absolute URLs)', img.hero_image_url === 'http://127.0.0.1:4597/images/hero.jpg' && img.logo_url === 'http://127.0.0.1:4597/apple-touch-icon.png');
+      await oshi.json('/api/admin/market', 'POST', { action: 'update', businessId: withSite.data.id, business: { heroImageUrl: 'https://cdn.example/chosen.jpg' } });
+      const again = await oshi.json('/api/admin/market', 'POST', { action: 'find_images', businessId: withSite.data.id });
+      check('FIND IMAGES never overwrites a picture admin chose', again.status === 200 && again.data.images.hero === false
+        && (await q(`select hero_image_url from market_businesses where id = $1`, [withSite.data.id]))[0].hero_image_url === 'https://cdn.example/chosen.jpg');
+      check('an unreachable website is reported, not fatal', (await oshi.json('/api/admin/market', 'POST', { action: 'update', businessId: bizId, business: { website: 'http://127.0.0.1:4596/' } })).status === 200);
+      check('a business with a photo shows it, not the fallback', (await anon.html('/market')).includes('cdn.example/chosen.jpg'));
+    } finally {
+      site.close();
+    }
     check('business nav link appears for owners only', (await jules.html('/events')).includes('href="/business"') && !(await nadia.html('/events')).includes('href="/business"'));
   }
 

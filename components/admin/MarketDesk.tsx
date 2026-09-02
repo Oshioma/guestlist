@@ -88,6 +88,26 @@ export function CreateBusiness({ categories }: { categories: { id: string; name:
   );
 }
 
+export function FindImages({ businessId, hasWebsite }: { businessId: string; hasWebsite: boolean }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  return (
+    <div style={{ margin: '6px 0 12px' }}>
+      <button className="btnGhost" disabled={busy || !hasWebsite} onClick={async () => {
+        setBusy(true); setMsg('');
+        const r = await post({ action: 'find_images', businessId }) as { ok: boolean; images?: { hero: boolean; logo: boolean; error: string | null } };
+        setBusy(false);
+        const i = r.images;
+        setMsg(!r.ok ? 'Failed' : i?.error ? `Couldn’t read their site: ${i.error}` : i?.hero || i?.logo ? `Found ${[i.hero && 'a photo', i.logo && 'a logo'].filter(Boolean).join(' and ')}.` : 'Nothing missing, or nothing found on the site.');
+        router.refresh();
+      }}>{busy ? 'Reading their website…' : 'Find images from their website'}</button>
+      {!hasWebsite && <span className="adminSub" style={{ marginLeft: 8 }}>Add a website first.</span>}
+      {msg && <span className="adminSub" style={{ marginLeft: 8 }}>{msg}</span>}
+    </div>
+  );
+}
+
 export function BusinessControls({ businessId, featured, sortOrder, adminNotes }: { businessId: string; featured: boolean; sortOrder: number; adminNotes: string }) {
   const router = useRouter();
   const [v, setV] = useState({ featured, sortOrder: String(sortOrder), adminNotes });
