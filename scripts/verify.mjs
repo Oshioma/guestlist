@@ -744,8 +744,9 @@ console.log('\n— Signup flow —');
     check('turning them back on restores the nav', back.includes('>Explore</a>'));
   }
 
-  const you = await (await fresh.fetch('/you')).text();
-  check('the You page offers the display-name field', you.includes('id="displayName"'));
+  // The display name is edited on the profile page now, not on You.
+  const profilePage = await (await fresh.fetch('/you/profile')).text();
+  check('the profile page offers the display-name field', profilePage.includes('id="displayName"'));
   const header = await (await fresh.fetch('/events')).text();
   check('header no longer carries the + Add Event nav link',
     !header.includes('+ Add Event'));
@@ -2048,6 +2049,49 @@ console.log('\n— Scanning is a job, not a request —');
     (await nadia.fetch(`/api/admin/sources/${src.id}/scan?scanId=${body.scanId}`)).status === 403);
 
   await q(`delete from event_sources where id = $1`, [src.id]);
+}
+
+// ---------------------------------------------------------------------------
+// YOUR PROFILE MOVES OUT. It is the one part of Your Guestlist that is not
+// private — it is what everybody else sees — so it belongs behind your own
+// name in the header, not at the bottom of the settings screen between the
+// privacy checkboxes and the email toggles. Everything else stays under You.
+console.log('\n— Your profile lives behind your name —');
+{
+  const me = client();
+  check('member login', (await me.login('dev-jules@example.com')) === 200);
+
+  const header = await (await me.fetch('/events')).text();
+  check('your own name in the header goes somewhere', header.includes('/you/profile'));
+
+  const profile = await me.fetch('/you/profile');
+  check('and that somewhere is your profile', profile.status === 200);
+  const page = await profile.text();
+  check('it carries the profile form', page.includes('Save profile') && page.includes('Your name'));
+  check('and every field that was on the settings screen',
+    page.includes('Raving since') && page.includes('Looking for') && page.includes('About you'));
+  check('it points back at everything that stayed under You', page.includes('href="/you"'));
+  check('your own profile page is never indexed', page.includes('noindex'));
+
+  const you = await (await me.fetch('/you')).text();
+  check('the profile form is gone from You', !you.includes('Save profile'));
+  check('but the switches it sat next to are still there',
+    you.includes('Public profile') && you.includes('Weekly personalised weekend picks'));
+  check('and everything else is untouched',
+    you.includes('Rave history') && you.includes('Places') && you.includes('Membership'));
+  check('You links to the profile rather than hiding it', you.includes('/you/profile'));
+
+  // Editing still works from its new home.
+  const saved = await me.fetch('/api/you/settings', {
+    method: 'PATCH',
+    body: JSON.stringify({ profile: { displayName: 'Jules Okonkwo', bio: 'Moved house.', ravingSince: '1998' } }),
+  });
+  check('saving from the new page still saves', saved.status === 200);
+  check('and the change is real',
+    (await q(`select bio, raving_since from members where email = 'dev-jules@example.com'`))[0].bio === 'Moved house.');
+
+  check('a signed-out visitor is sent to sign in, not shown a profile',
+    [302, 307].includes((await client().fetch('/you/profile')).status));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

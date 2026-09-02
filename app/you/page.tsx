@@ -21,7 +21,7 @@ export default async function YouPage() {
 
   const membership = await getMembership(member.id);
   const isMember = membershipIsActive(membership);
-  const [taste, allGenres, history, places, plans, privacy, emailPrefs, profile] = await Promise.all([
+  const [taste, allGenres, history, places, plans, privacy, emailPrefs] = await Promise.all([
     tasteProfile(member.id),
     query<{ id: string; name: string; slug: string; parent_genre_id: string | null }>(
       `select id, name, slug, parent_genre_id from genres where active
@@ -42,13 +42,6 @@ export default async function YouPage() {
     ),
     getPrivacy(member.id),
     getEmailPrefs(member.id),
-    query<{
-      display_name: string; slug: string | null;
-      bio: string | null; raving_since: number | null; now_doing: string | null; looking_for: string | null;
-    }>(
-      `select display_name, slug, bio, raving_since, now_doing, looking_for from members where id = $1`,
-      [member.id]
-    ).then((r) => r[0]),
   ]);
 
   const parents = allGenres.filter((g) => !g.parent_genre_id);
@@ -61,11 +54,14 @@ export default async function YouPage() {
         You’re in control of all of it.
       </p>
       <nav className="chipRow" style={{ marginBottom: 8 }}>
+        {/* Your profile is what other people see, so it lives behind your own
+            name in the header rather than in here with the switches. */}
+        <Link href="/you/profile" className="chip">Your profile</Link>
         <Link href="/you/membership" className="chip">Membership</Link>
         <a href="#music" className="chip">Music</a>
         <a href="#history" className="chip">Rave history</a>
         <a href="#places" className="chip">Places & travel</a>
-        <a href="#settings" className="chip">Profile & privacy</a>
+        <a href="#settings" className="chip">Privacy & email</a>
       </nav>
 
       {/* Membership first: it is the part of Guestlist that gets you in. */}
@@ -99,7 +95,6 @@ export default async function YouPage() {
       <SettingsPanel
         initialPrivacy={privacy as unknown as Record<string, boolean>}
         initialEmailPrefs={emailPrefs as unknown as Record<string, boolean>}
-        initialProfile={profile}
       />
     </main>
   );

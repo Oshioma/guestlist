@@ -58,13 +58,16 @@ export async function SiteHeader() {
                   </svg>
                   {unread > 0 && <span className="bellBadge">{unread > 99 ? '99+' : unread}</span>}
                 </Link>
-                <span className="avatarChip">
+                {/* Your own name goes to your own profile. Everywhere else on
+                    the web that is what pressing your name does, and until now
+                    this was the one piece of the header that did nothing. */}
+                <Link href="/you/profile" className="avatarChip" title="Your profile">
                   {member.avatar_url && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={member.avatar_url} alt="" />
                   )}
                   {member.display_name.split(' ')[0]}
-                </span>
+                </Link>
               </>
             ) : (
               <Link href="/login" className="btnGhost">Sign in</Link>
