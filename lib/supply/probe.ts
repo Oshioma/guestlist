@@ -72,6 +72,8 @@ export async function probeTarget(
   let ownFilters = 0;
   let skippedSitemaps: string[] = [];
   let declaredSitemap: string | null = null;
+  let urlsSeen = 0;
+  let sitemapsRead = 0;
   if (asBot.ok) {
     if (looksLikeSitemap(asBot.body)) {
       // Somebody pointed the source straight at a sitemap. Read it as one:
@@ -84,6 +86,8 @@ export async function probeTarget(
       found = walked.found;
       sampleUrls = walked.sample;
       skippedSitemaps = walked.skipped;
+      urlsSeen = walked.urlsSeen;
+      sitemapsRead = walked.sitemapsRead;
       // Nothing in the sitemap we were handed: ask the site which sitemaps it
       // actually has. This is the case where that matters most, and it was
       // the one case that never asked.
@@ -98,8 +102,12 @@ export async function probeTarget(
             found = elsewhere.urls;
             declaredSitemap = elsewhere.url;
           } else if (elsewhere?.sample?.length) {
-            sampleUrls = [...sampleUrls, ...elsewhere.sample].slice(0, 8);
+            // Deduped: the same file reached two ways is one example, not two.
+            // Showing "/en/about/, /en/about/" tells an admin nothing twice.
+            sampleUrls = [...new Set([...sampleUrls, ...elsewhere.sample])].slice(0, 8);
           }
+          urlsSeen += elsewhere?.urlsSeen ?? 0;
+          sitemapsRead += elsewhere?.sitemapsRead ?? 0;
         }
       }
     } else if (looksLikeFeed(asBot.contentType, asBot.body)) {
@@ -147,7 +155,7 @@ export async function probeTarget(
   const result: ProbeResult = {
     target, bot: toProbe(asBot), browser: toProbe(asBrowser), method, candidates,
     candidateUrls, clientRendered, embedded, sampleUrls, browserCandidates, ownFilters,
-    skippedSitemaps, declaredSitemap,
+    skippedSitemaps, declaredSitemap, urlsSeen, sitemapsRead,
     servesBrowsersMore,
   };
 

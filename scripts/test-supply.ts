@@ -29,7 +29,7 @@ import { zonedTimeToUtc, parseLocalInTimezone, parseFoundDate, resolveEndCrossin
 import { mapGenreProposals, loadGenres } from '@/lib/supply/genres';
 import { computeOverallConfidence, canAutoPublish } from '@/lib/supply/confidence';
 import { runExtractionPipeline } from '@/lib/supply/pipeline';
-import { scanSource, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, sitemapEventUrls, sitemapIndexUrls, sitemapsFromRobots } from '@/lib/supply/scanner';
+import { scanSource, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, countSitemapUrls, sitemapEventUrls, sitemapIndexUrls, sitemapsFromRobots } from '@/lib/supply/scanner';
 import { explainScan, outcomeLabel } from '@/lib/supply/outcomes';
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
@@ -1410,6 +1410,31 @@ async function main() {
     });
     check('an empty sitemap as the source still asks the site for its others',
       emptyScan.method === 'sitemap' && emptyScan.extracted === 1, JSON.stringify(emptyScan));
+
+    // "No event pages" out of five URLs and out of five thousand are
+    // different diagnoses. Until the verdict said how much it read, both
+    // came back as the same shrug.
+    check('every URL in a sitemap is counted, not just the ones we sample',
+      countSitemapUrls(`<?xml version="1.0"?><urlset>
+        <url><loc>https://c.example/a</loc></url>
+        <url><loc>https://c.example/b</loc></url>
+        <url><loc>https://c.example/c</loc></url>
+      </urlset>`) === 3);
+    check('an empty sitemap counts as none', countSitemapUrls('<?xml version="1.0"?><urlset></urlset>') === 0);
+
+    const emptyVerdict = testVerdict({
+      target: 'https://c.example/sitemap.xml',
+      bot: { ok: true, status: 200, code: null, detail: null, ms: 10 },
+      browser: { ok: true, status: 200, code: null, detail: null, ms: 10 },
+      method: 'sitemap' as const,
+      candidates: 0,
+      sitemapsRead: 3,
+      urlsSeen: 4812,
+      sampleUrls: ['https://c.example/en/about/', 'https://c.example/en/about/', 'https://c.example/en/press/'],
+    });
+    check('the verdict says how many sitemaps and URLs it got through',
+      emptyVerdict.text.includes('3 sitemaps') && emptyVerdict.text.includes('4812 URLs'),
+      emptyVerdict.text);
   }
 
   // -------------------------------------------------------------------------
