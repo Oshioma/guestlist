@@ -1329,6 +1329,25 @@ async function main() {
     });
     check('an index four sections deep still reaches the programme',
       deepScan.method === 'sitemap' && deepScan.extracted === 1, JSON.stringify(deepScan));
+
+    // A sitemap is asked for with a budget that fits one. 2MB is generous for
+    // a web page and small for a list of every URL on a large site, and a
+    // programme sitemap that overran it was being dropped in silence.
+    let sitemapBudget = 0;
+    const budgetScan = await scanSource(deep.id, {
+      fetcher: (url: string, options?: { maxBytes?: number }) => {
+        if (url.endsWith('.xml')) sitemapBudget = Math.max(sitemapBudget, options?.maxBytes ?? 0);
+        return mockFetcher({
+          'https://deep.example/sitemap.xml': { body: INDEX_OF_MANY, contentType: 'application/xml' },
+          'https://deep.example/sitemap-program.xml': { body: '<?xml version="1.0"?><urlset><url><loc>https://deep.example/program/deep-night</loc></url></urlset>', contentType: 'application/xml' },
+          'https://deep.example/program/deep-night': { body: '<html><title>Deep Night</title><body><main>x</main></body></html>' },
+        })(url);
+      },
+      ai: mockAI({ 'https://deep.example/program/deep-night': proposal('Deep Night') }),
+      delayMs: 1,
+    });
+    check('a sitemap is fetched with a sitemap-sized budget, not a page-sized one',
+      sitemapBudget > 2_000_000, `${sitemapBudget} — ${JSON.stringify(budgetScan)}`);
   }
 
   // -------------------------------------------------------------------------
@@ -1439,6 +1458,20 @@ async function main() {
       identifyCandidateLinks(
         '<html><body><a href="/events/detail?id=1234">Friday</a></body></html>',
         'https://old.example/events/detail?view=list'
+      ).length === 1);
+
+    // A redirect that drops the query must not promote the tabs to events:
+    // we asked for ?section=events&category=…, we landed on the bare path,
+    // and the tabs would otherwise look like links introducing new keys.
+    check('a redirect that drops the query does not turn tabs into events',
+      identifyCandidateLinks(TABS, 'https://www.amsterdam-dance-event.nl/en/program/filter/', ADE).length === 0,
+      JSON.stringify(identifyCandidateLinks(TABS, 'https://www.amsterdam-dance-event.nl/en/program/filter/', ADE)));
+    check('and they are still counted as the page\u2019s own filters',
+      pageFilterLinks(TABS, 'https://www.amsterdam-dance-event.nl/en/program/filter/', ADE) === 3);
+    check('a real event link survives a redirect that drops the query',
+      identifyCandidateLinks(
+        '<html><body><a href="/en/program/2026/oliver-heldens/998/">Oliver Heldens</a></body></html>',
+        'https://www.amsterdam-dance-event.nl/en/program/filter/', ADE
       ).length === 1);
   }
 

@@ -70,6 +70,7 @@ export async function probeTarget(
   let embedded = 0;
   let sampleUrls: string[] = [];
   let ownFilters = 0;
+  let skippedSitemaps: string[] = [];
   if (asBot.ok) {
     if (looksLikeSitemap(asBot.body)) {
       // Somebody pointed the source straight at a sitemap. Read it as one:
@@ -81,18 +82,19 @@ export async function probeTarget(
       const walked = await walkSitemap(asBot, safeFetch, supplyConfig.scan.delayBetweenFetchesMs);
       found = walked.found;
       sampleUrls = walked.sample;
+      skippedSitemaps = walked.skipped;
     } else if (looksLikeFeed(asBot.contentType, asBot.body)) {
       method = 'rss';
       found = parseFeedLinks(asBot.body, asBot.finalUrl);
     } else {
       method = 'html';
-      found = identifyCandidateLinks(asBot.body, asBot.finalUrl);
+      found = identifyCandidateLinks(asBot.body, asBot.finalUrl, target);
       // How much of that came from the page's embedded data rather than its
       // markup — the difference between "this page hides its listings" and
       // "this page shipped them, just not as links".
       const inMarkup = new Set(found);
-      embedded = identifyEmbeddedLinks(asBot.body, asBot.finalUrl).filter((u) => inMarkup.has(u)).length;
-      ownFilters = pageFilterLinks(asBot.body, asBot.finalUrl);
+      embedded = identifyEmbeddedLinks(asBot.body, asBot.finalUrl, target).filter((u) => inMarkup.has(u)).length;
+      ownFilters = pageFilterLinks(asBot.body, asBot.finalUrl, target);
     }
   }
   const candidates: number | null = asBot.ok ? found.length : null;
@@ -116,7 +118,7 @@ export async function probeTarget(
   // But an admin cannot decide what to do about a wall nobody has named.
   let browserCandidates: number | null = null;
   if (asBrowser.ok && method === 'html') {
-    browserCandidates = identifyCandidateLinks(asBrowser.body, asBrowser.finalUrl).length;
+    browserCandidates = identifyCandidateLinks(asBrowser.body, asBrowser.finalUrl, target).length;
   }
   // A couple more links is noise — a nav that differs, a cookie banner. A
   // page of listings against a handful is a different page.
@@ -126,6 +128,7 @@ export async function probeTarget(
   const result: ProbeResult = {
     target, bot: toProbe(asBot), browser: toProbe(asBrowser), method, candidates,
     candidateUrls, clientRendered, embedded, sampleUrls, browserCandidates, ownFilters,
+    skippedSitemaps,
     servesBrowsersMore,
   };
 
@@ -165,7 +168,11 @@ export async function probeTarget(
     // A sitemap we could read but which held no event pages is not a rescue.
     // Keep what it listed, though — it says more about the site than silence.
     if (sitemap && !sitemap.found) {
-      return { ...result, sampleUrls: sitemap.sample ?? sampleUrls };
+      return {
+        ...result,
+        sampleUrls: sitemap.sample ?? sampleUrls,
+        skippedSitemaps: sitemap.skipped ?? skippedSitemaps,
+      };
     }
     if (sitemap) {
       // Nothing readable on the page: the sitemap IS the source.
