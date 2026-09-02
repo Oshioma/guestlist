@@ -354,6 +354,12 @@ export function sitemapEventUrls(xml: string, baseUrl: string, limit: number): s
 // exist so a sitemap that yields no events can SHOW what it does contain
 // instead of reporting an empty site. A dead end that shows its work is a
 // clue; one that says \"no event links found\" is a shrug.
+export function countSitemapUrls(xml: string): number {
+  let n = 0;
+  for (const _m of xml.matchAll(/<loc>[\s\S]*?<\/loc>/gi)) n++;
+  return n;
+}
+
 export function sitemapAllUrls(xml: string, baseUrl: string, limit: number): string[] {
   const out: string[] = [];
   for (const m of xml.matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/gi)) {
@@ -396,9 +402,11 @@ export async function findSitemapEvents(
   // sitemaps matter most, so we come here — and re-reading the one we just
   // read would only produce the same nothing, more slowly.
   alreadyTried: string[] = []
-): Promise<{ url: string; found: number; urls: string[]; sample?: string[]; skipped?: string[] } | null> {
+): Promise<{ url: string; found: number; urls: string[]; sample?: string[]; skipped?: string[]; urlsSeen?: number; sitemapsRead?: number } | null> {
   let sample: string[] = [];
   let skipped: string[] = [];
+  let urlsSeen = 0;
+  let sitemapsRead = 0;
 
   // What the site says first, then the two conventional paths. A declared
   // sitemap is the site telling us where to look; the paths are us guessing.
@@ -422,11 +430,25 @@ export async function findSitemapEvents(
     }
     if (walked.sample.length) sample = walked.sample;
     if (walked.skipped.length) skipped = walked.skipped;
+    urlsSeen += walked.urlsSeen;
+    sitemapsRead += walked.sitemapsRead;
   }
-  return sample.length || skipped.length
-    ? { url: targets[0] ?? `${origin}${SITEMAP_PATHS[0]}`, found: 0, urls: [], sample, skipped }
+  return sample.length || skipped.length || sitemapsRead
+    ? { url: targets[0] ?? `${origin}${SITEMAP_PATHS[0]}`, found: 0, urls: [], sample, skipped, urlsSeen, sitemapsRead }
     : null;
 }
+
+export type SitemapWalk = {
+  url: string;
+  found: string[];
+  sample: string[];
+  skipped: string[];
+  // Every <loc> we actually read, across the index and its children. "3
+  // sitemaps, 4,812 URLs, none event-shaped" and "1 sitemap, 1 URL" are
+  // different diagnoses, and until now both came back the same sentence.
+  urlsSeen: number;
+  sitemapsRead: number;
+};
 
 // Read one sitemap response for event URLs, stepping into an index when the
 // top level has none. Shared by the scan and the probe so a \"test fetch\"
@@ -435,20 +457,22 @@ export async function walkSitemap(
   res: { body: string; finalUrl: string },
   fetcher: (url: string, options?: SafeFetchOptions) => Promise<SafeFetchResult>,
   delayMs = supplyConfig.scan.delayBetweenFetchesMs
-): Promise<{ url: string; found: string[]; sample: string[]; skipped: string[] }> {
+): Promise<SitemapWalk> {
   const cap = supplyConfig.scan.maxCandidatesPerScan;
   const direct = sitemapEventUrls(res.body, res.finalUrl, cap);
-  if (direct.length) return { url: res.finalUrl, found: direct, sample: [], skipped: [] };
+  if (direct.length) return { url: res.finalUrl, found: direct, sample: [], skipped: [], urlsSeen: countSitemapUrls(res.body), sitemapsRead: 1 };
 
   const children = sitemapIndexUrls(res.body, res.finalUrl, SITEMAP_CHILDREN_TO_FETCH);
   // Not an index, just a sitemap with nothing event-shaped in it. Report what
   // it DOES list, so the shape of the site's URLs is visible.
   if (!children.length) {
-    return { url: res.finalUrl, found: [], sample: sitemapAllUrls(res.body, res.finalUrl, 5), skipped: [] };
+    return { url: res.finalUrl, found: [], sample: sitemapAllUrls(res.body, res.finalUrl, 8), skipped: [], urlsSeen: countSitemapUrls(res.body), sitemapsRead: 1 };
   }
 
   let sample: string[] = [];
   const skipped: string[] = [];
+  let urlsSeen = countSitemapUrls(res.body);
+  let sitemapsRead = 1;
   for (const child of children) {
     await sleep(delayMs);
     const sub = await fetcher(child, sitemapFetchOptions());
@@ -456,11 +480,13 @@ export async function walkSitemap(
     // it, and swallowing the difference is how "too big to fetch" came back
     // as "this site has no events".
     if (!sub.ok) { skipped.push(`${child} (${sub.code})`); continue; }
+    sitemapsRead++;
+    urlsSeen += countSitemapUrls(sub.body);
     const found = sitemapEventUrls(sub.body, sub.finalUrl, cap);
-    if (found.length) return { url: sub.finalUrl, found, sample: [], skipped };
+    if (found.length) return { url: sub.finalUrl, found, sample: [], skipped, urlsSeen, sitemapsRead };
     if (!sample.length) sample = sitemapAllUrls(sub.body, sub.finalUrl, 8);
   }
-  return { url: res.finalUrl, found: [], sample, skipped };
+  return { url: res.finalUrl, found: [], sample, skipped, urlsSeen, sitemapsRead };
 }
 
 

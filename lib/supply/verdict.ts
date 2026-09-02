@@ -50,6 +50,10 @@ export type ProbeResult = {
   // were pointed at did not. Named, because the admin should move the source
   // to it rather than rely on us finding it again every scan.
   declaredSitemap?: string | null;
+  // How much of the sitemap we got through. An admin told "no event pages"
+  // deserves to know whether that was out of five URLs or five thousand.
+  urlsSeen?: number;
+  sitemapsRead?: number;
   // A sitemap with more event pages than the listing page gave us. Offered
   // rather than substituted: the admin was looking at a filtered view, and the
   // sitemap is the whole site.
@@ -99,7 +103,7 @@ export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
         t.method === 'rss'
           ? 'Reachable, but this feed contains no event links — it is probably a generic blog or news feed. Clear the feed URL below so scans use the listing page again.'
           : t.method === 'sitemap'
-          ? `This is a sitemap, and we read it as one — including the section sitemaps it points at and any others the site declares in its robots.txt — but none of the URLs we could read look like event pages.${t.sampleUrls?.length ? ` They look like this: ${t.sampleUrls.slice(0, 5).join(', ')}.` : ''}${t.skippedSitemaps?.length ? ` ${t.skippedSitemaps.length} section sitemap${t.skippedSitemaps.length === 1 ? '' : 's'} could not be read at all: ${t.skippedSitemaps.slice(0, 3).join(', ')}.` : ''} Point the source at the sitemap for the programme section, if the site has one.`
+          ? `We read ${t.sitemapsRead ?? 1} sitemap${(t.sitemapsRead ?? 1) === 1 ? '' : 's'} — the one you gave us, the section sitemaps it points at, and any others the site declares in its robots.txt — holding ${t.urlsSeen ?? 0} URL${(t.urlsSeen ?? 0) === 1 ? '' : 's'} between them. None of them look like event pages.${t.sampleUrls?.length ? ` They look like this: ${t.sampleUrls.slice(0, 5).join(', ')}.` : ''}${t.skippedSitemaps?.length ? ` ${t.skippedSitemaps.length} section sitemap${t.skippedSitemaps.length === 1 ? '' : 's'} could not be read at all: ${t.skippedSitemaps.slice(0, 3).join(', ')}.` : ''} Point the source at the sitemap for the programme section, if the site has one.`
           : t.clientRendered
             ? `Reachable, but this page builds its listings in the browser — the event list is empty in the HTML we are served.${t.ownFilters ? ` The only event-shaped links on it are ${t.ownFilters} of its own filter tabs.` : ''} Use the site\u2019s sitemap, or a page that lists events without filtering.`
             : t.ownFilters
