@@ -22,6 +22,7 @@ export type SourceRow = {
   trust: string;
   polling_enabled: boolean;
   render_js: boolean;
+  max_candidates: number | null;
   poll_frequency_hours: number;
   last_checked_at: string | null;
 };
@@ -61,6 +62,21 @@ const NON_EVENT_PATH = new RegExp(
   'i'
 );
 const DATE_TEXT = /\b(\d{1,2}(st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|(mon|tue|wed|thu|fri|sat|sun)[a-z]*\s+\d{1,2}|\d{1,2}[./]\d{1,2}[./]\d{2,4})\b/i;
+
+// HOW MANY CANDIDATES ONE SCAN MAY TAKE.
+//
+// Forty is right for a venue: a club with more than forty upcoming nights is
+// rarer than a bug in our reader, and the cap is what stops a mis-read page
+// turning into a thousand fetches. It is wrong for a festival programme —
+// ADE's is hundreds, and a cap that silently stops at forty is a listing
+// truncated with no sign that it happened.
+//
+// So a source may carry its own, and the default stands for everything that
+// does not.
+export function candidateCap(source?: { max_candidates?: number | null } | null): number {
+  const own = source?.max_candidates;
+  return own && own > 0 ? own : supplyConfig.scan.maxCandidatesPerScan;
+}
 
 export function canonicaliseCandidateUrl(raw: string, baseUrl: string): string | null {
   let url: URL;
@@ -186,7 +202,7 @@ export function looksLikeJson(body: string): boolean {
   return head === '{' || head === '[';
 }
 
-export function identifyJsonLinks(body: string, pageUrl: string, requestedUrl?: string): string[] {
+export function identifyJsonLinks(body: string, pageUrl: string, requestedUrl?: string, limit = candidateCap()): string[] {
   let parsed: unknown;
   try { parsed = JSON.parse(body); } catch { return []; }
 
@@ -196,7 +212,7 @@ export function identifyJsonLinks(body: string, pageUrl: string, requestedUrl?: 
   const seen = new Set<string>();
 
   const consider = (value: string) => {
-    if (out.length >= supplyConfig.scan.maxCandidatesPerScan) return;
+    if (out.length >= limit) return;
     if (!/^https?:\/\//i.test(value) && !value.startsWith('/')) return;
     const canonical = canonicaliseCandidateUrl(value, pageUrl);
     if (!canonical || seen.has(canonical)) return;
@@ -213,7 +229,7 @@ export function identifyJsonLinks(body: string, pageUrl: string, requestedUrl?: 
 
   // Depth-limited so a pathological document cannot walk forever.
   const walk = (node: unknown, depth: number) => {
-    if (depth > 12 || out.length >= supplyConfig.scan.maxCandidatesPerScan) return;
+    if (depth > 12 || out.length >= limit) return;
     if (typeof node === 'string') return consider(node);
     if (Array.isArray(node)) { for (const item of node) walk(item, depth + 1); return; }
     if (node && typeof node === 'object') {
@@ -224,7 +240,7 @@ export function identifyJsonLinks(body: string, pageUrl: string, requestedUrl?: 
   return out;
 }
 
-export function identifyCandidateLinks(html: string, pageUrl: string, requestedUrl?: string): string[] {
+export function identifyCandidateLinks(html: string, pageUrl: string, requestedUrl?: string, limit = candidateCap()): string[] {
   const root = parse(html);
   const base = new URL(pageUrl);
   // What we asked for, when a redirect landed us somewhere plainer.
@@ -257,7 +273,7 @@ export function identifyCandidateLinks(html: string, pageUrl: string, requestedU
     if (pathLooksEventy || (sameSite && textLooksDated)) {
       seen.add(canonical);
       out.push(canonical);
-      if (out.length >= supplyConfig.scan.maxCandidatesPerScan) break;
+      if (out.length >= limit) break;
     }
   }
 
@@ -268,7 +284,7 @@ export function identifyCandidateLinks(html: string, pageUrl: string, requestedU
       if (seen.has(url)) continue;
       seen.add(url);
       out.push(url);
-      if (out.length >= supplyConfig.scan.maxCandidatesPerScan) break;
+      if (out.length >= limit) break;
     }
   }
   return out;
@@ -295,7 +311,7 @@ const A_FILE = /\.(json|jsonp|js|mjs|css|map|png|jpe?g|gif|svg|webp|avif|ico|wof
 // The rule is the same one the markup pass uses: a same-site path that looks
 // like an event page. Nothing here trusts the JSON's shape, because every site
 // invents its own — it only trusts the URLs, which are the site's own.
-export function identifyEmbeddedLinks(html: string, pageUrl: string, requestedUrl?: string): string[] {
+export function identifyEmbeddedLinks(html: string, pageUrl: string, requestedUrl?: string, limit = candidateCap()): string[] {
   const root = parse(html);
   const base = new URL(pageUrl);
   const asked = new URL(requestedUrl ?? pageUrl);
@@ -324,7 +340,7 @@ export function identifyEmbeddedLinks(html: string, pageUrl: string, requestedUr
       if (!EVENT_PATH_HINT.test(url.pathname)) continue;
       seen.add(canonical);
       out.push(canonical);
-      if (out.length >= supplyConfig.scan.maxCandidatesPerScan) return out;
+      if (out.length >= limit) return out;
     }
   }
   return out;
@@ -347,7 +363,7 @@ export function looksLikeFeed(contentType: string, body: string): boolean {
 // Regex-based feed parsing: <link> is a void element to HTML parsers, so an
 // HTML parser silently loses RSS link text — plain pattern matching over the
 // XML is the reliable route for the two well-known shapes.
-export function parseFeedLinks(xml: string, baseUrl: string): string[] {
+export function parseFeedLinks(xml: string, baseUrl: string, limit = candidateCap()): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   const push = (u: string | null | undefined) => {
@@ -364,7 +380,7 @@ export function parseFeedLinks(xml: string, baseUrl: string): string[] {
     const link = item.match(/<link[^>]*>([\s\S]*?)<\/link>/i)?.[1]
       ?? item.match(/<guid[^>]*>(https?:\/\/[\s\S]*?)<\/guid>/i)?.[1];
     push(link);
-    if (out.length >= supplyConfig.scan.maxCandidatesPerScan) return out;
+    if (out.length >= limit) return out;
   }
   // Atom: <entry>…<link href="url"/>… (prefer rel="alternate")
   for (const m of xml.matchAll(/<entry[\s>][\s\S]*?<\/entry>/gi)) {
@@ -372,7 +388,7 @@ export function parseFeedLinks(xml: string, baseUrl: string): string[] {
     const links = [...entry.matchAll(/<link\b[^>]*href=["']([^"']+)["'][^>]*>/gi)];
     const alternate = links.find((l) => /rel=["']alternate["']/i.test(l[0]) || !/rel=/i.test(l[0]));
     push(alternate?.[1] ?? links[0]?.[1]);
-    if (out.length >= supplyConfig.scan.maxCandidatesPerScan) return out;
+    if (out.length >= limit) return out;
   }
   return out;
 }
@@ -546,9 +562,9 @@ export type SitemapWalk = {
 export async function walkSitemap(
   res: { body: string; finalUrl: string },
   fetcher: (url: string, options?: SafeFetchOptions) => Promise<SafeFetchResult>,
-  delayMs = supplyConfig.scan.delayBetweenFetchesMs
+  delayMs = supplyConfig.scan.delayBetweenFetchesMs,
+  cap = candidateCap()
 ): Promise<SitemapWalk> {
-  const cap = supplyConfig.scan.maxCandidatesPerScan;
   const direct = sitemapEventUrls(res.body, res.finalUrl, cap);
   if (direct.length) return { url: res.finalUrl, found: direct, sample: [], skipped: [], urlsSeen: countSitemapUrls(res.body), sitemapsRead: 1 };
 
@@ -616,14 +632,15 @@ async function followPages(
   target: string,
   read: (body: string, at: string, asked: string) => string[],
   fetcher: (url: string, options?: SafeFetchOptions) => Promise<SafeFetchResult>,
-  ctx: ScanContext
+  ctx: ScanContext,
+  limit = candidateCap()
 ): Promise<string[]> {
   if (!isPaged(target)) return first;
   const candidates = [...first];
   const seen = new Set(candidates);
   let pageUrl: string | null = target;
   for (let page = 0; page < supplyConfig.listing.maxPagesPerScan; page++) {
-    if (candidates.length >= supplyConfig.scan.maxCandidatesPerScan) break;
+    if (candidates.length >= limit) break;
     pageUrl = nextPageUrl(pageUrl);
     if (!pageUrl) break;
     await sleep(ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
@@ -636,13 +653,13 @@ async function followPages(
     if (!fresh.length) break;
     for (const u of fresh) { seen.add(u); candidates.push(u); }
   }
-  return candidates.slice(0, supplyConfig.scan.maxCandidatesPerScan);
+  return candidates.slice(0, limit);
 }
 
 export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promise<ScanResult> {
   const source = await queryOne<SourceRow>(
     `select id, name, url, feed_url, source_type, active, trust, polling_enabled,
-            poll_frequency_hours, render_js, last_checked_at::text
+            poll_frequency_hours, render_js, max_candidates, last_checked_at::text
        from event_sources where id = $1`,
     [sourceId]
   );
@@ -715,6 +732,8 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
     return findSitemapEvents(origin, fetcher, ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
   };
 
+  // This source's ceiling, decided once and used by every reader below.
+  const cap = candidateCap(source);
   let method: 'rss' | 'html' | 'sitemap' | 'json';
   let candidates: string[];
 
@@ -734,7 +753,7 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
     // The source URL IS a sitemap. Read the event pages straight out of it,
     // stepping into a sitemap index if that is what we were given.
     method = 'sitemap';
-    candidates = (await walkSitemap(fetched, fetcher, ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs)).found;
+    candidates = (await walkSitemap(fetched, fetcher, ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs, cap)).found;
     // The sitemap we were pointed at holds no events. That is the moment the
     // site's OTHER sitemaps matter most — and until now it was the one moment
     // we never asked for them, because asking only happened when the target
@@ -748,19 +767,19 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
   } else
   if (looksLikeFeed(fetched.contentType, fetched.body)) {
     method = 'rss';
-    candidates = parseFeedLinks(fetched.body, fetched.finalUrl);
+    candidates = parseFeedLinks(fetched.body, fetched.finalUrl, cap);
   } else if (looksLikeJson(fetched.body)) {
     // The body decides what it is, not the header: ADE's endpoint calls this
     // text/html and answers with a JSON array of events.
     method = 'json';
-    const readJson = (body: string, at: string, asked: string) => identifyJsonLinks(body, at, asked);
+    const readJson = (body: string, at: string, asked: string) => identifyJsonLinks(body, at, asked, cap);
     candidates = readJson(fetched.body, fetched.finalUrl, target);
-    candidates = await followPages(candidates, target, readJson, fetcher, ctx);
+    candidates = await followPages(candidates, target, readJson, fetcher, ctx, cap);
   } else {
     method = 'html';
-    const readHtml = (body: string, at: string, asked: string) => identifyCandidateLinks(body, at, asked);
+    const readHtml = (body: string, at: string, asked: string) => identifyCandidateLinks(body, at, asked, cap);
     candidates = readHtml(fetched.body, fetched.finalUrl, target);
-    candidates = await followPages(candidates, target, readHtml, fetcher, ctx);
+    candidates = await followPages(candidates, target, readHtml, fetcher, ctx, cap);
     // An advertised feed is a FALLBACK, not an upgrade. Only look at one when
     // the listing page itself yielded nothing: sites routinely advertise a
     // generic blog or news feed, and adopting one while the page was working
