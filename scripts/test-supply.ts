@@ -2050,6 +2050,105 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  // THE CODE THE DOOR SCANS.
+  //
+  // This is written out by hand rather than pulled in as a package, so it has
+  // to be proved rather than trusted. Every one of the eight mask patterns is
+  // compared against a reference implementation, module for module — with the
+  // mask pinned on both sides, so a difference can only ever mean an encoding
+  // bug and never a difference of taste in which mask looks best.
+  console.log('\n— the QR code on a door pass —');
+  {
+    const QR = (await import('qrcode')).default;
+    const { encodeQr, byteCapacity, MAX_VERSION } = await import('@/lib/qr');
+    const { qrPng, greyscalePng } = await import('@/lib/png');
+    const { inflateSync } = await import('node:zlib');
+
+    const samples = [
+      'https://www.guestlist.net/d/abc',
+      'https://www.guestlist.net/d/9f3c1a2b4d5e6f70.1a2b3c4d5e6f7081',
+      'HELLO WORLD',
+      'a',
+      'x'.repeat(byteCapacity(MAX_VERSION)),
+      'Ünïcodé — ✓ £ 東京',
+    ];
+
+    let mismatches = 0;
+    let compared = 0;
+    for (const text of samples) {
+      for (let mask = 0; mask < 8; mask++) {
+        // Byte mode on both sides: the reference will otherwise pack uppercase
+        // text more tightly using alphanumeric mode, which is a different
+        // (also correct) encoding of the same string.
+        const ref = QR.create([{ data: new TextEncoder().encode(text), mode: 'byte' }], { errorCorrectionLevel: 'M', maskPattern: mask as 0|1|2|3|4|5|6|7 });
+        const mine = encodeQr(text, mask);
+        const n = ref.modules.size;
+        if (n !== mine.size) { mismatches++; continue; }
+        for (let r = 0; r < n; r++) {
+          for (let c = 0; c < n; c++) {
+            compared++;
+            if (!!ref.modules.get(r, c) !== mine.get(r, c)) mismatches++;
+          }
+        }
+      }
+    }
+    check('every mask matches a reference implementation, module for module',
+      mismatches === 0 && compared > 50_000, `${mismatches} of ${compared}`);
+
+    // And left to choose for itself, it lands where the reference lands.
+    let freeChoiceDiff = 0;
+    for (const text of samples) {
+      const ref = QR.create([{ data: new TextEncoder().encode(text), mode: 'byte' }], { errorCorrectionLevel: 'M' });
+      const mine = encodeQr(text);
+      for (let r = 0; r < ref.modules.size; r++) {
+        for (let c = 0; c < ref.modules.size; c++) {
+          if (!!ref.modules.get(r, c) !== mine.get(r, c)) freeChoiceDiff++;
+        }
+      }
+    }
+    check('and it picks the same mask when left to itself', freeChoiceDiff === 0, String(freeChoiceDiff));
+
+    check('the smallest version that fits is the one used', encodeQr('a').size === 21);
+    check('a longer string grows the code', encodeQr('x'.repeat(200)).size > encodeQr('a').size);
+    check('and there is a limit rather than a silent truncation',
+      (() => { try { encodeQr('x'.repeat(byteCapacity(MAX_VERSION) + 1)); return false; } catch { return true; } })());
+
+    // The PNG has to be a real PNG: an email client will not forgive a
+    // hand-rolled file that is nearly right.
+    const matrix = encodeQr('https://www.guestlist.net/d/abcdef');
+    const png = qrPng(matrix, 6, 4);
+    check('the PNG carries the PNG signature',
+      png.subarray(0, 8).toString('hex') === '89504e470d0a1a0a');
+    const chunks: Record<string, Buffer> = {};
+    for (let off = 8; off < png.length;) {
+      const len = png.readUInt32BE(off);
+      chunks[png.subarray(off + 4, off + 8).toString('ascii')] = png.subarray(off + 8, off + 8 + len);
+      off += 12 + len;
+    }
+    check('with a header, an image and an end', !!chunks.IHDR && !!chunks.IDAT && 'IEND' in chunks);
+    const width = chunks.IHDR.readUInt32BE(0), height = chunks.IHDR.readUInt32BE(4);
+    check('square, and the size the matrix asked for',
+      width === height && width === (matrix.size + 8) * 6, `${width}x${height}`);
+    const raw = inflateSync(chunks.IDAT);
+    check('the pixels decompress to the right number of scanlines', raw.length === height * (width + 1));
+    let wrongPixels = 0;
+    for (let r = 0; r < matrix.size; r++) {
+      for (let c = 0; c < matrix.size; c++) {
+        const y = (r + 4) * 6 + 2, x = (c + 4) * 6 + 2;
+        if ((raw[y * (width + 1) + 1 + x] === 0) !== matrix.get(r, c)) wrongPixels++;
+      }
+    }
+    check('and every pixel is the module it should be', wrongPixels === 0, String(wrongPixels));
+    // The quiet border is not decoration: without it a scanner cannot find
+    // the code at all against an email's background.
+    let borderInk = 0;
+    for (let x = 0; x < width; x++) if (raw[1 + x] !== 255) borderInk++;
+    check('the quiet border really is quiet', borderInk === 0);
+    check('a pixel buffer of the wrong size is refused',
+      (() => { try { greyscalePng(2, 2, new Uint8Array(3)); return false; } catch { return true; } })());
+  }
+
+  // -------------------------------------------------------------------------
   // A SCAN THAT RUNS OUT OF TIME.
   //
   // A big, slow site does not fail — it just takes longer than whatever is

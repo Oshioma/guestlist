@@ -27,6 +27,8 @@ import { track } from './analytics';
 import { audit } from './audit';
 import { refreshAdminReviewDigest } from './adminNotify';
 import { queueMemberTransactional } from './email';
+import { markConfirmed } from './doorPass';
+import { sendGuestlistConfirmed } from './guestlistEmail';
 import { processUrlSubmission } from './ingestion';
 import { isPast, normalizeTitle } from './util';
 
@@ -602,7 +604,7 @@ export async function memberRequests(memberId: string, limit = 40): Promise<Memb
 
 // --- Telling the member ------------------------------------------------------------
 
-async function tellMember(requestId: string): Promise<void> {
+async function tellMember(requestId: string, opts: { skipEmail?: boolean } = {}): Promise<void> {
   const r = await queryOne<{
     member_id: string; email: string; display_name: string; status: RequestStatus; member_message: string | null;
     event_id: string | null; title: string; slug: string | null; entry_status: string | null;
@@ -623,7 +625,7 @@ async function tellMember(requestId: string): Promise<void> {
     `insert into notifications (member_id, type, event_id, payload) values ($1, 'membership_request_update', $2, $3)`,
     [r.member_id, r.event_id, { request_id: requestId, state: state.key, title: state.title, event_title: r.title, slug: r.slug }]
   ).catch((err) => console.error('request notification failed', err));
-  await queueMemberTransactional({
+  if (!opts.skipEmail) await queueMemberTransactional({
     memberId: r.member_id,
     email: r.email,
     emailType: 'notification:membership_request',
@@ -732,6 +734,7 @@ export async function adminActOnRequest(
     if (!promoterId || !r.event_id) return null;
     if (r.guestlist_entry_id) {
       await query(`update event_guestlist_entries set status = 'confirmed', updated_at = now() where id = $1`, [r.guestlist_entry_id]);
+      await markConfirmed(r.guestlist_entry_id, admin.id);
       return r.guestlist_entry_id;
     }
     const existing = await queryOne<{ id: string }>(
@@ -740,13 +743,15 @@ export async function adminActOnRequest(
     );
     if (existing) {
       await query(`update event_guestlist_entries set status = 'confirmed', updated_at = now() where id = $1`, [existing.id]);
+      await markConfirmed(existing.id, admin.id);
       return existing.id;
     }
     const name = (r.display_name || r.email.split('@')[0]).trim().slice(0, 140);
     const row = await queryOne<{ id: string }>(
       `insert into event_guestlist_entries
-         (event_id, promoter_id, member_id, guest_name, plus_ones, source, status, notes, created_by_member_id)
-       values ($1, $2, $3, $4, $5, 'guestlist', 'confirmed', 'Guestlist member — arranged by Guestlist', $6)
+         (event_id, promoter_id, member_id, guest_name, plus_ones, source, status, notes,
+          created_by_member_id, confirmed_by_member_id, confirmed_at)
+       values ($1, $2, $3, $4, $5, 'guestlist', 'confirmed', 'Guestlist member — arranged by Guestlist', $6, $6, now())
        returning id`,
       [r.event_id, promoterId, r.member_id, name, Math.max(0, r.places - 1), admin.id]
     );
@@ -869,7 +874,14 @@ export async function adminActOnRequest(
         member_message: memberMessage,
       }, true);
       await timeline(next, note ?? (entryId ? 'Confirmed free — on the door list' : 'Confirmed free'));
-      await tellMember(requestId);
+      // A place at a door deserves the pass, not a status update. When there
+      // is a real door list entry the guestlist email carries everything the
+      // generic one would have said and a code the door can scan, so only one
+      // of the two is sent.
+      const sentPass = entryId
+        ? await sendGuestlistConfirmed(entryId).catch((err) => { console.error('guestlist email failed', err); return false; })
+        : false;
+      await tellMember(requestId, { skipEmail: sentPass });
       break;
     }
     case 'offer_discount': {

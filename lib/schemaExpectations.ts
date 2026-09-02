@@ -42,6 +42,7 @@ export const MIGRATION_FILES: string[] = [
   '035_signup_provenance.sql',
   '036_email_verification.sql',
   '037_scan_progress.sql',
+  '038_guestlist_confirmation.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
@@ -168,6 +169,8 @@ export const EXPECTED_COLUMNS: string[] = [
   'email_outbox.error_category',
   'email_outbox.last_attempt_at',
   'email_outbox.provider_message_id',
+  'event_guestlist_entries.confirmed_at',
+  'event_guestlist_entries.confirmed_by_member_id',
   'event_sources.city',
   'event_sources.country',
   'event_sources.feed_url',

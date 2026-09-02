@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AuthError } from '@/lib/auth';
 import { db, query, queryOne } from '@/lib/db';
 import { requireOwnEvent, requirePromoterRole } from '@/lib/promoterAuth';
+import { markConfirmed } from '@/lib/doorPass';
+import { sendGuestlistConfirmed } from '@/lib/guestlistEmail';
 
 const SOURCES = new Set(['promoter','guestlist','artist','partner','competition','invite_link','member_referral']);
 const MODES = new Set(['promoter_only','approve_requests','auto_fill']);
@@ -70,10 +72,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       if (!name) return NextResponse.json({ error:'Guest name is required' }, { status:400 });
       const source = SOURCES.has(String(body.source)) ? String(body.source) : 'promoter';
       await query(
-        `insert into event_guestlist_entries(event_id,promoter_id,guest_name,plus_ones,source,status,notes,created_by_member_id)
-         values($1,$2,$3,$4,$5,'confirmed',$6,$7)`,
+        `insert into event_guestlist_entries(event_id,promoter_id,guest_name,plus_ones,source,status,notes,created_by_member_id,confirmed_by_member_id,confirmed_at)
+         values($1,$2,$3,$4,$5,'confirmed',$6,$7,$7,now())`,
         [eventId,promoter.id,name,int(body.plusOnes,0,10),source,cleanNotes(body.notes),member.id]
       );
+      // A name typed in by hand has no member behind it, so there is nobody to
+      // write to. sendGuestlistConfirmed knows that and says no.
       return NextResponse.json({ ok:true });
     }
 
@@ -86,6 +90,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       await query(`update event_guestlist_entries set checked_in_at=case when checked_in_at is null then now() else null end,updated_at=now() where id=$1`,[entryId]);
     } else if (action === 'approve') {
       await query(`update event_guestlist_entries set status='confirmed',updated_at=now() where id=$1`,[entryId]);
+      // WHO SAID YES is the fact the door pass carries, so it is recorded at
+      // the moment somebody says it — not inferred afterwards.
+      await markConfirmed(entryId, member.id);
+      await sendGuestlistConfirmed(entryId).catch((err) => console.error('guestlist email failed', err));
     } else if (action === 'decline') {
       await query(`update event_guestlist_entries set status='declined',updated_at=now() where id=$1`,[entryId]);
     } else if (action === 'remove') {

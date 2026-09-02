@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
         emailType: 'transactional:verify_email',
         subject: mail.subject,
         bodyText: mail.bodyText,
+        bodyHtml: mail.bodyHtml,
       });
     }
   } catch (err) {

@@ -1841,6 +1841,167 @@ console.log('\n— Admin edit and delete, in place —');
 }
 
 // ---------------------------------------------------------------------------
+// YOU ARE ON THE GUESTLIST — the email, and the pass it carries.
+//
+// The pass has to answer a door's questions and nobody else's: a name, a
+// count, and who in the promoter's own team said yes. Reading it takes only
+// the link; changing it takes somebody on that team.
+console.log('\n— The guestlist pass —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  // A promoter can only work its own guestlist once the claim is verified,
+  // so the fixture starts where a real one would after review.
+  const [promoter] = await q(
+    `update promoters set claim_status = 'verified'
+      where id = (select id from promoters order by name limit 1)
+      returning id, name`);
+  const [guest] = await q(`select id, email, display_name from members where email = 'dev-jules@example.com'`);
+  const [doorman] = await q(`select id, email from members where email = 'dev-nadia@example.com'`);
+  const [night] = await q(
+    `insert into events (slug, title, title_normalized, start_at, timezone, status, city, country, promoter_id)
+     values ('pass-night', 'Pass Night', 'pass night', now() + interval '9 days',
+             'Europe/London', 'live', 'London', 'United Kingdom', $1)
+     returning id, slug, title`, [promoter.id]
+  );
+  // The doorman is on the promoter's team; the guest is not.
+  await q(`insert into promoter_members (promoter_id, member_id, role) values ($1, $2, 'editor')
+           on conflict do nothing`, [promoter.id, doorman.id]);
+  await q(`insert into event_guestlist_settings (event_id, promoter_id, mode, max_plus_ones, updated_by_member_id)
+           values ($1, $2, 'approve_requests', 3, $3)`, [night.id, promoter.id, doorman.id]);
+
+  // The member asks; nothing is confirmed and nothing is sent yet.
+  const jules = client();
+  await jules.login('dev-jules@example.com');
+  const asked = await jules.fetch(`/api/events/${night.id}/guestlist-request`, {
+    method: 'POST', body: JSON.stringify({ plusOnes: 1 }),
+  });
+  check('a member asks for a place', asked.status === 200 && (await asked.json()).status === 'pending');
+  check('and nothing is promised before somebody says yes',
+    (await q(`select 1 from email_outbox where member_id = $1 and email_type = 'notification:guestlist_confirmed'`, [guest.id])).length === 0);
+
+  // The promoter's team says yes.
+  const [entry] = await q(`select id from event_guestlist_entries where event_id = $1 and member_id = $2`, [night.id, guest.id]);
+  const door = client();
+  await door.login('dev-nadia@example.com');
+  const approved = await door.fetch(`/api/promoter/${promoter.id}/guestlists/${night.id}`, {
+    method: 'POST', body: JSON.stringify({ action: 'approve', entryId: entry.id }),
+  });
+  check('somebody on the promoter’s team approves it', approved.status === 200);
+
+  const [row] = await q(
+    `select confirmed_by_member_id, confirmed_at from event_guestlist_entries where id = $1`, [entry.id]);
+  check('the row records WHO said yes, not just that somebody did',
+    row.confirmed_by_member_id === doorman.id && !!row.confirmed_at);
+
+  const [mail] = await q(
+    `select subject, body_text, body_html from email_outbox
+      where member_id = $1 and email_type = 'notification:guestlist_confirmed'`, [guest.id]);
+  check('the pass is emailed to the guest', !!mail);
+  check('and it leads with the only sentence that matters',
+    mail.body_html.includes('YOU ARE ON') && mail.body_html.includes('GUESTLIST'));
+  check('it names the night', mail.subject.includes('Pass Night'));
+  check('it names who confirmed it', mail.body_html.includes('Nadia') || mail.body_text.includes('Nadia'),
+    mail.body_text.slice(0, 200));
+  check('it carries a scannable code', mail.body_html.includes('/qr.png'));
+  check('and a plain link, for a client that refuses images',
+    mail.body_text.includes('/d/'));
+
+  // The pass itself.
+  const token = mail.body_text.split('/d/')[1].split(/\s/)[0];
+  const passPage = await (await client().fetch(`/d/${token}`)).text();
+  check('anybody holding the link can read the pass', passPage.includes('ON THE GUESTLIST'));
+  check('it shows the name and the count',
+    passPage.includes(guest.display_name) && passPage.includes('2 places'));
+  check('and who in the organisation confirmed it', passPage.includes('Confirmed by'));
+  check('a door pass is never offered to a search engine', passPage.includes('noindex'));
+
+  const qr = await client().fetch(`/api/door/${token}/qr.png`);
+  check('the code renders as a PNG', qr.status === 200 && qr.headers.get('content-type') === 'image/png');
+  check('and it is a real one',
+    Buffer.from(await qr.arrayBuffer()).subarray(0, 8).toString('hex') === '89504e470d0a1a0a');
+
+  // A forged token is nothing at all.
+  const forged = `${token.split('.')[0]}.aaaaaaaaaaaaaaaaaaaaaa`;
+  check('a token with the wrong signature is not a pass',
+    (await client().fetch(`/api/door/${forged}/qr.png`)).status === 404);
+  check('and its page is a 404, not a hint', (await client().fetch(`/d/${forged}`)).status === 404);
+
+  // Checking in is the part that needs the team.
+  check('a stranger cannot check anybody in',
+    (await client().fetch(`/api/door/${token}/check-in`, { method: 'POST' })).status === 401);
+  check('nor can the guest themselves',
+    (await jules.fetch(`/api/door/${token}/check-in`, { method: 'POST' })).status === 403);
+  const checkedIn = await door.fetch(`/api/door/${token}/check-in`, { method: 'POST' });
+  check('the promoter’s team can', checkedIn.status === 200 && !!(await checkedIn.json()).checkedInAt);
+  check('and the pass says so afterwards',
+    (await (await client().fetch(`/d/${token}`)).text()).includes('ALREADY CHECKED IN'));
+  const undone = await door.fetch(`/api/door/${token}/check-in`, { method: 'POST' });
+  check('a misfire can be undone', undone.status === 200 && (await undone.json()).checkedInAt === null);
+
+  // Approving twice does not email twice.
+  await door.fetch(`/api/promoter/${promoter.id}/guestlists/${night.id}`, {
+    method: 'POST', body: JSON.stringify({ action: 'approve', entryId: entry.id }),
+  });
+  check('a second press of Approve does not send a second pass',
+    (await q(`select count(*)::int as n from email_outbox
+               where member_id = $1 and email_type = 'notification:guestlist_confirmed'`, [guest.id]))[0].n === 1);
+
+  await q(`delete from events where id = $1`, [night.id]);
+}
+
+// ---------------------------------------------------------------------------
+// One email on the way in, not two: a welcome that happens to carry the
+// button, rather than a chore that arrives on its own.
+console.log('\n— Joining takes one email —');
+{
+  const email = `verify-welcome-${Date.now()}@example.com`;
+  const res = await client().fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'a-brand-new-password', displayName: 'Wanda Welcome' }),
+  });
+  check('signup succeeds', res.status === 200);
+
+  const sent = await q(`select email_type, subject, body_text, body_html from email_outbox where recipient_email = $1`, [email]);
+  check('exactly one email goes out', sent.length === 1, sent.map((x) => x.email_type).join(', '));
+  const [only] = sent;
+  check('it welcomes them by name', only.subject.includes('Wanda'));
+  check('and it is the one that confirms the address', only.body_text.includes('/verify?token='));
+  check('it is designed, not a wall of text', !!only.body_html && only.body_html.includes('CONFIRM YOUR EMAIL'));
+  check('it says what to do once they are in', only.body_html.includes('Set your city'));
+  check('and it never promises a survival guide to anything',
+    !/survival guide/i.test(`${only.subject} ${only.body_text} ${only.body_html}`));
+
+  // Proving an address is transactional. Somebody who stopped recommendation
+  // email must still be able to confirm a new one.
+  const { rows: [me] } = await db.query(`select id from members where email = $1`, [email]);
+  await q(`insert into email_suppressions (email, member_id, scope, source)
+           values ($1, $2, 'recommendations', 'unsubscribe') on conflict do nothing`, [email, me.id]);
+  await q(`update members set email_verified_at = null where id = $1`, [me.id]);
+  const signedIn = client();
+  await signedIn.login(email, 'a-brand-new-password');
+  await signedIn.fetch('/api/auth/verify', { method: 'POST' });
+  const after = await q(
+    `select status from email_outbox where recipient_email = $1 and email_type = 'transactional:verify_email'
+      order by created_at desc limit 1`, [email]);
+  check('an unsubscribe never blocks proving an address', after[0]?.status !== 'suppressed', after[0]?.status);
+}
+
+// ---------------------------------------------------------------------------
+// A dead link is the worst place to lose somebody on a site whose whole job is
+// telling them where to be tonight.
+console.log('\n— Nothing here —');
+{
+  const res = await client().fetch('/this-page-does-not-exist');
+  check('a missing page is a 404', res.status === 404);
+  const page = await res.text();
+  check('and it is ours, not the framework’s', page.includes('You’re not on'));
+  check('it offers a way on', page.includes('/events') && page.includes('/archive'));
+  check('and it is never indexed', page.includes('noindex'));
+}
+
+// ---------------------------------------------------------------------------
 // A SCAN IS WATCHED, NOT WAITED ON. Holding the request open for the whole
 // scan is what left the desk spinning for ever on a large site: the browser
 // waited on a function that had already been killed, and nothing was written

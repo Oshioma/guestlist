@@ -33,7 +33,10 @@ export const EMAIL_LIMITS = {
 // Transactional email keeps flowing even after a recommendations
 // unsubscribe (but an 'all' suppression from a bounce still stops it).
 const TRANSACTIONAL_PREFIXES = [
-  'notification:', 'team_invite', 'claim_decision', 'promoter_review',
+  // 'transactional:' was missing, which meant the email that proves an
+  // address is real was classed as a recommendation — so anybody who had
+  // unsubscribed from recommendations could never verify a new address.
+  'transactional:', 'notification:', 'team_invite', 'claim_decision', 'promoter_review',
 ];
 
 export function isTransactional(emailType: string): boolean {
