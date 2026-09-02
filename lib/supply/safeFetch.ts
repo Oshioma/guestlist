@@ -19,6 +19,7 @@ import https from 'node:https';
 import dns from 'node:dns';
 import net from 'node:net';
 import { supplyConfig } from './config';
+import zlib from 'node:zlib';
 
 export type SafeFetchFailureCode =
   | 'invalid_url'
@@ -48,6 +49,34 @@ export type SafeFetchOptions = {
 
 const BLOCKED_HOSTNAMES = new Set(['localhost', 'metadata.google.internal', 'metadata.goog']);
 const BLOCKED_HOST_SUFFIXES = ['.localhost', '.local', '.internal', '.home.arpa'];
+
+// Undo whatever the server compressed with. The size cap applies to the
+// DECOMPRESSED bytes as well: a small response that expands to a gigabyte is
+// the oldest trick there is, and zlib will stop rather than let it.
+async function decode(raw: Buffer, encoding: string | undefined, maxBytes: number): Promise<string> {
+  const how = (encoding ?? '').trim().toLowerCase();
+  if (!how || how === 'identity') return raw.toString('utf8');
+  const options = { maxOutputLength: maxBytes };
+  const run = (fn: (b: Buffer, o: object, cb: (e: Error | null, r: Buffer) => void) => void) =>
+    new Promise<Buffer>((res, rej) => fn(raw, options, (err, out) => {
+      if (!err) return res(out);
+      // zlib reports the output cap as ERR_BUFFER_TOO_LARGE; everything else
+      // is a genuinely broken stream, and the two need telling apart —
+      // "this is enormous" and "this is not what it claims" are different
+      // problems with different answers.
+      const overflow = (err as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE';
+      rej(new Error(overflow ? 'too_large' : 'undecodable'));
+    }));
+  if (how === 'gzip' || how === 'x-gzip') return (await run(zlib.gunzip)).toString('utf8');
+  if (how === 'deflate') return (await run(zlib.inflate)).toString('utf8');
+  if (how === 'br') return (await run(zlib.brotliDecompress)).toString('utf8');
+  if (how === 'zstd' && typeof zlib.zstdDecompress === 'function') {
+    return (await run(zlib.zstdDecompress as never)).toString('utf8');
+  }
+  // Something we did not ask for and cannot read. Saying so beats handing the
+  // rest of the pipeline a page of mojibake to find no links in.
+  throw new Error('undecodable');
+}
 
 function ipv4ToInt(ip: string): number {
   return ip.split('.').reduce((acc, o) => (acc << 8) + Number(o), 0) >>> 0;
@@ -194,6 +223,12 @@ function requestOnce(
           'User-Agent': opts.userAgent ?? supplyConfig.fetch.userAgent,
           Accept: opts.accept ?? 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.5',
           'Accept-Language': 'en-GB,en;q=0.8',
+          // We can decompress, so we may as well say so — and saying so is
+          // safer than staying silent. A CDN with a badly keyed cache will
+          // hand a compressed variant to a client that never asked, and
+          // reading those bytes as UTF-8 gives a page of mojibake with no
+          // links in it: HTTP 200, right size, nothing found.
+          'Accept-Encoding': 'gzip, deflate, br',
         },
         timeout: opts.timeoutMs,
       },
@@ -249,12 +284,16 @@ function requestOnce(
           chunks.push(chunk);
         });
         res.on('end', () => {
-          resolve({
-            kind: 'response',
-            status,
-            headers: res.headers,
-            body: Buffer.concat(chunks).toString('utf8'),
-          });
+          decode(Buffer.concat(chunks), res.headers['content-encoding'], opts.maxBytes)
+            .then((body) => resolve({ kind: 'response', status, headers: res.headers, body }))
+            .catch((err: Error) => resolve({
+              kind: 'error',
+              code: err.message === 'too_large' ? 'too_large' : 'fetch_failed',
+              detail: err.message === 'too_large'
+                ? `Decompressed past ${opts.maxBytes} bytes`
+                : `Could not decompress a ${res.headers['content-encoding']} response`,
+              status,
+            }));
         });
         res.on('error', () => {
           resolve({ kind: 'error', code: 'fetch_failed', detail: 'Response stream error', status });
