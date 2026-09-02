@@ -21,6 +21,7 @@ import { HomeTonight } from '@/components/HomeTonight';
 import { AskPanel } from '@/components/ask/AskPanel';
 import { BalanceHomeSection } from '@/components/balance/BalanceHomeSection';
 import { optional } from '@/lib/resilient';
+import { siteImages } from '@/lib/siteImages';
 
 export const dynamic = 'force-dynamic';
 
@@ -161,6 +162,8 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
 
 export default async function HomePage() {
   const member = await getCurrentMember();
+  // The band behind the headline is three settings, not three hardcoded files.
+  const images = await siteImages();
   // browseEvents is the page's reason to exist, so it is deliberately NOT
   // wrapped: an empty homepage pretending all is well would be worse than an
   // error. The chips and the promoter row beside it are decoration.
@@ -192,9 +195,9 @@ export default async function HomePage() {
       <section className="homeHero">
         <div className="homeHeroMedia" aria-hidden="true">
           {/* eslint-disable @next/next/no-img-element */}
-          <img src="/images/secret-party.jpg" alt="" />
-          <img src="/images/supper-club.jpg" alt="" />
-          <img src="/images/retreat-beach.jpg" alt="" />
+          <img src={images['home.1']} alt="" />
+          <img src={images['home.2']} alt="" />
+          <img src={images['home.3']} alt="" />
           {/* eslint-enable @next/next/no-img-element */}
         </div>
         <div className="wrap homeHeroInner">

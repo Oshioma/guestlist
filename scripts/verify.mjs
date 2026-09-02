@@ -2180,6 +2180,91 @@ console.log('\n— Who the verification gate is holding —');
   await q(`delete from members where id = $1`, [held.id]);
 }
 
+// ---------------------------------------------------------------------------
+// THE PICTURES ON THE SITE ARE SETTINGS, NOT CODE.
+//
+// Changing the photograph behind the front page used to be an edit and a
+// deploy, which puts a designer's job behind an engineer. Each fixed picture
+// is now a named slot with a shipped default, and the desk can point a slot
+// somewhere else — or put the original back, which is what makes trying
+// something safe.
+console.log('\n— The pictures on the site —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  const page = await (await desk.fetch('/admin/site')).text();
+  check('the desk lists the pictures', page.includes('Pictures'));
+  check('naming each one and where it lands',
+    page.includes('Home — first panel') && page.includes('Membership — Get in free')
+      && page.includes('The top of the Queue jump card'));
+  check('and showing what is in each slot now', page.includes('/images/hero.jpg'));
+
+  check('a member cannot see them',
+    (await nadia.fetch('/api/admin/site/images')).status === 403);
+  check('nor change one',
+    (await nadia.fetch('/api/admin/site/images', {
+      method: 'POST', body: JSON.stringify({ slot: 'home.1', url: 'https://evil.example/x.jpg' }),
+    })).status === 403);
+
+  // Just the band behind the headline: a seeded event uses the same file for
+  // its own artwork, so looking at the whole page would prove nothing.
+  const heroBand = async () => {
+    const html = await (await client().fetch('/')).text();
+    const at = html.indexOf('homeHeroMedia');
+    return at < 0 ? '' : html.slice(at, html.indexOf('</div>', at));
+  };
+  check('the front page shows the picture that ships with the code',
+    (await heroBand()).includes('/images/secret-party.jpg'));
+
+  const swap = await desk.fetch('/api/admin/site/images', {
+    method: 'POST',
+    body: JSON.stringify({ slot: 'home.1', url: 'https://pictures.example/new-night.jpg' }),
+  });
+  check('an admin can point a slot somewhere else', swap.status === 200);
+  const after = await heroBand();
+  check('and the front page follows immediately',
+    after.includes('https://pictures.example/new-night.jpg')
+      && !after.includes('/images/secret-party.jpg'), after.slice(0, 200));
+  check('the change is on the record',
+    (await q(`select 1 from audit_log where action = 'site_image_changed'`)).length > 0);
+
+  // A picture is only ever an address we would put in an img tag.
+  check('a javascript: address is refused',
+    (await desk.fetch('/api/admin/site/images', {
+      method: 'POST', body: JSON.stringify({ slot: 'home.1', url: 'javascript:alert(1)' }),
+    })).status === 400);
+  check('and so is a data: one',
+    (await desk.fetch('/api/admin/site/images', {
+      method: 'POST', body: JSON.stringify({ slot: 'home.1', url: 'data:image/svg+xml,<svg onload=alert(1)>' }),
+    })).status === 400);
+  check('a slot that does not exist is a 404, not a stored setting nothing reads',
+    (await desk.fetch('/api/admin/site/images', {
+      method: 'POST', body: JSON.stringify({ slot: 'made.up', url: 'https://pictures.example/x.jpg' }),
+    })).status === 404);
+  check('the refused attempts changed nothing',
+    (await heroBand()).includes('https://pictures.example/new-night.jpg'));
+
+  // The way back.
+  const reset = await desk.fetch('/api/admin/site/images', {
+    method: 'POST', body: JSON.stringify({ slot: 'home.1', url: null }),
+  });
+  check('the original goes back', reset.status === 200);
+  check('and the front page is as it shipped',
+    (await heroBand()).includes('/images/secret-party.jpg'));
+
+  // The membership section reads its pictures the same way.
+  await desk.fetch('/api/admin/site/images', {
+    method: 'POST',
+    body: JSON.stringify({ slot: 'membership.hero', url: 'https://pictures.example/city.jpg' }),
+  });
+  check('the membership benefits follow the same slots',
+    (await (await client().fetch('/membership')).text()).includes('https://pictures.example/city.jpg'));
+  await desk.fetch('/api/admin/site/images', {
+    method: 'POST', body: JSON.stringify({ slot: 'membership.hero', url: null }),
+  });
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

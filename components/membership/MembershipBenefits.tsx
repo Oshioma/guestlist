@@ -16,14 +16,7 @@
 // to the big number rather than at the bottom of the page.
 
 import Link from 'next/link';
-
-// EVERY PICTURE THIS SECTION USES, IN ONE PLACE.
-// Swap the paths when the real photography lands — nothing else needs to move.
-const IMAGES = {
-  hero: '/images/hero.jpg',            // the city at night, behind the claim
-  queueJump: '/images/secret-party.jpg',
-  drops: '/images/travel-ocean.jpg',
-} as const;
+import { siteImages } from '@/lib/siteImages';
 
 type Props = {
   // A member is being shown what they have; everybody else, what they'd get.
@@ -68,8 +61,11 @@ const Icon = {
   ),
 };
 
-export function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
+export async function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
   const isMember = variant === 'member';
+  // The photographs are settings, not code: an admin changes them on
+  // /admin/site and every page showing them follows.
+  const IMAGES = await siteImages();
 
   return (
     <section className="mbPerks" aria-label="What membership gets you">
@@ -79,7 +75,7 @@ export function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
           out being sold, and the page should feel like one. */}
       <div className="mbPerkHero">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="mbPerkHeroImg" src={IMAGES.hero} alt="" aria-hidden />
+        <img className="mbPerkHeroImg" src={IMAGES['membership.hero']} alt="" aria-hidden />
         <div className="mbPerkHeroText">
           {/* A member already has these; everybody else is being told about
               them. Same six things, two different sentences. */}
@@ -113,7 +109,7 @@ export function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
         <div className="mbPerkCard lilac photo">
           <span className="mbPerkShot">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={IMAGES.queueJump} alt="" aria-hidden />
+            <img src={IMAGES['membership.queueJump']} alt="" aria-hidden />
           </span>
           <span className="mbPerkIcon">{Icon.arrow}</span>
           <h3>Queue jump</h3>
@@ -124,7 +120,7 @@ export function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
         <div className="mbPerkCard cream photo">
           <span className="mbPerkShot">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={IMAGES.drops} alt="" aria-hidden />
+            <img src={IMAGES['membership.drops']} alt="" aria-hidden />
           </span>
           <span className="mbPerkIcon gold">{Icon.spark}</span>
           <h3>Member drops</h3>
