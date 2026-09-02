@@ -90,6 +90,13 @@ To take money:
    member as *Active · stripe* and `/you/membership` opens the Billing
    Portal.
 
+**If the webhook is wrong,** paid members still get in: the welcome page
+Stripe sends them to carries the Checkout session id, asks Stripe whether it
+paid, and activates the membership through the same code the webhook uses.
+`/admin/systems` → Stripe → *Webhook traffic* tells you whether real events
+are arriving; fix the endpoint anyway, because renewals, cancellations and
+failed payments only reach the site through it.
+
 **Managed Payments.** Newer Stripe accounts have *Managed Payments* (Stripe
 as merchant of record, collecting tax for you) switched on by default, and
 it refuses any product without a tax code — JOIN then fails with *"the

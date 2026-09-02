@@ -17,6 +17,7 @@ import {
 import { getSubscription, verifyWebhookSignature, type StripeSubscription } from '@/lib/stripe';
 import { track } from '@/lib/analytics';
 import { queueMemberTransactional } from '@/lib/email';
+import { welcomeNewMember } from '@/lib/membershipWelcome';
 
 export const runtime = 'nodejs';
 
@@ -35,24 +36,6 @@ async function resolveMember(obj: Record<string, unknown>): Promise<string | nul
   const customer = typeof obj.customer === 'string' ? obj.customer : null;
   if (customer) return memberIdForStripeCustomer(customer);
   return null;
-}
-
-async function welcome(memberId: string) {
-  const m = await queryOne<{ email: string; display_name: string }>(`select email, display_name from members where id = $1`, [memberId]);
-  if (!m) return;
-  await queueMemberTransactional({
-    memberId,
-    email: m.email,
-    emailType: 'notification:membership_welcome',
-    subject: 'You’re in. Welcome to Guestlist.',
-    body: 'See something you want to go to? Ask Guestlist to get you in. Your membership, your events and your Market offers all live in one place.',
-    ctaLabel: 'YOUR MEMBERSHIP',
-    ctaUrl: `${SITE}/you/membership`,
-    dedupeKey: `membership-welcome:${memberId}`,
-  });
-  await queryOne(
-    `insert into notifications (member_id, type, payload) values ($1, 'membership_started', '{}') returning id`, [memberId]
-  ).catch(() => null);
 }
 
 export async function POST(req: NextRequest) {
@@ -97,7 +80,7 @@ export async function POST(req: NextRequest) {
           if (change.after === 'active' || change.after === 'trialing') {
             if (change.before !== 'active' && change.before !== 'trialing') {
               await track('membership_started', { memberId, metadata: { via: 'checkout' } });
-              await welcome(memberId);
+              await welcomeNewMember(memberId);
             }
           }
         }
@@ -113,7 +96,7 @@ export async function POST(req: NextRequest) {
         const wasMember = change.before === 'active' || change.before === 'trialing';
         if (nowMember && !wasMember) {
           await track('membership_started', { memberId, metadata: { via: event.type } });
-          await welcome(memberId);
+          await welcomeNewMember(memberId);
         } else if (change.after === 'cancelled' && change.before !== 'cancelled') {
           await track('membership_cancelled', { memberId });
         } else if (change.after === 'expired' && change.before !== 'expired') {
