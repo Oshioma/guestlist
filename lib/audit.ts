@@ -20,7 +20,7 @@ export type AuditAction =
   | 'market_business_created' | 'market_business_updated' | 'market_business_decided'
   | 'market_offer_created' | 'market_offer_updated' | 'market_offer_decided'
   | 'market_offer_redeemed' | 'member_drop_changed' | 'good_cause_changed'
-  | 'member_deleted' | 'article_deleted' | 'member_verified';
+  | 'member_deleted' | 'article_deleted' | 'member_verified' | 'site_image_changed';
 
 export async function audit(
   action: AuditAction,

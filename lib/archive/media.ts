@@ -171,3 +171,21 @@ export async function storeArchiveImage(buf: Buffer): Promise<StoredMedia> {
     height,
   };
 }
+
+/**
+ * A picture for one of the site's fixed slots (see lib/siteImages.ts).
+ *
+ * Same rules as an archive upload — magic-byte sniffing, a size cap, and a
+ * generated path so an upload's filename can never steer where it lands —
+ * but no thumbnail variants: these are backdrops, always shown large.
+ */
+export async function storeSiteImage(buf: Buffer): Promise<{ url: string; mime: string; bytes: number }> {
+  if (buf.length > MEDIA_LIMITS.maxBytes) {
+    throw new MediaError(400, `Image too large (max ${MEDIA_LIMITS.maxBytes / 1024 / 1024}MB)`);
+  }
+  const sniffed = sniffImage(buf);
+  if (!sniffed) throw new MediaError(400, 'Not a supported image (JPEG, PNG, WebP or GIF)');
+  const id = randomUUID();
+  const url = await storeBuffer(`site/${id.slice(0, 2)}/${id}.${sniffed.ext}`, buf, sniffed.mime);
+  return { url, mime: sniffed.mime, bytes: buf.length };
+}
