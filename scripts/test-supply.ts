@@ -2022,6 +2022,19 @@ async function main() {
       && testVerdict(emptyJson).text.includes('6 bytes'),
       testVerdict(emptyJson).text);
 
+    // A count that IS the ceiling is a truncation, and it must not read as a
+    // total — that is the whole reason the ceiling is per source.
+    const atCap = { ...probe(true, 40), method: 'json' as const, cappedAt: 40 };
+    check('a count that is exactly the ceiling says so',
+      testVerdict(atCap).text.includes('ceiling') && testVerdict(atCap).text.includes('max'),
+      testVerdict(atCap).text);
+    check('a count under the ceiling does not',
+      !testVerdict({ ...probe(true, 12), method: 'json' as const }).text.includes('ceiling'));
+    check('a paged URL says the scan will read further',
+      testVerdict({ ...probe(true, 12), method: 'json' as const, paged: true }).text.includes('follows the pages'));
+    check('an unpaged one does not',
+      !testVerdict({ ...probe(true, 12), method: 'json' as const }).text.includes('follows the pages'));
+
     // The wall a status-code comparison walks straight past: same HTTP 200
     // both times, but the browser was handed the listings and we were not.
     const twoFaced = { ...probe(true, 4), browserCandidates: 38, servesBrowsersMore: true };

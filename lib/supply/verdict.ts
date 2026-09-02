@@ -66,6 +66,14 @@ export type ProbeResult = {
   bodyPreview?: string | null;
   bodyBytes?: number | null;
   responseType?: string | null;
+  // This target carries a page number, so a scan will keep going where the
+  // test fetch stopped. Said out loud, because a diagnostic that reads one
+  // page and a scan that reads twenty will otherwise disagree by design and
+  // look like a bug.
+  paged?: boolean;
+  // The ceiling this count was taken under, when the count hit it. A number
+  // that IS the cap is a truncation, and it should not look like a total.
+  cappedAt?: number | null;
   // The same page as the browser saw it. A big difference in size when the
   // link counts match is its own clue.
   browserBytes?: number | null;
@@ -121,7 +129,7 @@ export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
             ? `This page builds its listings in the browser — the event list is empty in the HTML we are served, so the ${t.candidates} link${t.candidates === 1 ? '' : 's'} we found ${t.candidates === 1 ? 'is' : 'are'} its own navigation.${t.sitemapAlternative ? ` Its sitemap lists ${t.sitemapAlternative.found} event pages: use ${t.sitemapAlternative.url} instead.` : ' Try the site\u2019s sitemap, or a page that lists events without filtering.'}`
             : t.sitemapAlternative
             ? `Only ${t.candidates} candidate link${t.candidates === 1 ? '' : 's'} in the raw HTML — this page builds its listings in the browser, so most of what you can see is not in what we can read. Its sitemap lists ${t.sitemapAlternative.found} event pages: use ${t.sitemapAlternative.url} instead.`
-            : `OK — ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'} via ${t.method?.toUpperCase()}. Scan it to see how many become events.`,
+            : `OK — ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'} via ${t.method?.toUpperCase()}.${t.cappedAt ? ` That is this source's per-scan ceiling exactly, so there are probably more behind it — raise "max" to see them.` : ''}${t.paged ? ' This URL is paged, and a scan follows the pages; the test fetch only reads the first.' : ''} Scan it to see how many become events.`,
       bad: !t.embedded && (!!t.sitemapAlternative || !!t.clientRendered),
     };
   }

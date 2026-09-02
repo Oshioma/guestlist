@@ -8,7 +8,7 @@
 
 import { parse } from 'node-html-parser';
 import { safeFetch, type SafeFetchResult } from './safeFetch';
-import { identifyCandidateLinks, identifyEmbeddedLinks, identifyJsonLinks, looksLikeJson, pageFilterLinks, parseFeedLinks, looksLikeFeed, looksLikeSitemap, walkSitemap, canonicaliseCandidateUrl, findSitemapEvents, looksClientRendered } from './scanner';
+import { candidateCap, isPaged, identifyCandidateLinks, identifyEmbeddedLinks, identifyJsonLinks, looksLikeJson, pageFilterLinks, parseFeedLinks, looksLikeFeed, looksLikeSitemap, walkSitemap, canonicaliseCandidateUrl, findSitemapEvents, looksClientRendered } from './scanner';
 import { supplyConfig } from './config';
 import { renderFetch, renderingConfigured } from './render';
 import type { FetchProbe, ProbeResult } from './verdict';
@@ -73,8 +73,11 @@ export function findListingLink(html: string, baseUrl: string): string | null {
 
 export async function probeTarget(
   target: string,
-  opts: { findListingOnMiss?: boolean } = {}
+  opts: { findListingOnMiss?: boolean; limit?: number } = {}
 ): Promise<ProbeResult> {
+  // The source's own ceiling when it has one, so the diagnostic and the scan
+  // count the same way.
+  const limit = opts.limit ?? candidateCap();
   const asBot = await safeFetch(target, { accept: SCANNER_ACCEPT });
   await new Promise((r) => setTimeout(r, supplyConfig.scan.delayBetweenFetchesMs));
   const asBrowser = await safeFetch(target, { accept: SCANNER_ACCEPT, userAgent: BROWSER_UA });
@@ -100,7 +103,7 @@ export async function probeTarget(
       // walkSitemap is what the scan uses, index-stepping included, so the
       // two cannot disagree.
       method = 'sitemap';
-      const walked = await walkSitemap(asBot, safeFetch, supplyConfig.scan.delayBetweenFetchesMs);
+      const walked = await walkSitemap(asBot, safeFetch, supplyConfig.scan.delayBetweenFetchesMs, limit);
       found = walked.found;
       sampleUrls = walked.sample;
       skippedSitemaps = walked.skipped;
@@ -130,20 +133,20 @@ export async function probeTarget(
       }
     } else if (looksLikeFeed(asBot.contentType, asBot.body)) {
       method = 'rss';
-      found = parseFeedLinks(asBot.body, asBot.finalUrl);
+      found = parseFeedLinks(asBot.body, asBot.finalUrl, limit);
     } else if (looksLikeJson(asBot.body)) {
       // Read the same way the scan reads it. A body that says text/html and
       // is a JSON array of events must not be reported as an empty page.
       method = 'json';
-      found = identifyJsonLinks(asBot.body, asBot.finalUrl, target);
+      found = identifyJsonLinks(asBot.body, asBot.finalUrl, target, limit);
     } else {
       method = 'html';
-      found = identifyCandidateLinks(asBot.body, asBot.finalUrl, target);
+      found = identifyCandidateLinks(asBot.body, asBot.finalUrl, target, limit);
       // How much of that came from the page's embedded data rather than its
       // markup — the difference between "this page hides its listings" and
       // "this page shipped them, just not as links".
       const inMarkup = new Set(found);
-      embedded = identifyEmbeddedLinks(asBot.body, asBot.finalUrl, target).filter((u) => inMarkup.has(u)).length;
+      embedded = identifyEmbeddedLinks(asBot.body, asBot.finalUrl, target, limit).filter((u) => inMarkup.has(u)).length;
       ownFilters = pageFilterLinks(asBot.body, asBot.finalUrl, target);
     }
   }
@@ -168,7 +171,7 @@ export async function probeTarget(
   // But an admin cannot decide what to do about a wall nobody has named.
   let browserCandidates: number | null = null;
   if (asBrowser.ok && method === 'html') {
-    browserCandidates = identifyCandidateLinks(asBrowser.body, asBrowser.finalUrl, target).length;
+    browserCandidates = identifyCandidateLinks(asBrowser.body, asBrowser.finalUrl, target, limit).length;
   }
   // A couple more links is noise — a nav that differs, a cookie banner. A
   // page of listings against a handful is a different page.
@@ -196,6 +199,8 @@ export async function probeTarget(
     responseType: asBot.ok ? asBot.contentType : null,
     browserBytes: asBrowser.ok ? asBrowser.body.length : null,
     target, bot: toProbe(asBot), browser: toProbe(asBrowser), method, candidates,
+    paged: isPaged(target),
+    cappedAt: found.length >= limit ? limit : null,
     candidateUrls, clientRendered, embedded, sampleUrls, browserCandidates, ownFilters,
     skippedSitemaps, declaredSitemap, urlsSeen, sitemapsRead,
     renderedCandidates, renderNote,
