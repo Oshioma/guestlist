@@ -104,19 +104,32 @@ button { font-family: inherit; }
 }
 .signOutLink:hover { color: var(--text); }
 
+/* The header wraps rather than squashing. A flex row shrinks its items by
+   default, and the first thing to give was the logo — the wordmark came out
+   narrow and wrong, which is the one element on the page that must never be
+   redrawn. So the brand never shrinks, and the nav takes its own line when it
+   no longer fits beside it: logo above, everything else below. No breakpoint
+   guesses which width that happens at; the layout works it out. */
 .siteHeader .inner {
   display: flex;
   align-items: center;
-  gap: 26px;
-  height: 68px;
+  flex-wrap: wrap;
+  column-gap: 26px;
+  /* Tighter between rows than between items: two stacked rows want less air
+     than two things side by side, and the logo should not sit on the very
+     top edge of the page. */
+  row-gap: 10px;
+  padding-block: 12px;
+  min-height: 68px;
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
   color: var(--accent-ink);
+  flex: 0 0 auto;
 }
-.brandWordmark { height: 22px; width: auto; display: block; }
+.brandWordmark { height: 22px; width: auto; max-width: none; display: block; flex: 0 0 auto; }
 .brandOnDark { display: none; }
 [data-theme="dark"] .brandOnLight { display: none; }
 [data-theme="dark"] .brandOnDark { display: block; }
@@ -134,6 +147,10 @@ button { font-family: inherit; }
   text-transform: uppercase;
   letter-spacing: 1.1px;
   color: var(--text-soft);
+  /* Wraps as a block to the next line rather than compressing the logo
+     beside it. No grow: taking the whole remaining line would push the
+     account controls off it and wrap even where there was room. */
+  flex: 0 1 auto;
 }
 .mainNav a:hover { color: var(--accent-ink); }
 .mainNav a.active { color: var(--text); }
