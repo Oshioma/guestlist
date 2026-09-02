@@ -132,6 +132,8 @@ export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
       text:
         t.method === 'rss'
           ? 'Reachable, but this feed contains no event links — it is probably a generic blog or news feed. Clear the feed URL below so scans use the listing page again.'
+          : t.method === 'json'
+          ? `We read this as JSON — the body decides, whatever the content-type says — and there are no event links in it${t.bodyBytes != null ? `, across ${t.bodyBytes} byte${t.bodyBytes === 1 ? '' : 's'}` : ''}. An endpoint that answers with an empty list is usually missing a parameter it needs rather than telling you the site is empty: put back whatever you last removed from the URL.`
           : t.method === 'sitemap'
           ? `We read ${t.sitemapsRead ?? 1} sitemap${(t.sitemapsRead ?? 1) === 1 ? '' : 's'} — the one you gave us, the section sitemaps it points at, and any others the site declares in its robots.txt — holding ${t.urlsSeen ?? 0} URL${(t.urlsSeen ?? 0) === 1 ? '' : 's'} between them. None of them look like event pages.${t.sampleUrls?.length ? ` They look like this: ${t.sampleUrls.slice(0, 5).join(', ')}.` : ''}${t.skippedSitemaps?.length ? ` ${t.skippedSitemaps.length} section sitemap${t.skippedSitemaps.length === 1 ? '' : 's'} could not be read at all: ${t.skippedSitemaps.slice(0, 3).join(', ')}.` : ''} Point the source at the sitemap for the programme section, if the site has one.`
           : t.clientRendered
