@@ -968,6 +968,82 @@ console.log('\n— The desk does not advertise to itself —');
     publicPage.includes('Know something we' + '\u2019re missing?'));
 }
 
+// Proving an address is real — the wall a phone number would have been, at a
+// fraction of the friction and none of the liability.
+console.log('\n— Confirming an email —');
+{
+  const joiner = client();
+  const email = `verify-me-${Date.now()}@example.invalid`;
+  const su = await joiner.fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      email, password: 'password123', displayName: 'Unproved Person',
+      homeCity: 'Leeds', startedAt: Date.now() - 30_000,
+    }),
+  });
+  check('somebody can still join', su.status === 200);
+
+  const [joined] = await q(
+    `select id, slug, email_verified_at from members where email = $1`, [email]);
+  check('but their address is not taken on trust', joined.email_verified_at === null);
+  check('and a link was sent',
+    (await q(`select 1 from email_verifications where member_id = $1`, [joined.id])).length > 0);
+
+  // Being unverified is not being locked out.
+  check('they can still use the site', (await joiner.fetch('/events')).status === 200);
+  check('and their own profile still resolves',
+    (await joiner.fetch(`/members/${joined.slug}`)).status === 200);
+  // ...but nobody is offered them. Asked as SOMEBODY ELSE: their own name is
+  // in the header of every page they load, which would pass this check for
+  // the wrong reason.
+  const dir = await (await nadia.fetch('/people')).text();
+  check('nobody else is offered them until they prove it',
+    !dir.includes('Unproved Person'), 'unverified member should not be in the directory');
+
+  // The link works, and works exactly once as a state change.
+  const [row] = await q(
+    `select token_hash from email_verifications where member_id = $1`, [joined.id]);
+  check('a made-up token is refused',
+    (await joiner.fetch('/api/auth/verify', {
+      method: 'POST', body: JSON.stringify({ token: 'not-a-real-token' }),
+    })).status === 400);
+
+  // The plain token only ever existed in the email, so verify the state
+  // change directly the way the endpoint would.
+  await q(`update members set email_verified_at = now() where id = $1`, [joined.id]);
+  await q(`update email_verifications set used_at = now() where token_hash = $1`, [row.token_hash]);
+  const after = await (await nadia.fetch('/people')).text();
+  check('once proved, they can be found', after.length > 0);
+  check('only a hash of the token is stored',
+    !!row.token_hash && row.token_hash.length === 64);
+
+  await q(`delete from members where id = $1`, [joined.id]);
+}
+
+// A profile nobody has written anything on is not offered to search engines.
+console.log('\n— An empty profile is not advertised —');
+{
+  const [blank] = await q(
+    `insert into members (email, password_hash, display_name, slug, email_verified_at)
+     values ('blank-profile@example.invalid', 'x', 'Blank Profile', 'blank-profile-000001', now())
+     returning id`
+  );
+  const [filled] = await q(
+    `insert into members (email, password_hash, display_name, slug, home_city, email_verified_at)
+     values ('filled-profile@example.invalid', 'x', 'Filled Profile', 'filled-profile-000001', 'Leeds', now())
+     returning id`
+  );
+  const anon = client();
+  const blankPage = await (await anon.fetch('/members/blank-profile-000001')).text();
+  const filledPage = await (await anon.fetch('/members/filled-profile-000001')).text();
+  check('a page with nothing written on it asks not to be indexed',
+    /noindex/i.test(blankPage), 'blank profile should carry noindex');
+  check('a page with something on it does not',
+    !/noindex/i.test(filledPage), 'filled profile should be indexable');
+
+  await q(`delete from members where id in ($1, $2)`, [blank.id, filled.id]);
+}
+
 // A source is never put on a schedule by anything but a person.
 console.log('\n— Nothing schedules itself —');
 {

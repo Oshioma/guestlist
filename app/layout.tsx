@@ -4,6 +4,7 @@ import './globals.css';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
 import { SetYourCity } from '@/components/SetYourCity';
+import { ConfirmYourEmail } from '@/components/auth/ConfirmYourEmail';
 import { getCurrentMember } from '@/lib/auth';
 
 export const metadata: Metadata = {
@@ -26,6 +27,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* A member with no resolved place is, to Guestlist, nowhere. Asked
             once a visit until they answer — see components/SetYourCity. */}
         {member && !member.home_location_id && <SetYourCity />}
+        {/* An unproved address is not a locked account — they can use
+            everything. It is a profile nobody else can find yet, and that is
+            what the ask explains. */}
+        {member && !member.email_verified_at && <ConfirmYourEmail />}
         {children}
         <SiteFooter isSignedIn={!!member} isAdmin={member?.role === 'admin'} />
       </body>
