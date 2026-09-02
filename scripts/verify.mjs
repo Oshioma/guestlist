@@ -2094,6 +2094,92 @@ console.log('\n— Your profile lives behind your name —');
     [302, 307].includes((await client().fetch('/you/profile')).status));
 }
 
+// ---------------------------------------------------------------------------
+// THE GATE, AND A WINDOW ONTO IT.
+//
+// An unconfirmed member is deliberately invisible — not in the directory, not
+// offered to search engines. That is the anti-spam contract. What was missing
+// was any way to SEE who the gate is holding, and any second chance for
+// somebody who simply missed one email.
+console.log('\n— Who the verification gate is holding —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  const email = `verify-held-${Date.now()}@example.com`;
+  await client().fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'a-brand-new-password', displayName: 'Hedy Held' }),
+  });
+  const [held] = await q(`select id, slug from members where email = $1`, [email]);
+
+  // Invisible, by design.
+  const peoplePage = await (await (async () => {
+    const seer = client();
+    await seer.login('dev-nadia@example.com');
+    return seer.fetch('/people');
+  })()).text();
+  check('an unconfirmed member is not in the directory', !peoplePage.includes('Hedy Held'));
+
+  // But no longer invisible to the desk.
+  const members = await (await desk.fetch('/admin/members')).text();
+  check('the desk says who the gate is holding', members.includes('Not confirmed yet'));
+  check('and names them', members.includes('Hedy Held') && members.includes(email));
+  check('with how long they have been waiting', /Joined \d+h ago/.test(members));
+  check('and that a reminder has not gone yet', members.includes('too soon to remind'));
+
+  // Sending it again.
+  const before = (await q(`select count(*)::int as n from email_outbox
+                            where member_id = $1 and email_type = 'transactional:verify_email'`, [held.id]))[0].n;
+  const resend = await desk.fetch(`/api/admin/members/${held.id}/verification`, {
+    method: 'POST', body: JSON.stringify({ action: 'resend' }),
+  });
+  check('an admin can send the email again', resend.status === 200);
+  check('and it really goes out',
+    (await q(`select count(*)::int as n from email_outbox
+               where member_id = $1 and email_type = 'transactional:verify_email'`, [held.id]))[0].n === before + 1);
+  check('a member cannot do that to somebody else',
+    (await nadia.fetch(`/api/admin/members/${held.id}/verification`, {
+      method: 'POST', body: JSON.stringify({ action: 'resend' }),
+    })).status === 403);
+
+  // ONE REMINDER, EVER. Driven through the hourly job itself rather than the
+  // function behind it, so what is proved is the thing that actually runs.
+  const runJob = async () =>
+    (await (await desk.fetch('/api/jobs/send-emails', { method: 'POST' })).json()).verifyNudges;
+  check('nobody is reminded before the wait is up', (await runJob()) === 0);
+  await q(`update members set created_at = now() - interval '30 hours' where id = $1`, [held.id]);
+  check('a day later, one reminder goes', (await runJob()) === 1);
+  const [nudge] = await q(`select subject, body_html from email_outbox
+                            where member_id = $1 and email_type = 'transactional:verify_reminder'`, [held.id]);
+  check('it says what they are missing', nudge.subject.includes('still hidden'));
+  check('and carries a fresh link', nudge.body_html.includes('/verify?token='));
+  check('running the job again never sends a second one', (await runJob()) === 0);
+  check('and there is still exactly one on the record',
+    (await q(`select count(*)::int as n from email_outbox
+               where member_id = $1 and email_type = 'transactional:verify_reminder'`, [held.id]))[0].n === 1);
+  check('the desk now shows the reminder went',
+    (await (await desk.fetch('/admin/members')).text()).includes('reminded'));
+
+  // Vouching: a real decision, so it is on the record.
+  const vouch = await desk.fetch(`/api/admin/members/${held.id}/verification`, {
+    method: 'POST', body: JSON.stringify({ action: 'mark_verified' }),
+  });
+  check('an admin can vouch for somebody they know is real', vouch.status === 200);
+  check('and that puts them in the directory',
+    (await (await (async () => { const s2 = client(); await s2.login('dev-nadia@example.com'); return s2.fetch('/people'); })()).text()).includes('Hedy Held'));
+  check('vouching is on the record',
+    (await q(`select 1 from audit_log where action = 'member_verified'`)).length > 0);
+  check('and they drop off the held list',
+    !(await (await desk.fetch('/admin/members')).text()).includes(email));
+  check('sending again to somebody already confirmed says so, rather than pretending',
+    (await desk.fetch(`/api/admin/members/${held.id}/verification`, {
+      method: 'POST', body: JSON.stringify({ action: 'resend' }),
+    })).status === 400);
+
+  await q(`delete from members where id = $1`, [held.id]);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

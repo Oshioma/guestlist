@@ -23,6 +23,7 @@ import {
 import { getSafetySwitches } from '@/lib/settings';
 import { processAnnouncements } from '@/lib/announcements';
 import { refreshAdminReviewDigest } from '@/lib/adminNotify';
+import { queueVerificationNudges } from '@/lib/emailVerification';
 
 export const maxDuration = 300;
 
@@ -52,6 +53,11 @@ async function run(req: NextRequest) {
   // keep it live during the day; this is the safety net for anything that
   // reached a queue by another route.
   const adminDigests = await refreshAdminReviewDigest();
+
+  // Somebody who joined a day ago and never confirmed is invisible and does
+  // not know it. One reminder, ever — the dedupe key enforces that, so this
+  // running hourly cannot turn into nagging.
+  const verifyNudges = await queueVerificationNudges();
 
   const notificationEmails = await queuePromoterNotificationEmails();
   const promoterReview = await queuePromoterReviewNotifications();
@@ -109,6 +115,7 @@ async function run(req: NextRequest) {
     ok: true,
     isoWeek: isoWeek(now),
     announcements,
+    verifyNudges,
     notificationEmails, promoterReview, reminders, travelDigests,
     dailyDigests, weeklyDigests, memberDigests, promoterDigests, adminDigests,
     ...delivery,
