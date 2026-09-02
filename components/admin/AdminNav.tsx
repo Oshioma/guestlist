@@ -56,6 +56,7 @@ const GROUPS: { name: string; items: Item[] }[] = [
     name: 'System',
     items: [
       { href: '/admin/site', label: 'Site' },
+      { href: '/admin/systems', label: 'Systems' },
       { href: '/admin/schema', label: 'Database' },
     ],
   },
