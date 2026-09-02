@@ -30,7 +30,7 @@ import { zonedTimeToUtc, parseLocalInTimezone, parseFoundDate, resolveEndCrossin
 import { mapGenreProposals, loadGenres } from '@/lib/supply/genres';
 import { computeOverallConfidence, canAutoPublish } from '@/lib/supply/confidence';
 import { runExtractionPipeline } from '@/lib/supply/pipeline';
-import { scanSource, nextPageUrl, isPaged, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, countSitemapUrls, sitemapEventUrls, sitemapIndexUrls, sitemapsFromRobots } from '@/lib/supply/scanner';
+import { scanSource, nextPageUrl, isPaged, identifyJsonLinks, looksLikeJson, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, countSitemapUrls, sitemapEventUrls, sitemapIndexUrls, sitemapsFromRobots } from '@/lib/supply/scanner';
 import { explainScan, outcomeLabel } from '@/lib/supply/outcomes';
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
@@ -1683,6 +1683,64 @@ async function main() {
       pagedScan.extracted === 3, JSON.stringify(pagedScan));
     check('and a page that repeats the last one ends the walk',
       pagedScan.candidatesFound === 3, JSON.stringify(pagedScan));
+
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— a listing that is not a page at all —');
+  {
+    // Verbatim from ADE, escaped slashes and a lying content-type included.
+    const ADE_JSON = String.raw`{"data":[{"id":2812228,"handle":"events","title":"Big Bells x Audiosolo ADE 2026","start_date_time":{"date":"2026-10-21 12:00:00.000000","timezone":"Europe\/Amsterdam"},"url":"https:\/\/json.example\/en\/program\/2026\/big-bells\/2812228\/","venue":{"title":"Club Baggerbeest"},"soldOut":false},{"id":2829793,"title":"VOLT & Friends BOAT PARTY","url":"https:\/\/json.example\/en\/program\/2026\/volt-friends\/2829793\/","venue":{"title":"Somewhere"}}],"meta":{"next":"\/api\/program\/filter\/?page=1","logo":"\/assets\/logo.png","partner":"https:\/\/elsewhere.example\/program\/2026\/x\/1\/"}}`;
+    const JSON_API = 'https://json.example/api/program/filter/?section=events&page=0';
+
+    check('a body that opens with a brace is read as JSON', looksLikeJson(ADE_JSON));
+    check('a body that opens with a tag is not', !looksLikeJson('<html><body>x</body></html>'));
+
+    const links = identifyJsonLinks(ADE_JSON, JSON_API, JSON_API);
+    check('event URLs are read straight out of the JSON',
+      links.length === 2 && links[0] === 'https://json.example/en/program/2026/big-bells/2812228/',
+      JSON.stringify(links));
+    check('the API\u2019s own next-page link is not an event',
+      !links.some((u) => u.includes('/api/')));
+    check('an asset in the payload is not an event',
+      !links.some((u) => u.includes('/assets/')));
+    check('another site\u2019s URL in the payload is ignored',
+      !links.some((u) => u.includes('elsewhere.example')));
+    check('a body that is not JSON at all yields nothing',
+      identifyJsonLinks('<html><a href="/events/x">x</a></html>', JSON_API).length === 0);
+
+    // End to end, including pagination: a JSON listing is still a listing.
+    const src = (await q(
+      `insert into event_sources (source_type, name, url, trust)
+       values ('venue_website', 'JSON listing', '${JSON_API}', 'trusted') returning id`
+    ))[0] as { id: string };
+    const jsonPage = (n: number) =>
+      `{"data":[{"id":${n},"url":"https://json.example/en/program/2026/act-${n}/${n}/"}]}`;
+    const bodies: Record<string, { body: string; contentType?: string }> = {
+      // The lying header is the point: text/html, JSON body.
+      'https://json.example/api/program/filter/?section=events&page=0': { body: jsonPage(0), contentType: 'text/html' },
+      'https://json.example/api/program/filter/?section=events&page=1': { body: jsonPage(1), contentType: 'text/html' },
+      'https://json.example/api/program/filter/?section=events&page=2': { body: jsonPage(1), contentType: 'text/html' },
+    };
+    const ai: Record<string, unknown> = {};
+    for (let n = 0; n < 2; n++) {
+      bodies[`https://json.example/en/program/2026/act-${n}/${n}/`] =
+        { body: `<html><title>Act ${n}</title><body><main>a</main></body></html>` };
+      ai[`https://json.example/en/program/2026/act-${n}/${n}/`] = {
+        is_event: true, is_music_event: true, title: `Act ${n}`,
+        start_date: FUTURE.toISOString().slice(0, 10), start_time: '23:00',
+        city: 'Amsterdam', country: 'Netherlands',
+        genres: [{ name: 'Techno', confidence: 90 }],
+        field_confidence: { title: 92, date: 90, city: 88, genres: 88 },
+      };
+    }
+    const jsonScan = await scanSource(src.id, {
+      fetcher: mockFetcher(bodies),
+      ai: mockAI(ai as Parameters<typeof mockAI>[0]),
+      delayMs: 1,
+    });
+    check('a JSON listing scans, whatever its content-type claims',
+      jsonScan.method === 'json' && jsonScan.extracted === 2, JSON.stringify(jsonScan));
 
   }
 

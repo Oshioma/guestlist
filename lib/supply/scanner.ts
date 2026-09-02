@@ -164,6 +164,66 @@ export function isPaged(current: string): boolean {
   return nextPageUrl(current) !== null;
 }
 
+// A LISTING THAT IS NOT A PAGE AT ALL.
+//
+// ADE's programme endpoint answers with `content-type: text/html` and a body
+// that is nothing of the sort:
+//
+//   {"data":[{"id":2812228,"title":"Big Bells x Audiosolo ADE 2026",
+//     "url":"https://www.amsterdam-dance-event.nl/en/program/2026/…/2812228/",
+//     "venue":{"title":"Club Baggerbeest"},…}]}
+//
+// A reader that trusts the header looks for <a href> in that, finds none, and
+// reports an empty site. So the body decides what it is, not the header — and
+// the rule for what counts as an event link is the same one everywhere else:
+// a same-site path that looks like an event page.
+//
+// Only the URLs are trusted, never the shape. Every site invents its own
+// field names, and a reader that guesses at "title" or "startDate" is a
+// reader that silently mis-imports the day somebody renames a key.
+export function looksLikeJson(body: string): boolean {
+  const head = body.trimStart()[0];
+  return head === '{' || head === '[';
+}
+
+export function identifyJsonLinks(body: string, pageUrl: string, requestedUrl?: string): string[] {
+  let parsed: unknown;
+  try { parsed = JSON.parse(body); } catch { return []; }
+
+  const base = new URL(pageUrl);
+  const asked = new URL(requestedUrl ?? pageUrl);
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const consider = (value: string) => {
+    if (out.length >= supplyConfig.scan.maxCandidatesPerScan) return;
+    if (!/^https?:\/\//i.test(value) && !value.startsWith('/')) return;
+    const canonical = canonicaliseCandidateUrl(value, pageUrl);
+    if (!canonical || seen.has(canonical)) return;
+    let url: URL;
+    try { url = new URL(canonical); } catch { return; }
+    if (url.hostname.replace(/^www\./, '') !== base.hostname.replace(/^www\./, '')) return;
+    if (NOT_A_PAGE.test(url.pathname) || A_FILE.test(url.pathname)) return;
+    if (NON_EVENT_PATH.test(url.pathname)) return;
+    if (!EVENT_PATH_HINT.test(url.pathname)) return;
+    if (isFacetOfPage(url, base, asked)) return;
+    seen.add(canonical);
+    out.push(canonical);
+  };
+
+  // Depth-limited so a pathological document cannot walk forever.
+  const walk = (node: unknown, depth: number) => {
+    if (depth > 12 || out.length >= supplyConfig.scan.maxCandidatesPerScan) return;
+    if (typeof node === 'string') return consider(node);
+    if (Array.isArray(node)) { for (const item of node) walk(item, depth + 1); return; }
+    if (node && typeof node === 'object') {
+      for (const value of Object.values(node as Record<string, unknown>)) walk(value, depth + 1);
+    }
+  };
+  walk(parsed, 0);
+  return out;
+}
+
 export function identifyCandidateLinks(html: string, pageUrl: string, requestedUrl?: string): string[] {
   const root = parse(html);
   const base = new URL(pageUrl);
@@ -527,7 +587,7 @@ export type ScanContext = Pick<PipelineContext, 'ai' | 'fetcher' | 'fetchOptions
 export type ScanResult = {
   scanId: string;
   status: 'succeeded' | 'failed';
-  method: 'rss' | 'html' | 'sitemap' | null;
+  method: 'rss' | 'html' | 'sitemap' | 'json' | null;
   candidatesFound: number;
   newCandidates: number;
   extracted: number;
@@ -544,6 +604,40 @@ export type ScanResult = {
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// A paged listing keeps going. Stop the moment a page adds nothing new — that
+// is the end of the results, and it is also what a site does when it ignores a
+// page number it has run out of, so one check covers both.
+//
+// Shared by the HTML and JSON readers, because a listing being paginated has
+// nothing to do with what format it is served in — and ADE's is both.
+async function followPages(
+  first: string[],
+  target: string,
+  read: (body: string, at: string, asked: string) => string[],
+  fetcher: (url: string, options?: SafeFetchOptions) => Promise<SafeFetchResult>,
+  ctx: ScanContext
+): Promise<string[]> {
+  if (!isPaged(target)) return first;
+  const candidates = [...first];
+  const seen = new Set(candidates);
+  let pageUrl: string | null = target;
+  for (let page = 0; page < supplyConfig.listing.maxPagesPerScan; page++) {
+    if (candidates.length >= supplyConfig.scan.maxCandidatesPerScan) break;
+    pageUrl = nextPageUrl(pageUrl);
+    if (!pageUrl) break;
+    await sleep(ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
+    const next = await fetcher(pageUrl, {
+      ...ctx.fetchOptions,
+      accept: 'text/html,application/xhtml+xml,application/json,application/xml;q=0.9',
+    });
+    if (!next.ok) break;
+    const fresh = read(next.body, next.finalUrl, pageUrl).filter((u) => !seen.has(u));
+    if (!fresh.length) break;
+    for (const u of fresh) { seen.add(u); candidates.push(u); }
+  }
+  return candidates.slice(0, supplyConfig.scan.maxCandidatesPerScan);
+}
 
 export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promise<ScanResult> {
   const source = await queryOne<SourceRow>(
@@ -621,7 +715,7 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
     return findSitemapEvents(origin, fetcher, ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
   };
 
-  let method: 'rss' | 'html' | 'sitemap';
+  let method: 'rss' | 'html' | 'sitemap' | 'json';
   let candidates: string[];
 
   if (!fetched.ok) {
@@ -655,32 +749,18 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
   if (looksLikeFeed(fetched.contentType, fetched.body)) {
     method = 'rss';
     candidates = parseFeedLinks(fetched.body, fetched.finalUrl);
+  } else if (looksLikeJson(fetched.body)) {
+    // The body decides what it is, not the header: ADE's endpoint calls this
+    // text/html and answers with a JSON array of events.
+    method = 'json';
+    const readJson = (body: string, at: string, asked: string) => identifyJsonLinks(body, at, asked);
+    candidates = readJson(fetched.body, fetched.finalUrl, target);
+    candidates = await followPages(candidates, target, readJson, fetcher, ctx);
   } else {
     method = 'html';
-    candidates = identifyCandidateLinks(fetched.body, fetched.finalUrl, target);
-    // A paged listing keeps going. Stop the moment a page adds nothing new —
-    // that is the end of the results, and it is also what a site does when it
-    // ignores a page number it has run out of, so the same check covers both.
-    if (isPaged(target)) {
-      const seen = new Set(candidates);
-      let pageUrl: string | null = target;
-      for (let page = 0; page < supplyConfig.listing.maxPagesPerScan; page++) {
-        if (candidates.length >= supplyConfig.scan.maxCandidatesPerScan) break;
-        pageUrl = nextPageUrl(pageUrl);
-        if (!pageUrl) break;
-        await sleep(ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
-        const next = await fetcher(pageUrl, {
-          ...ctx.fetchOptions,
-          accept: 'text/html,application/xhtml+xml,application/xml;q=0.9',
-        });
-        if (!next.ok) break;
-        const fresh = identifyCandidateLinks(next.body, next.finalUrl, pageUrl)
-          .filter((u) => !seen.has(u));
-        if (!fresh.length) break;
-        for (const u of fresh) { seen.add(u); candidates.push(u); }
-      }
-      candidates = candidates.slice(0, supplyConfig.scan.maxCandidatesPerScan);
-    }
+    const readHtml = (body: string, at: string, asked: string) => identifyCandidateLinks(body, at, asked);
+    candidates = readHtml(fetched.body, fetched.finalUrl, target);
+    candidates = await followPages(candidates, target, readHtml, fetcher, ctx);
     // An advertised feed is a FALLBACK, not an upgrade. Only look at one when
     // the listing page itself yielded nothing: sites routinely advertise a
     // generic blog or news feed, and adopting one while the page was working
