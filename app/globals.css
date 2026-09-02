@@ -171,7 +171,12 @@ button { font-family: inherit; }
   display: flex;
   align-items: center;
   gap: 8px;
+  /* It is a link now, so it has to look pressable without shouting. */
+  text-decoration: none;
+  color: inherit;
 }
+.avatarChip:hover { color: var(--accent-ink); }
+.avatarChip:hover img { border-color: var(--accent); }
 .avatarChip img {
   width: 28px; height: 28px; border-radius: 50%;
   border: 1px solid var(--border-strong);
@@ -3363,3 +3368,30 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
   margin-top: 4px;
 }
 .notFoundFoot { font-size: 12.5px; color: var(--text-muted); margin-top: 28px; }
+
+
+/* Your profile — the page behind your own name. The card at the top is the
+   thing you are editing, shown as others would see it. */
+.profileHeadCard {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.profileHeadAvatar {
+  width: 64px; height: 64px; flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border-strong);
+}
+.profileHeadAvatarBlank {
+  display: grid; place-items: center;
+  background: var(--surface-hover);
+  font-size: 26px; font-weight: 800; color: var(--text-muted);
+}
+.profileHeadText { min-width: 0; }
+.profileHeadName {
+  font-size: 22px; font-weight: 750; letter-spacing: -0.4px;
+  overflow-wrap: anywhere;
+}
+.profileHeadNote { font-size: 12.5px; color: var(--text-muted); margin-top: 5px; line-height: 1.55; }
+.profileHeadLink { font-size: 12.5px; display: inline-block; margin-top: 5px; }

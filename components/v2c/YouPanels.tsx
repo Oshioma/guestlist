@@ -534,16 +534,14 @@ const FREQUENCIES: [string, string][] = [
   ['off', 'Off'],
 ];
 
-export function SettingsPanel({
-  initialPrivacy, initialEmailPrefs, initialProfile,
-}: {
-  initialPrivacy: Privacy;
-  initialEmailPrefs: EmailPrefs;
-  initialProfile: ProfileFields;
-}) {
+// ---------------------------------------------------------------------------
+// YOUR PROFILE. Who you are to every other member — so it lives on its own
+// page, reached by pressing your own name, rather than buried at the bottom
+// of a settings screen next to the email checkboxes.
+// ---------------------------------------------------------------------------
+
+export function ProfilePanel({ initialProfile }: { initialProfile: ProfileFields }) {
   const router = useRouter();
-  const [privacy, setPrivacy] = useState(initialPrivacy);
-  const [email, setEmail] = useState(initialEmailPrefs);
   const [profile, setProfile] = useState({
     displayName: initialProfile.display_name ?? '',
     bio: initialProfile.bio ?? '',
@@ -552,6 +550,70 @@ export function SettingsPanel({
     lookingFor: initialProfile.looking_for ?? '',
   });
   const [savedFlash, setSavedFlash] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function saveProfile(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const res = await fetch('/api/you/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile }),
+    }).catch(() => null);
+    if (!res) { setError('Could not save that'); return; }
+    if (!res.ok) {
+      setError((await res.json().catch(() => ({})))?.error ?? 'Could not save that');
+      return;
+    }
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 2000);
+    // A changed name changes the header and the profile URL, so the whole
+    // page has to hear about it, not just this form.
+    router.refresh();
+  }
+
+  return (
+    <div className="youPanel" id="profile">
+      {/* No heading: the page is already called Your profile and the card
+          above it is the profile. A third "Your profile" would be noise. */}
+      <form className="youProfileForm" onSubmit={saveProfile}>
+        <label className="youFieldLabel" htmlFor="displayName">
+          Your name
+          <span className="youFieldHint">
+            What every other member sees — a first name or a nickname is fine.
+          </span>
+        </label>
+        <input id="displayName" placeholder="Your name" value={profile.displayName}
+               maxLength={40} required
+               onChange={(e) => setProfile({ ...profile, displayName: e.target.value })} />
+        <textarea placeholder="About you — who you are culturally, not your job title"
+                  value={profile.bio} maxLength={600} rows={3}
+                  onChange={(e) => setProfile({ ...profile, bio: e.target.value })} />
+        <div className="youNewGrid">
+          <input placeholder="Raving since (1992)" value={profile.ravingSince} inputMode="numeric" maxLength={4}
+                 onChange={(e) => setProfile({ ...profile, ravingSince: e.target.value.replace(/\D/g, '') })} />
+          <input placeholder="Now (Hospitality · Property · Technology)" value={profile.nowDoing} maxLength={160}
+                 onChange={(e) => setProfile({ ...profile, nowDoing: e.target.value })} />
+          <input placeholder="Looking for (Interesting people · Parties · Travel)" value={profile.lookingFor} maxLength={160}
+                 onChange={(e) => setProfile({ ...profile, lookingFor: e.target.value })} />
+        </div>
+        <div className="youPanelActions">
+          <button className="btnAccent" type="submit">{savedFlash ? '\u2713 Saved' : 'Save profile'}</button>
+        </div>
+        {error && <div className="formError">{error}</div>}
+      </form>
+    </div>
+  );
+}
+
+export function SettingsPanel({
+  initialPrivacy, initialEmailPrefs,
+}: {
+  initialPrivacy: Privacy;
+  initialEmailPrefs: EmailPrefs;
+}) {
+  const [privacy, setPrivacy] = useState(initialPrivacy);
+  const [email, setEmail] = useState(initialEmailPrefs);
   const [error, setError] = useState<string | null>(null);
 
   async function patch(body: Record<string, unknown>): Promise<boolean> {
@@ -578,46 +640,9 @@ export function SettingsPanel({
     setEmail(next);
     patch({ emailPrefs: { [key]: next[key] } });
   }
-  async function saveProfile(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!(await patch({ profile }))) return;
-    setSavedFlash(true);
-    setTimeout(() => setSavedFlash(false), 2000);
-    router.refresh();
-  }
-
   return (
     <div className="youPanel" id="settings">
-      <h2 className="youPanelTitle">Your profile</h2>
-      <form className="youProfileForm" onSubmit={saveProfile}>
-        <label className="youFieldLabel" htmlFor="displayName">
-          Your name
-          <span className="youFieldHint">
-            What every other member sees — a first name or a nickname is fine.
-          </span>
-        </label>
-        <input id="displayName" placeholder="Your name" value={profile.displayName}
-               maxLength={40} required
-               onChange={(e) => setProfile({ ...profile, displayName: e.target.value })} />
-        <textarea placeholder="About you — who you are culturally, not your job title"
-                  value={profile.bio} maxLength={600} rows={3}
-                  onChange={(e) => setProfile({ ...profile, bio: e.target.value })} />
-        <div className="youNewGrid">
-          <input placeholder="Raving since (1992)" value={profile.ravingSince} inputMode="numeric" maxLength={4}
-                 onChange={(e) => setProfile({ ...profile, ravingSince: e.target.value.replace(/\D/g, '') })} />
-          <input placeholder="Now (Hospitality · Property · Technology)" value={profile.nowDoing} maxLength={160}
-                 onChange={(e) => setProfile({ ...profile, nowDoing: e.target.value })} />
-          <input placeholder="Looking for (Interesting people · Parties · Travel)" value={profile.lookingFor} maxLength={160}
-                 onChange={(e) => setProfile({ ...profile, lookingFor: e.target.value })} />
-        </div>
-        <div className="youPanelActions">
-          <button className="btnAccent" type="submit">{savedFlash ? '✓ Saved' : 'Save profile'}</button>
-        </div>
-        {error && <div className="formError">{error}</div>}
-      </form>
-
-      <h2 className="youPanelTitle" style={{ marginTop: 26 }}>Privacy</h2>
+      <h2 className="youPanelTitle">Privacy</h2>
       <div className="youToggleList">
         {PRIVACY_LABELS.map(([key, label]) => (
           <label className="notifPrefRow" key={key}>
