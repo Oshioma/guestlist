@@ -81,5 +81,19 @@ export const supplyConfig = {
     maxExtractionsPerScan: num(process.env.SUPPLY_SCAN_MAX_EXTRACTIONS, 10),
     // Small politeness delay between fetches to the same source.
     delayBetweenFetchesMs: num(process.env.SUPPLY_SCAN_DELAY_MS, 1_000),
+    // A WALL CLOCK, not just a count. Ten extractions is a small number until
+    // the pages are large and the site is slow, and then a scan runs past
+    // whatever is hosting it and dies mid-flight with nothing written down.
+    // A scan that runs out of time stops cleanly, says what it left, and the
+    // next scan picks the rest up — the seen/attempted bookkeeping already
+    // makes that resumable.
+    budgetMs: num(process.env.SUPPLY_SCAN_BUDGET_MS, 240_000),
+    // How long past its budget a 'running' row is still believed. Past this
+    // it was killed, and saying so beats a spinner that never stops.
+    staleAfterMs: num(process.env.SUPPLY_SCAN_STALE_MS, 300_000),
+    // The least time a scheduled run will give any one source. The batch size
+    // follows from it: a run that takes on more sources than its clock can
+    // serve is a run that pretends to have scanned the ones it never reached.
+    minPerSourceMs: num(process.env.SUPPLY_SCAN_MIN_PER_SOURCE_MS, 45_000),
   },
 };

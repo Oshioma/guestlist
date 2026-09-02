@@ -1840,6 +1840,55 @@ console.log('\n— Admin edit and delete, in place —');
   check('the night is gone', (await q(`select 1 from events where id = $1`, [live.id])).length === 0);
 }
 
+// ---------------------------------------------------------------------------
+// A SCAN IS WATCHED, NOT WAITED ON. Holding the request open for the whole
+// scan is what left the desk spinning for ever on a large site: the browser
+// waited on a function that had already been killed, and nothing was written
+// down. Now the POST starts the job and the desk watches the row.
+console.log('\n— Scanning is a job, not a request —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  // A host that does not exist: the scan fails fast, which is exactly what
+  // this block is about — it must fail on the ROW, not on the request.
+  const [src] = await q(
+    `insert into event_sources (source_type, name, url)
+     values ('promoter_website', 'Scan Contract', 'https://scan-contract.invalid/whats-on')
+     returning id`
+  );
+
+  const startedAt = Date.now();
+  const started = await desk.fetch(`/api/admin/sources/${src.id}/scan`, { method: 'POST' });
+  const body = await started.json();
+  check('starting a scan answers straight away', started.status === 200 && !!body.scanId && body.running === true);
+  check('and does not hold the request open while it works', Date.now() - startedAt < 5_000);
+  check('the row exists the moment the scan is asked for',
+    (await q(`select 1 from source_scans where id = $1`, [body.scanId])).length === 1);
+
+  let state = null;
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    const poll = await desk.fetch(`/api/admin/sources/${src.id}/scan?scanId=${body.scanId}`);
+    if (!poll.ok) continue;
+    state = await poll.json();
+    if (!state.running) break;
+  }
+  check('the desk can watch it through to a finish', state !== null && state.running === false, JSON.stringify(state));
+  check('and the row says how it went', state?.status === 'failed' && !!state?.error);
+
+  check('asking which scan is required, not assumed',
+    (await desk.fetch(`/api/admin/sources/${src.id}/scan`)).status === 400);
+  check('a scan that does not exist is a 404',
+    (await desk.fetch(`/api/admin/sources/${src.id}/scan?scanId=00000000-0000-0000-0000-000000000000`)).status === 404);
+  check('a member cannot start a scan',
+    (await nadia.fetch(`/api/admin/sources/${src.id}/scan`, { method: 'POST' })).status === 403);
+  check('nor watch one',
+    (await nadia.fetch(`/api/admin/sources/${src.id}/scan?scanId=${body.scanId}`)).status === 403);
+
+  await q(`delete from event_sources where id = $1`, [src.id]);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));
