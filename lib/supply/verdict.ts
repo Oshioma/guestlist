@@ -46,6 +46,10 @@ export type ProbeResult = {
   // fetch is not a sitemap with no events in it, and the two must not be
   // reported as the same thing.
   skippedSitemaps?: string[];
+  // A sitemap the site declared in robots.txt that answered when the one we
+  // were pointed at did not. Named, because the admin should move the source
+  // to it rather than rely on us finding it again every scan.
+  declaredSitemap?: string | null;
   // A sitemap with more event pages than the listing page gave us. Offered
   // rather than substituted: the admin was looking at a filtered view, and the
   // sitemap is the whole site.
@@ -71,7 +75,9 @@ export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
   }
   if (t.bot.ok && (t.candidates ?? 0) > 0) {
     return {
-      text: t.foundVia?.viaSitemap
+      text: t.declaredSitemap
+        ? `OK — the sitemap you gave us holds no event pages, but the site declares another one in its robots.txt: ${t.declaredSitemap}, with ${t.candidates} event page${t.candidates === 1 ? '' : 's'}. Scans will use it. Set it as the source URL to make that explicit.`
+        : t.foundVia?.viaSitemap
         ? `OK via the sitemap — the listing page gave us nothing (JavaScript, or it blocks our bot), but ${t.target} lists ${t.candidates} event page${t.candidates === 1 ? '' : 's'}. Scans will use it.`
         : t.foundVia
           ? `OK — that URL was a dead end, but the site's listing page is ${t.target}, with ${t.candidates} candidate event link${t.candidates === 1 ? '' : 's'}. Add uses the working one.`
@@ -93,7 +99,7 @@ export function testVerdict(t: ProbeResult): { text: string; bad: boolean } {
         t.method === 'rss'
           ? 'Reachable, but this feed contains no event links — it is probably a generic blog or news feed. Clear the feed URL below so scans use the listing page again.'
           : t.method === 'sitemap'
-          ? `This is a sitemap, and we read it as one — including the section sitemaps it points at — but none of the URLs we could read look like event pages.${t.sampleUrls?.length ? ` It lists things like ${t.sampleUrls.slice(0, 3).join(', ')}.` : ''}${t.skippedSitemaps?.length ? ` ${t.skippedSitemaps.length} section sitemap${t.skippedSitemaps.length === 1 ? '' : 's'} could not be read at all: ${t.skippedSitemaps.slice(0, 3).join(', ')}.` : ''} Point the source at the sitemap for the programme section, if the site has one.`
+          ? `This is a sitemap, and we read it as one — including the section sitemaps it points at and any others the site declares in its robots.txt — but none of the URLs we could read look like event pages.${t.sampleUrls?.length ? ` They look like this: ${t.sampleUrls.slice(0, 5).join(', ')}.` : ''}${t.skippedSitemaps?.length ? ` ${t.skippedSitemaps.length} section sitemap${t.skippedSitemaps.length === 1 ? '' : 's'} could not be read at all: ${t.skippedSitemaps.slice(0, 3).join(', ')}.` : ''} Point the source at the sitemap for the programme section, if the site has one.`
           : t.clientRendered
             ? `Reachable, but this page builds its listings in the browser — the event list is empty in the HTML we are served.${t.ownFilters ? ` The only event-shaped links on it are ${t.ownFilters} of its own filter tabs.` : ''} Use the site\u2019s sitemap, or a page that lists events without filtering.`
             : t.ownFilters
