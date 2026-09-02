@@ -6,11 +6,13 @@ import Link from 'next/link';
 import { memberLedger, membershipOverview, requestOverview, waitlistRows } from '@/lib/membershipStats';
 import { billingEnabled, formatPence } from '@/lib/membership';
 import { GrantMembership, RevokeMembership } from '@/components/admin/MembershipControls';
+import { VerificationControls } from '@/components/admin/VerificationControls';
+import { unverifiedMembers, VERIFY_NUDGE_AFTER_HOURS } from '@/lib/emailVerification';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminMembersPage() {
-  const [m, r, ledger, waitlist] = await Promise.all([membershipOverview(), requestOverview(), memberLedger(), waitlistRows()]);
+  const [m, r, ledger, waitlist, unverified] = await Promise.all([membershipOverview(), requestOverview(), memberLedger(), waitlistRows(), unverifiedMembers()]);
   const flagged = ledger.filter((x) => x.flags.length > 0);
 
   return (
@@ -38,6 +40,35 @@ export default async function AdminMembersPage() {
           <div className="statTile" key={l}><div className="v" style={{ fontSize: 22 }}>{v}</div><div className="l">{l}</div></div>
         ))}
       </div>
+
+      {/* WHO THE GATE IS HOLDING.
+          An unconfirmed member is not listed in the directory and not offered
+          to search engines — which is the whole point, and also invisible to
+          you unless something says so. This is that something. */}
+      <div className="sectionLabel" style={{ marginTop: 30 }}>Not confirmed yet ({unverified.length})</div>
+      <p className="adminSub">
+        They can sign in and look around, but they are not in the directory and
+        not offered to search engines until they confirm their address. Everybody
+        gets one reminder after {VERIFY_NUDGE_AFTER_HOURS} hours, automatically.
+      </p>
+      {unverified.length === 0 && <p className="adminSub">Nobody — everyone who has joined has confirmed.</p>}
+      {unverified.map((u) => (
+        <div className="attentionRow" key={u.id}>
+          <span>
+            <b>{u.slug ? <Link href={`/members/${u.slug}`} style={{ textDecoration: 'underline' }}>{u.display_name}</Link> : u.display_name}</b>
+            <span style={{ color: 'var(--text-faint)', fontSize: 12 }}> {u.email}</span>
+            <div style={{ color: 'var(--text-faint)', fontSize: 11.5 }}>
+              {u.hours_waiting < 24
+                ? `Joined ${u.hours_waiting}h ago`
+                : `Joined ${Math.floor(u.hours_waiting / 24)} day${Math.floor(u.hours_waiting / 24) === 1 ? '' : 's'} ago`}
+              {u.reminded_at
+                ? ` · reminded ${new Date(u.reminded_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+                : u.hours_waiting >= VERIFY_NUDGE_AFTER_HOURS ? ' · reminder due' : ' · too soon to remind'}
+            </div>
+          </span>
+          <VerificationControls memberId={u.id} name={u.display_name} />
+        </div>
+      ))}
 
       <div className="sectionLabel">Grant membership</div>
       <p className="adminSub">DJs, promoters, journalists, partners, early members, competition winners — ours to give. Optional expiry; lifetime never expires.</p>

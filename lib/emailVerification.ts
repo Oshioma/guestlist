@@ -19,6 +19,16 @@ import { createHash, randomBytes } from 'node:crypto';
 import { query, queryOne } from './db';
 
 export const VERIFY_TTL_HOURS = 72;
+// ONE REMINDER, AND ONLY ONE.
+//
+// A single email at the moment of signup is one chance: land in a promotions
+// tab, arrive while somebody is on a train, and they are invisible for good
+// with nothing to tell them why. A nudge a day later catches that. Two nudges
+// would be nagging somebody about a thing they have already decided not to do.
+export const VERIFY_NUDGE_AFTER_HOURS = 24;
+// Past this, a signup has gone cold and a reminder is just a stranger's email
+// arriving out of nowhere.
+export const VERIFY_NUDGE_WINDOW_DAYS = 7;
 // Enough for somebody who mistyped their address and needs another go; few
 // enough that nobody's inbox becomes a weapon.
 export const MAX_VERIFICATIONS_PER_MEMBER_PER_HOUR = 5;
@@ -186,4 +196,124 @@ export function verificationEmail(displayName: string, link: string) {
 </body></html>`;
 
   return { subject: `${first}, one press and you're in — Guestlist`, bodyText, bodyHtml };
+}
+
+// The reminder. Deliberately shorter than the welcome and in a different
+// voice: this one exists to say what they are missing, not to say hello again.
+export function verificationNudgeEmail(displayName: string, link: string) {
+  const esc = (v: string) =>
+    v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const first = displayName.trim().split(/\s+/)[0] || displayName;
+
+  const bodyText = [
+    `${first} — your Guestlist profile is still hidden.`,
+    '',
+    'You joined, but the address was never confirmed, so other members cannot',
+    'find you and you are not in the directory. One press fixes it:',
+    link,
+    '',
+    `The link works for ${VERIFY_TTL_HOURS} hours.`,
+    '',
+    'This is the only reminder we will send.',
+  ].join('\n');
+
+  const bodyHtml = `<!doctype html><html><body style="margin:0;padding:0;background:#f3eee1;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3eee1;">
+    <tr><td align="center" style="padding:0 14px 40px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;">
+        <tr><td style="background:#0d0d0c;border-radius:0 0 14px 14px;padding:20px 26px;">
+          <span style="font-size:15px;font-weight:800;letter-spacing:4px;color:#f5f1e6;">GUEST<span style="color:#c9a2e8;">LIST</span></span>
+        </td></tr>
+        <tr><td style="padding:30px 6px 0;">
+          <div style="font-size:28px;line-height:1.1;font-weight:800;letter-spacing:-0.9px;color:#141414;">
+            ${esc(first)}, you're still hidden
+          </div>
+          <div style="font-size:14.5px;color:#6f6a5c;margin-top:14px;line-height:1.6;">
+            You joined Guestlist, but this address was never confirmed — so other
+            members can't find you and you're not in the directory. One press fixes it.
+          </div>
+        </td></tr>
+        <tr><td align="center" style="padding:26px 6px 8px;">
+          <a href="${link}" style="display:inline-block;background:#7c4a9e;color:#ffffff;font-weight:800;font-size:14px;letter-spacing:0.6px;text-decoration:none;border-radius:12px;padding:16px 38px;">CONFIRM YOUR EMAIL</a>
+        </td></tr>
+        <tr><td style="padding:14px 6px 0;border-top:1px solid #e4dcc8;">
+          <div style="font-size:11px;color:#8a8574;line-height:1.7;padding-top:14px;">
+            The link works for ${VERIFY_TTL_HOURS} hours. This is the only reminder we'll send.<br/>
+            If you did not sign up, ignore this and nothing happens.
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  return { subject: `${first}, your Guestlist profile is still hidden`, bodyText, bodyHtml };
+}
+
+/**
+ * Everybody who joined, never confirmed, and has not been reminded. Run from
+ * the hourly email job. The dedupe key is what makes "only one" true: a
+ * second call can never queue a second reminder for the same person.
+ */
+export async function queueVerificationNudges(): Promise<number> {
+  const { queueEmail } = await import('./email');
+  const site = process.env.SITE_URL ?? 'https://www.guestlist.net';
+  const due = await query<{ id: string }>(
+    `select m.id from members m
+      where m.email_verified_at is null
+        and m.created_at < now() - make_interval(hours => $1)
+        and m.created_at > now() - make_interval(days => $2)
+        and not exists (
+          select 1 from email_outbox o
+           where o.member_id = m.id and o.email_type = 'transactional:verify_reminder')
+      order by m.created_at`,
+    [VERIFY_NUDGE_AFTER_HOURS, VERIFY_NUDGE_WINDOW_DAYS]
+  );
+  let sent = 0;
+  for (const m of due) {
+    const issued = await createVerificationToken(m.id);
+    if (!issued.issued) continue;
+    const mail = verificationNudgeEmail(
+      issued.displayName, `${site}/verify?token=${encodeURIComponent(issued.token)}`);
+    const { outcome } = await queueEmail({
+      recipientEmail: issued.email,
+      memberId: m.id,
+      emailType: 'transactional:verify_reminder',
+      subject: mail.subject,
+      bodyText: mail.bodyText,
+      bodyHtml: mail.bodyHtml,
+      dedupeKey: `verify_nudge:${m.id}`,
+    });
+    if (outcome === 'queued') sent++;
+  }
+  return sent;
+}
+
+export type UnverifiedMember = {
+  id: string; display_name: string; email: string; slug: string | null;
+  created_at: string; hours_waiting: number; reminded_at: string | null;
+};
+
+/** Who the verification gate is currently holding, and for how long. */
+export async function unverifiedMembers(): Promise<UnverifiedMember[]> {
+  return query<UnverifiedMember>(
+    `select m.id, m.display_name, m.email, m.slug, m.created_at::text,
+            floor(extract(epoch from (now() - m.created_at)) / 3600)::int as hours_waiting,
+            (select max(o.created_at)::text from email_outbox o
+              where o.member_id = m.id and o.email_type = 'transactional:verify_reminder') as reminded_at
+       from members m
+      where m.email_verified_at is null
+      order by m.created_at desc
+      limit 200`
+  );
+}
+
+/** An admin vouching for somebody they know is real. */
+export async function markVerifiedByAdmin(memberId: string): Promise<boolean> {
+  const row = await queryOne<{ id: string }>(
+    `update members set email_verified_at = coalesce(email_verified_at, now())
+      where id = $1 returning id`,
+    [memberId]
+  );
+  return !!row;
 }
