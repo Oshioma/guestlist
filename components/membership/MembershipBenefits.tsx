@@ -106,12 +106,6 @@ export function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
             Subject to availability and fair use.
           </div>
         </div>
-        {/* The words, not a number. A price of £0 invites the reader to start
-            pricing the thing; "free guestlist" names what they get. */}
-        <div className="mbPerkStamp" aria-hidden>
-          <span className="mbPerkStampBig">Free</span>
-          <span className="mbPerkStampWord">Guestlist</span>
-        </div>
       </div>
 
       {/* The two you feel on the night. */}

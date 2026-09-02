@@ -3473,32 +3473,6 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 }
 .mbPerkFine svg { width: 16px; height: 16px; flex: 0 0 auto; }
 
-/* The stamp on the photograph. Two words in the brand's own arrangement —
-   a big weight over a letterspaced lockup — so it reads as the wordmark does
-   rather than as a price tag. */
-.mbPerkStamp {
-  position: absolute; right: clamp(24px, 6vw, 84px); top: 50%;
-  transform: translateY(-50%) rotate(-6deg);
-  /* Deliberately light in both themes: it sits on a photograph, not on the
-     page ground, and a dark card on a dark photo disappears. */
-  background: #f2ecf9;
-  border-radius: var(--radius);
-  padding: clamp(18px, 2.8vw, 30px) clamp(22px, 3.4vw, 38px);
-  text-align: center;
-  box-shadow: 0 26px 60px rgba(0, 0, 0, 0.45);
-}
-.mbPerkStampBig {
-  display: block;
-  font-size: clamp(40px, 5.8vw, 66px); font-weight: 800;
-  letter-spacing: -0.045em; line-height: 0.86;
-  text-transform: uppercase; color: var(--accent);
-}
-.mbPerkStampWord {
-  display: block; margin-top: 7px;
-  font-size: clamp(12px, 1.5vw, 15px); font-weight: 800;
-  letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent);
-}
-
 /* --- Cards --------------------------------------------------------------- */
 .mbPerkPair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .mbPerkTrio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
@@ -3600,13 +3574,7 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 
 @media (max-width: 900px) {
   .mbPerkHero { min-height: 0; display: block; }
-  .mbPerkHeroText { max-width: none; padding-bottom: clamp(120px, 26vw, 170px); }
-  /* Under the words, not across them — a stamp over body copy is unreadable
-     however good the photograph is. */
-  .mbPerkStamp {
-    right: clamp(18px, 5vw, 30px); top: auto;
-    bottom: clamp(20px, 4vw, 30px); transform: rotate(-6deg);
-  }
+  .mbPerkHeroText { max-width: none; }
   .mbPerkTrio { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
