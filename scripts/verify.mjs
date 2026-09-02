@@ -952,6 +952,22 @@ console.log('\n— Signup is for people —');
   await q(`delete from members where email = 'slow-human@example.invalid'`);
 }
 
+// The admin desk is a work surface, not a shop window.
+console.log('\n— The desk does not advertise to itself —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+  const review = await (await desk.fetch('/admin/events?state=needs_review')).text();
+  check('no "add an event" ask on the review queue',
+    !review.includes('Know something we'
+      + '\u2019re missing?'), 'the public ask should not be on the admin desk');
+  check('but the footer links are still there', review.includes('Terms &amp; Conditions'));
+
+  const publicPage = await (await client().fetch('/events')).text();
+  check('and the ask is still on the pages it is for',
+    publicPage.includes('Know something we' + '\u2019re missing?'));
+}
+
 // A source is never put on a schedule by anything but a person.
 console.log('\n— Nothing schedules itself —');
 {
