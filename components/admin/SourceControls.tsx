@@ -302,7 +302,31 @@ export function SourceControls({
             <div style={{ color: 'var(--text-faint)', fontSize: 11 }}>
               bot: {probeLabel(testResult.bot)} ({testResult.bot.ms}ms) · browser:{' '}
               {probeLabel(testResult.browser)} ({testResult.browser.ms}ms)
+              {testResult.bodyBytes != null && (
+                <> · {testResult.bodyBytes.toLocaleString()} bytes
+                  {testResult.responseType ? ` of ${testResult.responseType.split(';')[0]}` : ''}
+                  {testResult.browserBytes != null && testResult.browserBytes !== testResult.bodyBytes
+                    ? ` (browser got ${testResult.browserBytes.toLocaleString()})`
+                    : ''}
+                </>
+              )}
             </div>
+            {/* WHAT WE ACTUALLY RECEIVED. Every "reachable but nothing found"
+                has been settled by looking at the response rather than
+                reasoning about it — an empty results list, a bot challenge and
+                a body we cannot decode all read as the same HTTP 200. */}
+            {testResult.bodyPreview && (
+              <details style={{ marginTop: 4 }}>
+                <summary style={{ cursor: 'pointer', color: 'var(--text-faint)', fontSize: 11 }}>
+                  what came back
+                </summary>
+                <pre style={{
+                  margin: '4px 0 0', padding: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6,
+                  color: 'var(--text-faint)', fontSize: 10.5, maxHeight: 220, overflow: 'auto',
+                }}>{testResult.bodyPreview}</pre>
+              </details>
+            )}
             {/* The links themselves. "4 candidates" on a page full of events is
                 a mystery until you can see that all four are the site's own
                 navigation — at which point the answer is obvious. */}
