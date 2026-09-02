@@ -14,7 +14,7 @@ export type ProbeResult = {
   target: string;
   bot: FetchProbe;
   browser: FetchProbe;
-  method: 'rss' | 'html' | 'sitemap' | null;
+  method: 'rss' | 'html' | 'sitemap' | 'json' | null;
   candidates: number | null;
   // The first few links we actually took as candidates. "4 candidates" on a
   // page full of events is a mystery; the four URLs are the answer — they are

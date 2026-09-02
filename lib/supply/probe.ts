@@ -8,7 +8,7 @@
 
 import { parse } from 'node-html-parser';
 import { safeFetch, type SafeFetchResult } from './safeFetch';
-import { identifyCandidateLinks, identifyEmbeddedLinks, pageFilterLinks, parseFeedLinks, looksLikeFeed, looksLikeSitemap, walkSitemap, canonicaliseCandidateUrl, findSitemapEvents, looksClientRendered } from './scanner';
+import { identifyCandidateLinks, identifyEmbeddedLinks, identifyJsonLinks, looksLikeJson, pageFilterLinks, parseFeedLinks, looksLikeFeed, looksLikeSitemap, walkSitemap, canonicaliseCandidateUrl, findSitemapEvents, looksClientRendered } from './scanner';
 import { supplyConfig } from './config';
 import { renderFetch, renderingConfigured } from './render';
 import type { FetchProbe, ProbeResult } from './verdict';
@@ -83,7 +83,7 @@ export async function probeTarget(
   // the way scanSource reads it, so the test and the scan cannot disagree —
   // an admin who is told "4 candidates via HTML" and then gets 40 events out
   // of the same URL has been told a lie by a diagnostic.
-  let method: 'rss' | 'html' | 'sitemap' | null = null;
+  let method: 'rss' | 'html' | 'sitemap' | 'json' | null = null;
   let found: string[] = [];
   let embedded = 0;
   let sampleUrls: string[] = [];
@@ -131,6 +131,11 @@ export async function probeTarget(
     } else if (looksLikeFeed(asBot.contentType, asBot.body)) {
       method = 'rss';
       found = parseFeedLinks(asBot.body, asBot.finalUrl);
+    } else if (looksLikeJson(asBot.body)) {
+      // Read the same way the scan reads it. A body that says text/html and
+      // is a JSON array of events must not be reported as an empty page.
+      method = 'json';
+      found = identifyJsonLinks(asBot.body, asBot.finalUrl, target);
     } else {
       method = 'html';
       found = identifyCandidateLinks(asBot.body, asBot.finalUrl, target);

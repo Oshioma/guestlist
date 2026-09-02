@@ -37,6 +37,7 @@ export const MIGRATION_FILES: string[] = [
   '030_membership_market.sql',
   '031_ask_guestlist.sql',
   '032_rendered_sources.sql',
+  '033_json_scan_method.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
