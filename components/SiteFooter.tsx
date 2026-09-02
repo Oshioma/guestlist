@@ -16,12 +16,21 @@ import { useState } from 'react';
 // to do with 1996, so it stays out of the way there.
 const NO_FOOTER = [/^\/archive(\/|$)/];
 
-// The admin desk keeps the footer but loses the ask. "Know something we're
-// missing? Paste the link" is an invitation to the public; showing it to the
-// person who runs the place, underneath the queue of events they are already
-// reviewing, is the site talking to itself. The links below it still earn
-// their place — add an article, terms, the contact address.
-const NO_ADD_BOX = [/^\/admin(\/|$)/];
+// Pages that keep the footer but lose the ask.
+//
+// The admin desk, because "Know something we're missing? Paste the link" is
+// an invitation to the public, and showing it to the person who runs the
+// place — underneath the queue of events they are already reviewing — is the
+// site talking to itself.
+//
+// And membership, because that page is making one ask already. A second,
+// unrelated one directly beneath it competes with the thing the page exists
+// to do, and asking somebody to add an event while they are deciding whether
+// to join reads as though we would rather have the event.
+//
+// The links below it still earn their place everywhere — add an article,
+// terms, the contact address.
+const NO_ADD_BOX = [/^\/admin(\/|$)/, /^\/membership(\/|$)/];
 
 export function SiteFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdmin: boolean }) {
   const router = useRouter();

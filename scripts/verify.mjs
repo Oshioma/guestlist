@@ -966,6 +966,14 @@ console.log('\n— The desk does not advertise to itself —');
   const publicPage = await (await client().fetch('/events')).text();
   check('and the ask is still on the pages it is for',
     publicPage.includes('Know something we' + '\u2019re missing?'));
+
+  // Membership is making one ask already. A second, unrelated one directly
+  // beneath it competes with the thing the page exists to do.
+  const membership = await (await client().fetch('/membership')).text();
+  check('nor on the page that is already asking for something',
+    !membership.includes('Know something we' + '\u2019re missing?'));
+  check('and that page keeps its footer too',
+    membership.includes('Terms &amp; Conditions'));
 }
 
 // Proving an address is real — the wall a phone number would have been, at a
