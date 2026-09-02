@@ -78,7 +78,7 @@ export default async function YouPage() {
         </p>
         <div className="youPanelActions">
           {isMember
-            ? <Link href="/you/membership" className="btnAccent">Your membership →</Link>
+            ? <><Link href="/you/ask" className="btnAccent">Ask Guestlist</Link><Link href="/you/membership" className="btnGhost">Your membership →</Link></>
             : <Link href="/membership" className="btnAccent">{billingEnabled() ? 'Join Guestlist' : 'Membership — coming soon'}</Link>}
           <Link href="/market" className="youHistoryMeta" style={{ textDecoration: 'underline' }}>Guestlist Market</Link>
         </div>

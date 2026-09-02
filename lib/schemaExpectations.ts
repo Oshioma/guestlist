@@ -35,6 +35,7 @@ export const MIGRATION_FILES: string[] = [
   '028_article_edited_notification.sql',
   '029_canonical_city_names.sql',
   '030_membership_market.sql',
+  '031_ask_guestlist.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
@@ -113,6 +114,7 @@ export const EXPECTED_TABLES: string[] = [
   'member_locations',
   'member_privacy',
   'member_reports',
+  'member_request_external_events',
   'member_scene_history',
   'member_scene_history_genres',
   'members',
@@ -170,6 +172,14 @@ export const EXPECTED_COLUMNS: string[] = [
   'events.listing_status',
   'events.location_id',
   'events.original_language',
+  'member_access_requests.context',
+  'member_access_requests.linked_at',
+  'member_access_requests.linked_by_member_id',
+  'member_access_requests.match_confidence',
+  'member_access_requests.origin',
+  'member_access_requests.outcome_reason',
+  'member_access_requests.request_type',
+  'member_access_requests.suggested_event_id',
   'member_connections.addressee_close',
   'member_connections.requester_close',
   'member_email_prefs.alert_frequency',

@@ -28,7 +28,8 @@ export type ClientTrackType =
   | 'get_me_in_viewed'
   | 'market_viewed'
   | 'market_business_viewed'
-  | 'member_drop_viewed';
+  | 'member_drop_viewed'
+  | 'ask_guestlist_opened';
 
 // Stable anonymous id (per browser) so unique-viewer counts work without
 // accounts. Random UUID, no fingerprinting.

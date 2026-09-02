@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getCurrentMember } from '@/lib/auth';
+import { isActiveMember } from '@/lib/membership';
 import {
   browseEvents, getLiveCities, getTopLevelGenres,
   type BrowseParams, type BrowseTab,
@@ -50,6 +51,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 export default async function EventsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
   const member = await getCurrentMember();
+  const guestlistMember = member ? await isActiveMember(member.id) : false;
 
   const tab = (TABS.some((t) => t.key === one(sp.tab)) ? one(sp.tab) : 'for-you') as BrowseTab;
   const genre = one(sp.genre) || null;
@@ -220,6 +222,15 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
               ? `${city} has nights on Guestlist — just none under ${TABS.find((t) => t.key === tab)?.label}.`
               : 'The right night might be one filter away.'}
           </p>
+          {/* A member who cannot find it is not a dead end: it is a request.
+              Missing inventory becomes demand data. */}
+          {guestlistMember && (
+            <div className="askEmpty">
+              <div className="homeKicker" style={{ marginBottom: 6 }}>Can’t find it?</div>
+              <p>Send it to Guestlist. We’ll see if we can get you in.</p>
+              <Link href={`/you/ask?context=events_empty${city ? `&city=${encodeURIComponent(city)}` : ''}`} className="btnAccent">Ask Guestlist</Link>
+            </div>
+          )}
           <div className="suggestions">
             {genre && (
               <Link href={buildQS({ genre: null })} className="btnGhost">Remove genre</Link>
@@ -253,7 +264,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 
       {/* Ask sits under the listings: browse what's on first, then ask when
           the list hasn't answered it. */}
-      <AskPanel isSignedIn={!!member} />
+      <AskPanel isSignedIn={!!member} isMember={guestlistMember} />
 
     </main>
   );

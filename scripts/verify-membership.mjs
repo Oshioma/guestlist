@@ -3,8 +3,10 @@
 // idempotent Stripe webhooks, GET ME IN routing (promoter list open → straight
 // on; closed → brokered) and every desk action, promoter outreach and the
 // relationship ledger, Guestlist Market applications, approval, claims with
-// single-use codes, redemption, portal permissions, member drops, and the
-// friendly member-facing states.
+// single-use codes, redemption, portal permissions, member drops, ASK
+// GUESTLIST (any event, anywhere: URL matching, external requests, the desk's
+// LINK / IMPORT / ASSIGN, rate limits, demand reports) and the friendly
+// member-facing states.
 //
 // Requires: db reset+seed (npm run db:reset), dev server on :3000 with
 // STRIPE_WEBHOOK_SECRET set (any value) and STRIPE_SECRET_KEY unset.
@@ -13,6 +15,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createHmac } from 'node:crypto';
 import path from 'node:path';
+import http from 'node:http';
 import pg from 'pg';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -247,7 +250,7 @@ try {
     check('a real door-list entry exists (source=guestlist, +1 honoured)', entry && entry.status === 'confirmed' && entry.source === 'guestlist' && entry.plus_ones === 1);
     const [reqOpen] = await q(`select status, places, guestlist_entry_id, fulfilment_method from member_access_requests where event_id = $1 and member_id = $2`, [evOpen.id, ids.nadia]);
     check('request recorded as confirmed_free linked to the entry', reqOpen.status === 'confirmed_free' && reqOpen.places === 2 && !!reqOpen.guestlist_entry_id && reqOpen.fulfilment_method === 'promoter_guestlist');
-    check('direct guestlisting is NOT on the desk queue', !(await oshi.html('/admin/getmein')).split('Events members want')[0].includes('GMI Test: Open List'));
+    check('direct guestlisting is NOT on the desk queue', !(await oshi.html('/admin/getmein')).split('What members want')[0].includes('GMI Test: Open List'));
 
     // Route 2: no open list → brokered.
     const closed = await nadia.json(`/api/events/${evClosed.id}/get-me-in`, 'POST', { places: 2, note: 'Birthday!' });
@@ -296,7 +299,7 @@ try {
     check('DECLINE requires a reason', noReason.status === 400);
     const declined = await oshi.json(`/api/admin/access-requests/${globalThis.__reqMarcus}`, 'PATCH', { action: 'decline', declineReason: 'too_expensive', memberMessage: 'Not this one, sorry.' });
     check('DECLINE with reason → unavailable', declined.status === 200 && declined.data.status === 'unavailable');
-    check('decline reason stored', (await q(`select decline_reason from member_access_requests where id = $1`, [globalThis.__reqMarcus]))[0].decline_reason === 'too_expensive');
+    check('decline reason stored', (await q(`select outcome_reason from member_access_requests where id = $1`, [globalThis.__reqMarcus]))[0].outcome_reason === 'too_expensive');
     const marcusPage = await marcus.html(`/events/${evClosed.slug}`);
     check('member reads SORRY — NOT THIS ONE with the message', marcusPage.includes('SORRY — NOT THIS ONE') && marcusPage.includes('Not this one, sorry.'));
     check('member notified + emailed on decision', (await q(`select 1 from notifications where member_id = $1 and type = 'membership_request_update'`, [ids.marcus])).length === 1
@@ -318,7 +321,7 @@ try {
     check('desk actions audited', (await q(`select count(*)::int as n from audit_log where action in ('access_request_updated','promoter_outreach_logged','promoter_contact_added','promoter_relationship_changed')`))[0].n >= 5);
     const stats = await q(`select count(*) filter (where r.status in ('confirmed_free','attended'))::int as free from member_access_requests r where r.promoter_id = $1`, [promoter.id]);
     check('promoter stats derived from requests, not stored', stats[0].free === 2);
-    check('request left the admin queue', !(await oshi.html('/admin/getmein')).includes('Needs the desk (0)') && !(await oshi.html('/admin/getmein')).split('Events members want')[0].includes('GMI Test: Closed List'));
+    check('request left the admin queue', !(await oshi.html('/admin/getmein')).includes('Needs the desk (0)') && !(await oshi.html('/admin/getmein')).split('What members want')[0].includes('GMI Test: Closed List'));
 
     // Member withdraws a confirmed place.
     const cancel = await nadia.json(`/api/membership/requests/${reqId}`, 'POST', { action: 'cancel' });
@@ -399,6 +402,137 @@ try {
     const manual = await oshi.json('/api/admin/market', 'POST', { action: 'create', business: { name: 'Hand Added Café', city: 'Bristol' }, approve: true });
     check('admin adds a business by hand, approved', manual.status === 200 && (await q(`select status from market_businesses where id = $1`, [manual.data.id]))[0].status === 'approved');
     check('business nav link appears for owners only', (await jules.html('/events')).includes('href="/business"') && !(await nadia.html('/events')).includes('href="/business"'));
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— ASK GUESTLIST: any event, anywhere —');
+  {
+    // Give the two seeded events real source URLs so a pasted link can match.
+    await q(`update events set source_url = 'https://ra.co/events/gmi-closed' where id = $1`, [evClosed.id]);
+    await q(`update events set source_url = 'https://www.example.com/open/' where id = $1`, [evOpen.id]);
+
+    check('anon cannot ask (401)', (await anon.json('/api/membership/ask', 'POST', { text: 'https://ra.co/events/1' })).status === 401);
+    check('non-member cannot ask (403)', (await jules.json('/api/membership/ask', 'POST', { text: 'https://ra.co/events/1' })).status === 403);
+    check('/you/ask shows the pitch to a non-member', (await jules.html('/you/ask')).includes('Ask Guestlist.') && (await jules.html('/you/ask')).includes('coming soon'));
+    check('/you/ask shows the form to a member', (await nadia.html('/you/ask')).includes('Paste the event link'));
+    check('empty ask rejected', (await nadia.json('/api/membership/ask', 'POST', { text: '   ' })).status === 400);
+    check('bad link rejected', (await nadia.json('/api/membership/ask', 'POST', { url: 'ftp://nope' })).status === 400);
+
+    // A pasted link that matches a Guestlist event by URL — tracking params and all.
+    const m1 = await marcus.json('/api/membership/ask', 'POST', { text: 'https://ra.co/events/gmi-closed?utm_source=ig&fbclid=abc  can you get me +1 for this on Saturday?', places: 2, context: 'membership_area' });
+    check('URL matches a Guestlist event → normal request on that event', m1.status === 200 && m1.data.kind === 'requested' && m1.data.matched === 'url' && m1.data.eventSlug === evClosed.slug);
+    const [m1r] = await q(`select r.event_id, r.places, r.request_type, r.origin, r.context, r.member_note, x.url_host, x.url_normalised, x.url
+                             from member_access_requests r join member_request_external_events x on x.request_id = r.id where r.id = $1`, [m1.data.requestId]);
+    check('linked, +1 → plus_one, origin ask_guestlist, note kept, link kept as demand signal',
+      m1r.event_id === evClosed.id && m1r.places === 2 && m1r.request_type === 'plus_one' && m1r.origin === 'ask_guestlist' && m1r.context === 'membership_area'
+      && /get me \+1/.test(m1r.member_note) && m1r.url_host === 'ra.co' && m1r.url_normalised === 'ra.co/events/gmi-closed' && !m1r.url.includes('utm_'));
+    const m2 = await marcus.json('/api/membership/ask', 'POST', { text: 'https://example.com/open?ref=x', places: 1 });
+    check('URL match to an OPEN promoter list → guestlisted instantly', m2.status === 200 && m2.data.kind === 'guestlisted' && m2.data.friendly.key === 'guestlisted');
+
+    // An event Guestlist does not have.
+    const n1 = await nadia.json('/api/membership/ask', 'POST', { text: 'https://www.instagram.com/p/AbC123/ Secret warehouse thing, Saturday', places: 1, context: 'events_empty' });
+    check('unknown link → external request, WE’RE WORKING ON IT', n1.status === 200 && n1.data.kind === 'requested' && n1.data.matched === null && n1.data.friendly.key === 'working');
+    const [n1r] = await q(`select r.event_id, r.status, r.suggested_event_id, x.url_host, x.name from member_access_requests r left join member_request_external_events x on x.request_id = r.id where r.id = $1`, [n1.data.requestId]);
+    check('stored with no event and the host', n1r.event_id === null && n1r.status === 'requested' && n1r.url_host === 'instagram.com');
+    check('same link again by the same member → 409', (await nadia.json('/api/membership/ask', 'POST', { text: 'https://instagram.com/p/AbC123' })).status === 409);
+    const n1b = await marcus.json('/api/membership/ask', 'POST', { text: 'https://instagram.com/p/AbC123?igshid=1 me too' });
+    check('another member can ask for the same link', n1b.status === 200);
+    check('member area lists it under the host', (await nadia.html('/you/membership')).includes('instagram.com'));
+    check('nothing was fetched or imported from the member link', (await q(`select count(*)::int as n from event_submissions where url like '%instagram.com%'`))[0].n === 0);
+
+    // Name + date only → a suggestion, never an automatic link.
+    const [evRow] = await q(`select start_at::text from events where id = $1`, [evClosed.id]);
+    const n2 = await nadia.json('/api/membership/ask', 'POST', { name: 'GMI Test: Closed List', startsAt: evRow.start_at, city: 'London', note: 'Is this the one?', places: 1 });
+    const [n2r] = await q(`select event_id, suggested_event_id, match_confidence from member_access_requests where id = $1`, [n2.data.requestId]);
+    check('title+date+city → suggested match only (no auto-link)', n2.status === 200 && n2r.event_id === null && n2r.suggested_event_id === evClosed.id && n2r.match_confidence === 'title_date');
+    const detail = await oshi.html(`/admin/getmein/${n2.data.requestId}`);
+    check('desk shows the possible match with one-click Link', detail.includes('Looks like') && detail.includes('GMI Test: Closed List'));
+    const link = await oshi.json(`/api/admin/access-requests/${n2.data.requestId}`, 'PATCH', { action: 'link_event', eventId: evClosed.id });
+    check('LINK EVENT links it', link.status === 200 && (await q(`select event_id, promoter_id, linked_by_member_id from member_access_requests where id = $1`, [n2.data.requestId]))[0].event_id === evClosed.id);
+    check('linking inherits the event promoter', (await q(`select promoter_id from member_access_requests where id = $1`, [n2.data.requestId]))[0].promoter_id === promoter.id);
+    check('bad link target rejected', (await oshi.json(`/api/admin/access-requests/${n1.data.requestId}`, 'PATCH', { action: 'link_event', eventId: 'nope' })).status === 404);
+
+    // Advice-type ask → HERE'S WHAT WE THINK.
+    const rec = await marcus.json('/api/membership/ask', 'POST', { text: 'I’m in Bristol Saturday. What should I go to?', requestType: 'city_recommendation' });
+    check('recommendation ask stored with its type', rec.status === 200 && (await q(`select request_type, event_id from member_access_requests where id = $1`, [rec.data.requestId]))[0].request_type === 'city_recommendation');
+    check('ANSWER needs a message', (await oshi.json(`/api/admin/access-requests/${rec.data.requestId}`, 'PATCH', { action: 'answer' })).status === 400);
+    const ans = await oshi.json(`/api/admin/access-requests/${rec.data.requestId}`, 'PATCH', { action: 'answer', memberMessage: 'Motion for the big room, Strange Brew after.' });
+    check('ANSWER → answered', ans.status === 200 && ans.data.status === 'answered');
+    check('member reads HERE’S WHAT WE THINK with the message', (await marcus.html('/you/membership')).includes('HERE’S WHAT WE THINK') && (await marcus.html('/you/membership')).includes('Strange Brew'));
+    check('member notified of the answer', (await q(`select 1 from notifications where member_id = $1 and type = 'membership_request_update' and payload->>'state' = 'answered'`, [ids.marcus])).length === 1);
+
+    // The flywheel on an external request: assign → contact → outreach.
+    check('CONTACT PROMOTER needs a promoter first', (await oshi.json(`/api/admin/access-requests/${n1.data.requestId}`, 'PATCH', { action: 'contact_promoter', summary: 'hi' })).status === 400);
+    const [other] = await q(`select id from promoters where id <> $1 order by name limit 1`, [promoter.id]);
+    const assign = await oshi.json(`/api/admin/access-requests/${n1.data.requestId}`, 'PATCH', { action: 'assign_promoter', promoterId: other.id });
+    check('ASSIGN PROMOTER', assign.status === 200 && (await q(`select promoter_id from member_access_requests where id = $1`, [n1.data.requestId]))[0].promoter_id === other.id);
+    const contact = await oshi.json(`/api/admin/access-requests/${n1.data.requestId}`, 'PATCH', { action: 'contact_promoter', channel: 'instagram', summary: 'DM’d about the warehouse party' });
+    check('CONTACT PROMOTER on an external request → outreach ledger + relationship', contact.status === 200
+      && (await q(`select 1 from promoter_outreach where request_id = $1 and promoter_id = $2 and event_id is null`, [n1.data.requestId, other.id])).length === 1
+      && (await q(`select relationship_status from promoters where id = $1`, [other.id]))[0].relationship_status === 'contacted');
+    const msg = await oshi.json(`/api/admin/access-requests/${n1.data.requestId}`, 'PATCH', { action: 'message_member', memberMessage: 'On it — spoken to the promoter, will confirm tomorrow.' });
+    check('MESSAGE MEMBER keeps the status and tells the member', msg.status === 200 && msg.data.status === 'contacting_promoter'
+      && (await nadia.html('/you/membership')).includes('spoken to the promoter'));
+    const conf = await oshi.json(`/api/admin/access-requests/${n1.data.requestId}`, 'PATCH', { action: 'confirm_free', fulfilmentMethod: 'venue', memberMessage: 'You’re on the door under your name.' });
+    check('CONFIRM FREE on an external request (no door list, message says how)', conf.status === 200 && conf.data.status === 'confirmed_free'
+      && (await q(`select guestlist_entry_id, fulfilment_method from member_access_requests where id = $1`, [n1.data.requestId]))[0].guestlist_entry_id === null);
+    check('member reads YOU’RE ON THE GUESTLIST for an external event', (await nadia.html('/you/membership')).includes('under your name'));
+
+    // CREATE / IMPORT runs the EXISTING submission pipeline against a fixture page.
+    const fixture = http.createServer((req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end(`<html><head><title>Ask Import Fixture</title><script type="application/ld+json">${JSON.stringify({
+        '@context': 'https://schema.org', '@type': 'Event', name: 'Ask Import Fixture Night',
+        startDate: new Date(Date.now() + 10 * 86400_000).toISOString(), endDate: new Date(Date.now() + 10 * 86400_000 + 6 * 3600_000).toISOString(),
+        location: { '@type': 'Place', name: 'Fixture Hall', address: { '@type': 'PostalAddress', addressLocality: 'Leeds', addressCountry: 'GB' } },
+        offers: { '@type': 'Offer', price: '12', priceCurrency: 'GBP', url: 'http://127.0.0.1:4599/tickets' },
+      })}</script></head><body><h1>Ask Import Fixture Night</h1></body></html>`);
+    });
+    await new Promise((r) => fixture.listen(4599, '127.0.0.1', r));
+    try {
+      const imp0 = await marcus.json('/api/membership/ask', 'POST', { text: 'http://127.0.0.1:4599/party can you get me in', places: 1 });
+      check('external request with an importable link', imp0.status === 200 && imp0.data.kind === 'requested');
+      check('IMPORT is admin-only', (await marcus.json(`/api/admin/access-requests/${imp0.data.requestId}`, 'PATCH', { action: 'import_event' })).status === 403);
+      const imp = await oshi.json(`/api/admin/access-requests/${imp0.data.requestId}`, 'PATCH', { action: 'import_event' });
+      check('CREATE/IMPORT runs the submission pipeline', imp.status === 200 && imp.data.submission && ['created', 'checking', 'duplicate'].includes(imp.data.submission.status), JSON.stringify(imp.data));
+      const [ext] = await q(`select import_submission_id, created_event_id from member_request_external_events where request_id = $1`, [imp0.data.requestId]);
+      check('submission recorded against the request', !!ext.import_submission_id && (await q(`select 1 from event_submissions where id = $1 and submitted_by = $2`, [ext.import_submission_id, ids.oshi])).length === 1);
+      if (imp.data.submission.eventId) {
+        check('draft event created and linked (not published)', ext.created_event_id === imp.data.submission.eventId
+          && (await q(`select status from events where id = $1`, [ext.created_event_id]))[0].status !== 'live'
+          && (await q(`select event_id from member_access_requests where id = $1`, [imp0.data.requestId]))[0].event_id === ext.created_event_id);
+      } else {
+        check('draft event created and linked (not published)', true, '(pipeline returned no event — needs review)');
+      }
+      check('importing twice is refused', (await oshi.json(`/api/admin/access-requests/${imp0.data.requestId}`, 'PATCH', { action: 'import_event' })).status === 409);
+    } finally {
+      fixture.close();
+    }
+
+    // The inbox and the demand reports.
+    const inbox = await oshi.html('/admin/getmein?kind=ask_guestlist&view=all');
+    check('inbox distinguishes ASK GUESTLIST and shows external detail', inbox.includes('Ask Guestlist') && inbox.includes('instagram.com'));
+    check('inbox shows membership status per request', inbox.includes('· active'));
+    check('demand reports: events we’re missing, hosts, cities', inbox.includes('Events we’re missing') && inbox.includes('Where the links come from') && inbox.includes('Cities with demand'));
+    const gmiOnly = await oshi.html('/admin/getmein?kind=get_me_in&view=all');
+    check('GET ME IN filter hides asks', !gmiOnly.split('What members want')[0].includes('instagram.com'));
+    check('other member asking for the same link is counted', (await oshi.html(`/admin/getmein/${n1.data.requestId}`)).includes('other member'));
+
+    // Entry points.
+    check('/events empty state offers ASK GUESTLIST to a member', (await nadia.html('/events?city=Nowhereville')).includes('Can’t find it?'));
+    check('…and not to a non-member', !(await jules.html('/events?city=Nowhereville')).includes('Can’t find it?'));
+    check('no /ask nav item (legacy suite constraint)', !/href="\/ask"/.test(await nadia.html('/events')));
+    check('/you links members to Ask Guestlist', (await nadia.html('/you')).includes('href="/you/ask"'));
+
+    // Limits: information for the desk, a friendly brake for the member.
+    await q(`insert into member_access_requests (member_id, places, status, request_type, origin, requested_at)
+             select $1, 1, 'cancelled', 'other', 'ask_guestlist', now() from generate_series(1, 10)`, [ids.marcus]);
+    check('rate limit: 10 asks an hour → 429', (await marcus.json('/api/membership/ask', 'POST', { text: 'https://ra.co/events/another' })).status === 429);
+    await q(`delete from member_access_requests where member_id = $1 and request_type = 'other' and status = 'cancelled' and member_note is null`, [ids.marcus]);
+
+    check('analytics: every ask type tracked', (await q(`select count(distinct event_type)::int as n from analytics_events where event_type in
+      ('ask_guestlist_submitted','external_event_requested','plus_one_requested','recommendation_requested','external_event_linked','ask_guestlist_fulfilled')`))[0].n === 6);
+    check('outcome reasons never reach the member', !(await nadia.html('/you/membership')).includes('promoter_no_response'));
   }
 
   // -------------------------------------------------------------------------

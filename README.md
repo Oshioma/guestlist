@@ -97,6 +97,16 @@ around rave, club and electronic music culture.
     member-only, other), CLAIM MEMBER OFFER mints a single-use expiring code;
     businesses redeem it in their portal at `/business`. Every claim and
     redemption is recorded.
+  - **ASK GUESTLIST** (`/you/ask`): any event, anywhere. A member pastes a
+    link (Instagram, RA, a flyer) or says what they're after; JUST ME / ME +1.
+    The link is matched against Guestlist first (`source_url`,
+    `event_source_links`, submissions) — a confident match becomes a normal
+    event request; otherwise it is stored as an external event
+    (`member_request_external_events`) for the desk to LINK, CREATE/IMPORT
+    (the existing submission pipeline, admin-triggered), ASSIGN PROMOTER and
+    fulfil. Advice-type asks close with HERE'S WHAT WE THINK. Internal
+    outcome reasons stay on the desk; `/admin/getmein` reports what members
+    want that Guestlist doesn't have.
   - Member area at `/you/membership`; GUESTLIST MEMBER badge on profiles;
     member drops and community projects (`good_causes`, ships empty) on
     `/admin/drops`; membership terms at `/membership/terms`.

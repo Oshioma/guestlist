@@ -13,6 +13,7 @@ export type AuditAction =
   | 'room_message_removed' | 'member_club_suspended' | 'member_club_unsuspended'
   // Membership
   | 'access_request_created' | 'access_request_updated' | 'access_request_note'
+  | 'access_request_linked' | 'access_request_imported' | 'access_request_promoter_assigned'
   | 'promoter_contact_added' | 'promoter_outreach_logged' | 'promoter_relationship_changed'
   | 'membership_changed'
   // Market
