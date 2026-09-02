@@ -1382,6 +1382,34 @@ async function main() {
     });
     check('a sitemap the site declares is found when the guessed path is not',
       declaredScan.method === 'sitemap' && declaredScan.extracted === 1, JSON.stringify(declaredScan));
+
+    // THE HOLE THIS CLOSES: pointing the source STRAIGHT at a sitemap used to
+    // skip the robots.txt lookup entirely — asking only ever happened when
+    // the target was not already a sitemap. So the one case where a site's
+    // other sitemaps matter most was the one case that never asked.
+    const emptySrc = (await q(
+      `insert into event_sources (source_type, name, url, trust) values ('venue_website', 'Empty sitemap as source', 'https://declared.example/sitemap.xml', 'trusted') returning id`
+    ))[0] as { id: string };
+    const emptyScan = await scanSource(emptySrc.id, {
+      fetcher: mockFetcher({
+        // Exactly ADE's shape: the conventional sitemap is real, readable,
+        // and holds only top-level pages.
+        'https://declared.example/sitemap.xml': {
+          body: '<?xml version="1.0"?><urlset><url><loc>https://declared.example/en/about/</loc></url></urlset>',
+          contentType: 'application/xml',
+        },
+        'https://declared.example/robots.txt': { body: ROBOTS, contentType: 'text/plain' },
+        'https://declared.example/sitemap-program.xml': {
+          body: '<?xml version="1.0"?><urlset><url><loc>https://declared.example/en/program/2026/verknipt/2700001/</loc></url></urlset>',
+          contentType: 'application/xml',
+        },
+        'https://declared.example/en/program/2026/verknipt/2700001/': { body: '<html><title>Verknipt</title><body><main>v</main></body></html>' },
+      }),
+      ai: mockAI({ 'https://declared.example/en/program/2026/verknipt/2700001/': proposal('Verknipt') }),
+      delayMs: 1,
+    });
+    check('an empty sitemap as the source still asks the site for its others',
+      emptyScan.method === 'sitemap' && emptyScan.extracted === 1, JSON.stringify(emptyScan));
   }
 
   // -------------------------------------------------------------------------

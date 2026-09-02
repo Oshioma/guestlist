@@ -390,7 +390,12 @@ export const SITEMAP_CHILDREN_TO_FETCH = 8;
 export async function findSitemapEvents(
   origin: string,
   fetcher: (url: string, options?: SafeFetchOptions) => Promise<SafeFetchResult>,
-  delayMs = supplyConfig.scan.delayBetweenFetchesMs
+  delayMs = supplyConfig.scan.delayBetweenFetchesMs,
+  // A sitemap already walked by the caller. Pointing the source straight at
+  // /sitemap.xml and finding nothing is exactly when the site's OTHER
+  // sitemaps matter most, so we come here — and re-reading the one we just
+  // read would only produce the same nothing, more slowly.
+  alreadyTried: string[] = []
 ): Promise<{ url: string; found: number; urls: string[]; sample?: string[]; skipped?: string[] } | null> {
   let sample: string[] = [];
   let skipped: string[] = [];
@@ -403,8 +408,10 @@ export async function findSitemapEvents(
   for (const path of SITEMAP_PATHS) {
     if (!targets.includes(`${origin}${path}`)) targets.push(`${origin}${path}`);
   }
+  const skip = new Set(alreadyTried.map((u) => canonicaliseCandidateUrl(u, origin) ?? u));
 
   for (const target of targets) {
+    if (skip.has(canonicaliseCandidateUrl(target, origin) ?? target)) continue;
     await sleep(delayMs);
     const res = await fetcher(target, sitemapFetchOptions());
     if (!res.ok || !/<(urlset|sitemapindex)[\s>]/i.test(res.body)) continue;
@@ -451,7 +458,7 @@ export async function walkSitemap(
     if (!sub.ok) { skipped.push(`${child} (${sub.code})`); continue; }
     const found = sitemapEventUrls(sub.body, sub.finalUrl, cap);
     if (found.length) return { url: sub.finalUrl, found, sample: [], skipped };
-    if (!sample.length) sample = sitemapAllUrls(sub.body, sub.finalUrl, 5);
+    if (!sample.length) sample = sitemapAllUrls(sub.body, sub.finalUrl, 8);
   }
   return { url: res.finalUrl, found: [], sample, skipped };
 }
@@ -574,6 +581,16 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
     // stepping into a sitemap index if that is what we were given.
     method = 'sitemap';
     candidates = (await walkSitemap(fetched, fetcher, ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs)).found;
+    // The sitemap we were pointed at holds no events. That is the moment the
+    // site's OTHER sitemaps matter most — and until now it was the one moment
+    // we never asked for them, because asking only happened when the target
+    // was not a sitemap in the first place.
+    if (!candidates.length && origin) {
+      const elsewhere = await findSitemapEvents(
+        origin, fetcher, ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs, [target, fetched.finalUrl]
+      );
+      if (elsewhere?.urls.length) candidates = elsewhere.urls;
+    }
   } else
   if (looksLikeFeed(fetched.contentType, fetched.body)) {
     method = 'rss';

@@ -71,6 +71,7 @@ export async function probeTarget(
   let sampleUrls: string[] = [];
   let ownFilters = 0;
   let skippedSitemaps: string[] = [];
+  let declaredSitemap: string | null = null;
   if (asBot.ok) {
     if (looksLikeSitemap(asBot.body)) {
       // Somebody pointed the source straight at a sitemap. Read it as one:
@@ -83,6 +84,24 @@ export async function probeTarget(
       found = walked.found;
       sampleUrls = walked.sample;
       skippedSitemaps = walked.skipped;
+      // Nothing in the sitemap we were handed: ask the site which sitemaps it
+      // actually has. This is the case where that matters most, and it was
+      // the one case that never asked.
+      if (!found.length) {
+        const origin = (() => { try { return new URL(asBot.finalUrl).origin; } catch { return null; } })();
+        if (origin) {
+          await new Promise((r) => setTimeout(r, supplyConfig.scan.delayBetweenFetchesMs));
+          const elsewhere = await findSitemapEvents(
+            origin, safeFetch, supplyConfig.scan.delayBetweenFetchesMs, [target, asBot.finalUrl]
+          );
+          if (elsewhere?.urls.length) {
+            found = elsewhere.urls;
+            declaredSitemap = elsewhere.url;
+          } else if (elsewhere?.sample?.length) {
+            sampleUrls = [...sampleUrls, ...elsewhere.sample].slice(0, 8);
+          }
+        }
+      }
     } else if (looksLikeFeed(asBot.contentType, asBot.body)) {
       method = 'rss';
       found = parseFeedLinks(asBot.body, asBot.finalUrl);
@@ -128,7 +147,7 @@ export async function probeTarget(
   const result: ProbeResult = {
     target, bot: toProbe(asBot), browser: toProbe(asBrowser), method, candidates,
     candidateUrls, clientRendered, embedded, sampleUrls, browserCandidates, ownFilters,
-    skippedSitemaps,
+    skippedSitemaps, declaredSitemap,
     servesBrowsersMore,
   };
 
