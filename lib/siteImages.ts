@@ -58,16 +58,37 @@ export const SITE_IMAGE_SLOTS: SiteImageSlot[] = [
   {
     key: 'membership.queueJump',
     label: 'Membership — Queue jump',
-    where: 'The top of the Queue jump card',
+    where: 'Beside the Queue jump benefit',
     guidance: 'Arriving, or a door. Cropped to a wide band, so the subject wants to be central.',
     fallback: '/images/secret-party.jpg',
   },
   {
     key: 'membership.drops',
     label: 'Membership — Member drops',
-    where: 'The top of the Member drops card',
+    where: 'Beside the Member drops benefit',
     guidance: 'Something you would be pleased to be surprised with.',
     fallback: '/images/travel-ocean.jpg',
+  },
+  {
+    key: 'membership.prices',
+    label: 'Membership — Member prices',
+    where: 'Beside the Member prices benefit',
+    guidance: 'Somewhere you would pay to get into, shot so the left side stays calm.',
+    fallback: '/images/travel-safari.jpg',
+  },
+  {
+    key: 'membership.market',
+    label: 'Membership — Guestlist Market',
+    where: 'Beside the Guestlist Market benefit',
+    guidance: 'A table, a bar, a shop — an independent place worth knowing.',
+    fallback: '/images/supper-club.jpg',
+  },
+  {
+    key: 'membership.doGood',
+    label: 'Membership — Do good for others',
+    where: 'Beside the Do good for others benefit',
+    guidance: 'People, together, doing something that is not about a dance floor.',
+    fallback: '/images/sound-healing.jpg',
   },
 ];
 

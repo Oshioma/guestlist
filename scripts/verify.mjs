@@ -2197,7 +2197,7 @@ console.log('\n— The pictures on the site —');
   check('the desk lists the pictures', page.includes('Pictures'));
   check('naming each one and where it lands',
     page.includes('Home — first panel') && page.includes('Membership — Get in free')
-      && page.includes('The top of the Queue jump card'));
+      && page.includes('Beside the Queue jump benefit'));
   check('and showing what is in each slot now', page.includes('/images/hero.jpg'));
 
   check('a member cannot see them',
@@ -2263,6 +2263,98 @@ console.log('\n— The pictures on the site —');
   await desk.fetch('/api/admin/site/images', {
     method: 'POST', body: JSON.stringify({ slot: 'membership.hero', url: null }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// AN ARTIST PAGE LEADS WITH A DATE, AND THE CLIPS ARE CLIPS.
+//
+// Somebody on an artist's page most often wants to know where they are
+// playing; the interview archive is why they stay, not why they arrived. And
+// nobody arrives wanting fifty minutes of video — they want the two minutes
+// where the artist says the interesting thing, with a sentence saying what
+// that is.
+console.log('\n— An artist page —');
+{
+  const [artist] = await q(`select id, slug, name from artists where slug = 'aya-sable'`);
+  check('the seeded artist is there', !!artist);
+
+  // A published interview with one clip, made here so the assertions below
+  // are about the page and not about whatever happens to be in the database.
+  const [video] = await q(
+    `insert into artist_videos (youtube_video_id, title, thumbnail_url, published_at,
+                                duration_seconds, source_url, status, is_interview, transcript_status)
+     values ('verifyClip01', 'The verify interview', '/images/secret-party.jpg', now() - interval '9 days',
+             2400, 'https://www.youtube.com/watch?v=verifyClip01', 'published', true, 'ready')
+     returning id`);
+  await q(`insert into artist_video_artists (video_id, artist_id, role, source)
+           values ($1, $2, 'interviewee', 'admin')`, [video.id, artist.id]);
+  await q(
+    `insert into artist_video_moments (video_id, start_seconds, end_seconds, title, summary,
+                                       topic_slug, topic_label, status, source)
+     values ($1, 754, 980, 'The record shop that started it',
+             'Fifteen years old in a Bristol basement, spending the bus fare on dubplates.',
+             'origins', 'Origins', 'published', 'admin')`, [video.id]);
+
+  const page = await (await client().fetch(`/artists/${artist.slug}`)).text();
+  check('it loads', page.includes(artist.name));
+
+  // Order is the point: the dates have to come before the archive.
+  const playing = page.indexOf('Playing next');
+  const clips = page.indexOf('In their words');
+  check('where they are playing comes first', playing > 0 && clips > 0 && playing < clips,
+    `playing at ${playing}, clips at ${clips}`);
+
+  check('the clip is on the page', page.includes('The record shop that started it'));
+  check('and it says what it is about',
+    page.includes('spending the bus fare on dubplates'));
+  check('with the timestamp it starts at', page.includes('12:34'));
+  check('and a link straight to that second',
+    page.includes('watch?v=verifyClip01&amp;t=754s') || page.includes('watch?v=verifyClip01&t=754s'));
+
+  // The full interview is no longer offered as a thing to watch. Asked of the
+  // markup only: in dev the React payload carries every prop as data, and that
+  // is not something a reader can see or click.
+  const visible = page.replace(/<script[\s\S]*?<\/script>/g, '');
+  check('the interview itself is not the headline',
+    !visible.includes('The verify interview'), 'the whole video should not be offered');
+  check('nor is there a way into the fifty minutes',
+    !visible.includes('Watch the full interview'));
+
+  await q(`delete from artist_videos where id = $1`, [video.id]);
+}
+
+// ---------------------------------------------------------------------------
+// ARTISTS BELONG ON THE PEOPLE PAGE.
+//
+// One follower is enough: somebody cared, which is the whole signal. And
+// /people is a directory of people, not a place to file a missing event —
+// the paste-a-link box belongs where somebody is looking at events.
+console.log('\n— Artists on the people page —');
+{
+  const [artist] = await q(
+    `select a.id, a.name from artists a
+      join member_follows f on f.entity_type = 'artist' and f.entity_id = a.id
+     group by a.id having count(*) >= 1 order by count(*) desc limit 1`);
+  check('the seed has an artist somebody follows', !!artist);
+
+  const people = await (await nadia.fetch('/people')).text();
+  check('the page names the section', people.includes('Artists people follow'));
+  check('and the artist is in it', people.includes(artist.name));
+  check('under the members, not above them',
+    people.indexOf('Your people') < people.indexOf('Artists people follow'));
+
+  // An artist nobody follows is not filler.
+  const [lonely] = await q(
+    `select name from artists a
+      where not exists (select 1 from member_follows f
+                         where f.entity_type = 'artist' and f.entity_id = a.id)
+      order by a.name limit 1`);
+  check('an artist nobody follows is left off', !!lonely && !people.includes(`>${lonely.name}<`),
+    lonely && lonely.name);
+
+  check('the add-an-event box is gone from /people', !people.includes('Know something we’re missing?'));
+  check('but it is still where events are', 
+    (await (await client().fetch('/events')).text()).includes('Know something we’re missing?'));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

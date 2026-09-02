@@ -541,6 +541,24 @@ for (const [a, b] of friendPairs) {
 }
 for (const [a, b] of oneWayFollows) await followMember(a, b);
 
+// --- artist follows ---
+// An artist with even one follower earns a place on /people, so the seed has
+// to contain some: without these the "Artists people follow" section is a
+// section that never renders, and nothing tests it.
+const artistFollows = [
+  ['Aya Sable', ['oshi@guestlist.net', 'dev-nadia@example.com', 'dev-kwame@example.com']],
+  ['Junglist Mo', ['oshi@guestlist.net', 'dev-jules@example.com']],
+  ['Marcy Vale', ['dev-dan@example.com', 'dev-sophie@example.com']],
+  ['Foxglove', ['dev-priya@example.com']],
+];
+for (const [artist, emails] of artistFollows) {
+  for (const email of emails) {
+    if (!memberId[email] || !artistId[artist]) continue;
+    await q(`insert into member_follows (member_id, entity_type, entity_id)
+             values ($1, 'artist', $2) on conflict do nothing`, [memberId[email], artistId[artist]]);
+  }
+}
+
 // --- canonical locations (V2C) ---
 // Mirror of the migration-005 backfill so a freshly seeded dev database has
 // the same structured geography a migrated production database gets.

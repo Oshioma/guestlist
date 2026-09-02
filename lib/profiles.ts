@@ -79,6 +79,39 @@ export type ArtistProfile = {
   genres: { name: string; slug: string }[];
 };
 
+export type FollowedArtist = {
+  id: string; name: string; slug: string; image_url: string | null;
+  follower_count: number; upcoming_count: number; following: boolean;
+};
+
+/**
+ * Artists somebody on Guestlist actually follows.
+ *
+ * ONE FOLLOWER IS THE BAR, and it is deliberately low: an artist nobody
+ * follows is a name that arrived with an event listing, and a directory of
+ * those is a phone book. The moment one person cares, the artist is part of
+ * this scene and belongs on the page about it.
+ */
+export async function followedArtists(
+  viewerId: string | null | undefined, limit = 24
+): Promise<FollowedArtist[]> {
+  return query<FollowedArtist>(
+    `select a.id, a.name, a.slug, a.image_url,
+            count(f.member_id)::int as follower_count,
+            (select count(*)::int from event_artists ea
+               join events e on e.id = ea.event_id
+              where ea.artist_id = a.id and e.status = 'live' and e.start_at > now()) as upcoming_count,
+            bool_or(f.member_id = $1) as following
+       from artists a
+       join member_follows f on f.entity_type = 'artist' and f.entity_id = a.id
+      group by a.id
+      having count(f.member_id) >= 1
+      order by count(f.member_id) desc, a.name
+      limit $2`,
+    [viewerId ?? null, limit]
+  );
+}
+
 export async function getArtistBySlug(slug: string): Promise<ArtistProfile | null> {
   return queryOne<ArtistProfile>(
     `select a.id, a.name, a.slug, a.image_url, a.website,

@@ -30,7 +30,7 @@ const NO_FOOTER = [/^\/archive(\/|$)/];
 //
 // The links below it still earn their place everywhere — add an article,
 // terms, the contact address.
-const NO_ADD_BOX = [/^\/admin(\/|$)/, /^\/membership(\/|$)/];
+const NO_ADD_BOX = [/^\/admin(\/|$)/, /^\/membership(\/|$)/, /^\/people(\/|$)/];
 
 export function SiteFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdmin: boolean }) {
   const router = useRouter();
