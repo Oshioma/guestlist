@@ -97,9 +97,11 @@ export function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
         <div className="mbPerkHeroArt" aria-hidden>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/images/secret-party.jpg" alt="" />
-          <div className="mbPerkPrice">
-            <span className="mbPerkPriceNum">£0</span>
-            <span className="mbPerkPriceWord">Entry</span>
+          {/* The words, not a number. A price of £0 invites the reader to
+              start pricing the thing; "free guestlist" names what they get. */}
+          <div className="mbPerkStamp">
+            <span className="mbPerkStampBig">Free</span>
+            <span className="mbPerkStampWord">Guestlist</span>
           </div>
         </div>
       </div>

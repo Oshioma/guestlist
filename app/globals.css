@@ -3410,7 +3410,7 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
    top, the two you feel on the night take a row, the standing three sit
    underneath.
    =========================================================================== */
-.mbPerks { display: grid; gap: 14px; margin-top: 22px; }
+.mbPerks { display: grid; gap: 14px; margin-top: 34px; }
 
 /* --- The hero claim ------------------------------------------------------ */
 .mbPerkHero {
@@ -3428,9 +3428,9 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
   text-transform: uppercase; color: var(--accent-ink);
 }
 .mbPerkBig {
-  font-size: clamp(38px, 6.4vw, 68px);
-  font-weight: 800; letter-spacing: -0.035em; line-height: 0.92;
-  margin: 14px 0 0; text-transform: uppercase;
+  font-size: clamp(34px, 5.2vw, 56px);
+  font-weight: 800; letter-spacing: -0.035em; line-height: 0.94;
+  margin: 12px 0 0; text-transform: uppercase;
 }
 .mbPerkSub {
   font-size: clamp(18px, 2.4vw, 24px); font-weight: 750;
@@ -3459,26 +3459,30 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 }
 /* The number sits over the picture, tilted, so the claim reads before the
    photograph does. */
-.mbPerkPrice {
-  position: absolute; left: -6%; top: 50%;
+/* The stamp on the photograph. Two words in the brand's own arrangement —
+   a big weight over a letterspaced lockup — so it reads as the wordmark does
+   rather than as a price tag. */
+.mbPerkStamp {
+  position: absolute; left: -8%; top: 50%;
   transform: translateY(-50%) rotate(-6deg);
   /* Deliberately light in both themes: it sits on a photograph, not on the
      page ground, and a dark card on a dark photo disappears. */
   background: #ede4f6;
   border-radius: var(--radius);
-  padding: clamp(18px, 3vw, 30px) clamp(20px, 3.4vw, 34px);
+  padding: clamp(16px, 2.6vw, 26px) clamp(20px, 3.2vw, 32px);
   text-align: center;
   box-shadow: 0 18px 40px rgba(15, 14, 10, 0.16);
 }
-.mbPerkPriceNum {
+.mbPerkStampBig {
   display: block;
-  font-size: clamp(46px, 7vw, 76px); font-weight: 800;
-  letter-spacing: -0.05em; line-height: 0.86; color: var(--accent);
+  font-size: clamp(38px, 5.6vw, 62px); font-weight: 800;
+  letter-spacing: -0.045em; line-height: 0.86;
+  text-transform: uppercase; color: var(--accent);
 }
-.mbPerkPriceWord {
-  display: block; margin-top: 6px;
-  font-size: clamp(13px, 1.6vw, 17px); font-weight: 800;
-  letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent);
+.mbPerkStampWord {
+  display: block; margin-top: 7px;
+  font-size: clamp(11.5px, 1.5vw, 15px); font-weight: 800;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent);
 }
 
 /* --- Cards --------------------------------------------------------------- */
@@ -3561,7 +3565,7 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 @media (max-width: 900px) {
   .mbPerkHero { grid-template-columns: 1fr; }
   .mbPerkHeroArt { min-height: 220px; order: -1; }
-  .mbPerkPrice { left: auto; right: 18px; top: auto; bottom: -26px; transform: rotate(-6deg); }
+  .mbPerkStamp { left: auto; right: 16px; top: auto; bottom: -24px; transform: rotate(-6deg); }
   .mbPerkHeroText { padding-top: 40px; }
   .mbPerkTrio { grid-template-columns: 1fr; }
 }
