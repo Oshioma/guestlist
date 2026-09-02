@@ -39,6 +39,7 @@ export const MIGRATION_FILES: string[] = [
   '032_rendered_sources.sql',
   '033_json_scan_method.sql',
   '034_source_scan_cap.sql',
+  '035_signup_provenance.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
@@ -198,6 +199,7 @@ export const EXPECTED_COLUMNS: string[] = [
   'members.looking_for',
   'members.now_doing',
   'members.raving_since',
+  'members.signup_ip_hash',
   'members.slug',
   'notifications.announcement_id',
   'notifications.archive_event_id',

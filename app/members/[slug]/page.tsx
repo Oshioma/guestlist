@@ -5,6 +5,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
+import { DeleteMember } from '@/components/admin/DeleteMember';
 import { query, queryOne } from '@/lib/db';
 import { getPrivacy } from '@/lib/privacy';
 import { connectionBetween, isBlockedEitherWay, isCloseFriend } from '@/lib/connections';
@@ -26,10 +27,10 @@ export default async function MemberProfilePage({ params }: { params: Promise<{ 
     id: string; display_name: string; slug: string; avatar_url: string | null;
     home_city: string | null; home_country: string | null; bio: string | null;
     raving_since: number | null; now_doing: string | null; looking_for: string | null;
-    created_at: string;
+    role: string; created_at: string;
   }>(
     `select id, display_name, slug, avatar_url, home_city, home_country, bio,
-            raving_since, now_doing, looking_for, created_at::text
+            raving_since, now_doing, looking_for, role, created_at::text
        from members where slug = $1`,
     [slug]
   );
@@ -103,6 +104,13 @@ export default async function MemberProfilePage({ params }: { params: Promise<{ 
   return (
     <main className="wrap profileWrap">
       <ClubTrack type="member_profile_viewed" />
+      {/* Where the problem is seen. An admin who has just opened a profile
+          full of gibberish should not have to go and find it again in a list. */}
+      {viewer?.role === 'admin' && !isSelf && member.role !== 'admin' && (
+        <div style={{ marginBottom: 10 }}>
+          <DeleteMember memberId={member.id} name={member.display_name} />
+        </div>
+      )}
       <div className="profileHead">
         {member.avatar_url ? (
           // eslint-disable-next-line @next/next/no-img-element

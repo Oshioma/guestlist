@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -13,6 +13,9 @@ function SignupForm() {
   // what is on near somebody at the top of the page without knowing where
   // "near" is, so it asks once before letting the blank through.
   const [askingCity, setAskingCity] = useState(false);
+  // When this form was put on screen. A post that arrives faster than anybody
+  // could read the form was not filled in by a person.
+  const renderedAt = useRef(Date.now());
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -34,6 +37,8 @@ function SignupForm() {
         password: form.get('password'),
         displayName: form.get('displayName'),
         homeCity: form.get('homeCity'),
+        nickname: form.get('nickname'),
+        startedAt: renderedAt.current,
       }),
     });
     setBusy(false);
@@ -52,6 +57,12 @@ function SignupForm() {
       <div className="sub">
         Find the nights worth going to — and the people you used to share
         dance floors with.
+      </div>
+      {/* Not for people: hidden from sight, from screen readers and from the
+          tab order, so only something filling in every input will fill it. */}
+      <div aria-hidden="true" style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }}>
+        <label htmlFor="nickname">Leave this empty</label>
+        <input id="nickname" name="nickname" type="text" tabIndex={-1} autoComplete="off" defaultValue="" />
       </div>
       <label htmlFor="displayName">Name</label>
       <input id="displayName" name="displayName" required autoComplete="name" />

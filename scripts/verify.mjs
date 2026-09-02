@@ -869,6 +869,89 @@ console.log('\n— The review queue names its sources —');
   await q(`delete from event_sources where id = $1`, [src.id]);
 }
 
+// Deleting somebody, and the two mistakes that must be impossible.
+console.log('\n— Removing a member —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  const [spam] = await q(
+    `insert into members (email, password_hash, display_name, slug, home_city)
+     values ('spam-bot@example.invalid', 'x', 'Spam Bot', 'spam-bot-000001', 'Nowhere')
+     returning id`
+  );
+  // Something of theirs that other people can see, to prove the sweep is real.
+  await q(
+    `insert into events (slug, title, title_normalized, start_at, timezone, status, city, country, created_by)
+     values ('spam-night', 'Spam Night', 'spam night', now() + interval '30 days',
+             'Europe/London', 'new', 'Nowhere', 'United Kingdom', $1)`, [spam.id]
+  );
+
+  check('a member cannot delete anybody',
+    (await nadia.fetch(`/api/admin/members/${spam.id}`, { method: 'DELETE' })).status === 403);
+
+  const [me] = await q(`select id from members where email = 'oshi@guestlist.net'`);
+  const self = await desk.fetch(`/api/admin/members/${me.id}`, { method: 'DELETE' });
+  check('an admin cannot delete themselves', self.status === 400);
+
+  const [otherAdmin] = await q(
+    `insert into members (email, password_hash, display_name, slug, role)
+     values ('second-admin@example.invalid', 'x', 'Second Admin', 'second-admin-000001', 'admin')
+     returning id`
+  );
+  const adminDel = await desk.fetch(`/api/admin/members/${otherAdmin.id}`, { method: 'DELETE' });
+  check('nor another admin without demoting them first', adminDel.status === 400);
+
+  const gone = await desk.fetch(`/api/admin/members/${spam.id}`, { method: 'DELETE' });
+  check('but a spam account goes', gone.status === 200);
+  check('and is really gone',
+    (await q(`select 1 from members where id = $1`, [spam.id])).length === 0);
+  check('what they left behind survives without them',
+    (await q(`select created_by from events where slug = 'spam-night'`))[0]?.created_by === null);
+  check('and the deletion is on the record',
+    (await q(`select 1 from audit_log where action = 'member_deleted'`)).length > 0);
+
+  await q(`delete from events where slug = 'spam-night'`);
+  await q(`delete from members where id = $1`, [otherAdmin.id]);
+}
+
+// Signing up is for people: a form filled in by something that cannot see it,
+// or faster than anybody can read it, does not get an account.
+console.log('\n— Signup is for people —');
+{
+  const bot = client();
+  const honeypot = await bot.fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: 'bot1@example.invalid', password: 'password123',
+      displayName: 'Bot One', homeCity: 'Leeds', nickname: 'filled in',
+    }),
+  });
+  check('a form field only a script would fill in stops the signup', honeypot.status === 400);
+  check('and no account was made',
+    (await q(`select 1 from members where email = 'bot1@example.invalid'`)).length === 0);
+
+  const tooFast = await bot.fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: 'bot2@example.invalid', password: 'password123',
+      displayName: 'Bot Two', homeCity: 'Leeds', startedAt: Date.now(),
+    }),
+  });
+  check('a form posted faster than it can be read stops too', tooFast.status === 400);
+
+  const person = await bot.fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: 'slow-human@example.invalid', password: 'password123',
+      displayName: 'Slow Human', homeCity: 'Leeds',
+      startedAt: Date.now() - 30_000, nickname: '',
+    }),
+  });
+  check('somebody who filled the form in normally still gets in', person.status === 200);
+  await q(`delete from members where email = 'slow-human@example.invalid'`);
+}
+
 // A source is never put on a schedule by anything but a person.
 console.log('\n— Nothing schedules itself —');
 {

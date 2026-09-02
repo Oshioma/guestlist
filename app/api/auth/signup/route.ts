@@ -5,6 +5,7 @@ import { memberSlug } from '@/lib/members';
 import { notifyAdminsNewMember } from '@/lib/adminNotify';
 import { findOrCreateCity } from '@/lib/locations';
 import { canonicalCity } from '@/lib/cityNames';
+import { HONEYPOT_FIELD, hashIp, looksAutomated, requestIp, signupsFromIp, SIGNUPS_PER_IP_PER_DAY } from '@/lib/botCheck';
 
 export async function POST(req: NextRequest) {
   const data = await req.json().catch(() => ({}));
@@ -23,6 +24,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'A display name is required' }, { status: 400 });
   }
 
+  // A form filled in by something that cannot see it, or faster than anybody
+  // can read it. Answered with the same sentence a person would get from a
+  // genuine mistake — telling a script which check it failed is telling it
+  // what to change.
+  if (looksAutomated({ honeypot: data[HONEYPOT_FIELD], startedAt: data.startedAt })) {
+    return NextResponse.json({ error: 'Unable to sign up. Please try again.' }, { status: 400 });
+  }
+
+  const ipHash = hashIp(requestIp(req.headers));
+  if (ipHash && (await signupsFromIp(ipHash)) >= SIGNUPS_PER_IP_PER_DAY) {
+    return NextResponse.json(
+      { error: 'Too many accounts have been created from this connection today. Try again tomorrow, or email info@guestlist.net.' },
+      { status: 429 }
+    );
+  }
+
   const existing = await queryOne('select 1 from members where lower(email) = $1', [email]);
   if (existing) {
     return NextResponse.json({ error: 'That email is already registered' }, { status: 409 });
@@ -31,9 +48,9 @@ export async function POST(req: NextRequest) {
   // The profile slug is generated here — without it every link to this
   // member's profile would point at /members/null.
   const member = await queryOne<{ id: string }>(
-    `insert into members (email, password_hash, display_name, home_city)
-     values ($1, $2, $3, $4) returning id`,
-    [email, hashPassword(password), displayName, homeCity]
+    `insert into members (email, password_hash, display_name, home_city, signup_ip_hash)
+     values ($1, $2, $3, $4, $5) returning id`,
+    [email, hashPassword(password), displayName, homeCity, ipHash]
   );
   await query(`update members set slug = $2 where id = $1`,
     [member!.id, memberSlug(displayName, member!.id)]);
