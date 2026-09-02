@@ -1782,6 +1782,64 @@ console.log('\n— Asking members with no city —');
     you.includes('gl_city_prompt_dismissed') === false || !you.includes('Where are you?'));
 }
 
+// ---------------------------------------------------------------------------
+// An admin reading the site is still an admin. The fix for a bad night or a bad
+// piece belongs on the page where the problem is visible — and nowhere else.
+console.log('\n— Admin edit and delete, in place —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  const [live] = await q(
+    `insert into events (slug, title, title_normalized, start_at, timezone, status, city, country)
+     values ('admin-actions-night', 'Admin Actions Night', 'admin actions night',
+             now() + interval '21 days', 'Europe/London', 'live', 'London', 'United Kingdom')
+     returning id, slug, title`
+  );
+  const [author] = await q(`select id from members where email = 'dev-jules@example.com'`);
+  const [piece] = await q(
+    `insert into articles (section_id, author_id, slug, title, body, status, published_at,
+                           hero_image_url, reading_minutes)
+     select s.id, $1, 'admin-actions-piece', 'Admin Actions Piece',
+            'A published piece the verify suite deletes from its own page. ',
+            'published', now(), 'https://images.example.com/hero.jpg', 3
+       from editorial_sections s where s.slug = 'balance'
+     returning id`, [author.id]
+  );
+
+  const anonEvent = await (await client().fetch(`/events/${live.slug}`)).text();
+  check('a visitor is never offered the delete button', !anonEvent.includes('Delete event'));
+
+  const memberSide = client();
+  await memberSide.login('dev-jules@example.com');
+  check('nor is an ordinary member',
+    !(await (await memberSide.fetch(`/events/${live.slug}`)).text()).includes('Delete event'));
+
+  const adminEvent = await (await desk.fetch(`/events/${live.slug}`)).text();
+  check('an admin gets both buttons on the night itself',
+    adminEvent.includes('Delete event') && adminEvent.includes(`/admin/events/${live.id}`));
+
+  const adminArticle = await (await desk.fetch('/balance/admin-actions-piece')).text();
+  check('and on the piece itself',
+    adminArticle.includes('Delete article') && adminArticle.includes(`/admin/articles?id=${piece.id}`));
+
+  check('a member cannot delete an article through the admin door',
+    (await memberSide.fetch(`/api/admin/articles/${piece.id}`, { method: 'DELETE' })).status === 403);
+  check('the article is still there', (await q(`select 1 from articles where id = $1`, [piece.id])).length === 1);
+
+  check('an admin can',
+    (await desk.fetch(`/api/admin/articles/${piece.id}`, { method: 'DELETE' })).status === 200);
+  check('and it is really gone', (await q(`select 1 from articles where id = $1`, [piece.id])).length === 0);
+  check('with the deletion on the record',
+    (await q(`select 1 from audit_log where action = 'article_deleted'`)).length > 0);
+  check('deleting an article that is already gone is a 404, not a crash',
+    (await desk.fetch(`/api/admin/articles/${piece.id}`, { method: 'DELETE' })).status === 404);
+
+  check('the same holds for a night',
+    (await desk.fetch(`/api/admin/events/${live.id}`, { method: 'DELETE' })).status === 200);
+  check('the night is gone', (await q(`select 1 from events where id = $1`, [live.id])).length === 0);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

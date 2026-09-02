@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, AuthError } from '@/lib/auth';
-import { adminEditArticle, adminReviewArticle } from '@/lib/articles';
+import { adminDeleteArticle, adminEditArticle, adminReviewArticle } from '@/lib/articles';
 
 const ACTIONS=new Set(['request_changes','approve','publish','reject','archive','feature']);
 export async function PATCH(req:NextRequest,{params}:{params:Promise<{id:string}>}){
@@ -11,4 +11,12 @@ export async function PATCH(req:NextRequest,{params}:{params:Promise<{id:string}
     const article=await adminReviewArticle(id,me.id,body.action,typeof body.note==='string'?body.note:undefined,body.featured===true);
     return article?NextResponse.json({article}):NextResponse.json({error:'Not found'},{status:404});
   } catch(e){ if(e instanceof AuthError)return NextResponse.json({error:e.message},{status:e.status}); console.error(e); return NextResponse.json({error:e instanceof Error?e.message:'Moderation failed'},{status:400}); }
+}
+
+export async function DELETE(_req:NextRequest,{params}:{params:Promise<{id:string}>}){
+  try{
+    const me=await requireAdmin(); const {id}=await params;
+    const gone=await adminDeleteArticle(id,me.id);
+    return gone?NextResponse.json({ok:true}):NextResponse.json({error:'Not found'},{status:404});
+  } catch(e){ if(e instanceof AuthError)return NextResponse.json({error:e.message},{status:e.status}); console.error(e); return NextResponse.json({error:'Could not delete article'},{status:400}); }
 }
