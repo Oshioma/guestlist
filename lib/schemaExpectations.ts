@@ -36,6 +36,7 @@ export const MIGRATION_FILES: string[] = [
   '029_canonical_city_names.sql',
   '030_membership_market.sql',
   '031_ask_guestlist.sql',
+  '032_rendered_sources.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
@@ -166,6 +167,7 @@ export const EXPECTED_COLUMNS: string[] = [
   'event_sources.feed_url',
   'event_sources.poll_frequency_hours',
   'event_sources.polling_enabled',
+  'event_sources.render_js',
   'event_sources.trust',
   'event_submissions.ip_hash',
   'events.canonical_url',

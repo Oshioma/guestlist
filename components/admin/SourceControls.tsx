@@ -15,7 +15,7 @@ type ScanSummary = {
 };
 
 export function SourceControls({
-  id, name, url, feedUrl, active, trust, pollingEnabled, pollFrequencyHours,
+  id, name, url, feedUrl, active, trust, pollingEnabled, pollFrequencyHours, renderJs,
   city, country, genreIds, genres, countries,
 }: {
   id: string;
@@ -25,6 +25,7 @@ export function SourceControls({
   active: boolean;
   trust: string;
   pollingEnabled: boolean;
+  renderJs: boolean;
   pollFrequencyHours: number;
   city: string | null;
   country: string | null;
@@ -137,6 +138,19 @@ export function SourceControls({
             disabled={busy}
           />
           poll
+        </label>
+        {/* Only for the handful of sites that hand a bot an empty shell. It
+            costs a hosted browser per scan, so it is a decision, not a
+            default — the test fetch says when it is the right one. */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+               title="Fetch this source through a real browser, for sites that build their listings in the browser">
+          <input
+            type="checkbox"
+            checked={renderJs}
+            onChange={(e) => patch({ renderJs: e.target.checked })}
+            disabled={busy}
+          />
+          render
         </label>
         <select
           value={pollFrequencyHours}

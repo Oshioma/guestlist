@@ -10,12 +10,15 @@ import { parse } from 'node-html-parser';
 import { safeFetch, type SafeFetchResult } from './safeFetch';
 import { identifyCandidateLinks, identifyEmbeddedLinks, pageFilterLinks, parseFeedLinks, looksLikeFeed, looksLikeSitemap, walkSitemap, canonicaliseCandidateUrl, findSitemapEvents, looksClientRendered } from './scanner';
 import { supplyConfig } from './config';
+import { renderFetch, renderingConfigured } from './render';
 import type { FetchProbe, ProbeResult } from './verdict';
 
 export type { FetchProbe, ProbeResult } from './verdict';
 
 const BROWSER_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+// Below this many links, a page is worth re-reading in a browser.
+const FEW_FOR_RENDER = 5;
 const SCANNER_ACCEPT =
   'application/rss+xml,application/atom+xml,text/html,application/xhtml+xml,application/xml;q=0.9';
 
@@ -152,10 +155,26 @@ export async function probeTarget(
   const servesBrowsersMore =
     browserCandidates !== null && browserCandidates >= 5 && browserCandidates >= (candidates ?? 0) * 3;
 
+  // WOULD RENDERING HELP? Asked here rather than left to the admin to guess,
+  // because the answer is one fetch away and the alternative is ticking a box
+  // to find out. Only when the page looks client-rendered or gave us almost
+  // nothing — a page that already works is never rendered to check.
+  let renderedCandidates: number | null = null;
+  let renderNote: string | null = null;
+  if (renderingConfigured() && method === 'html' && (clientRendered || (candidates ?? 0) < FEW_FOR_RENDER)) {
+    const attempt = await renderFetch(target, { accept: SCANNER_ACCEPT });
+    if (attempt.render.rendered && attempt.result.ok) {
+      renderedCandidates = identifyCandidateLinks(attempt.result.body, attempt.result.finalUrl, target).length;
+    } else if (!attempt.render.rendered && attempt.render.reason === 'failed') {
+      renderNote = attempt.render.detail ?? 'The renderer could not load this page';
+    }
+  }
+
   const result: ProbeResult = {
     target, bot: toProbe(asBot), browser: toProbe(asBrowser), method, candidates,
     candidateUrls, clientRendered, embedded, sampleUrls, browserCandidates, ownFilters,
     skippedSitemaps, declaredSitemap, urlsSeen, sitemapsRead,
+    renderedCandidates, renderNote,
     servesBrowsersMore,
   };
 

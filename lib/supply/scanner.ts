@@ -8,6 +8,7 @@ import { query, queryOne } from '@/lib/db';
 import { safeFetch, type SafeFetchOptions, type SafeFetchResult } from './safeFetch';
 import { runExtractionPipeline, type PipelineContext } from './pipeline';
 import { supplyConfig } from './config';
+import { fetcherFor } from './render';
 import type { OutcomeTally } from './outcomes';
 import { refreshAdminReviewDigest } from '@/lib/adminNotify';
 
@@ -20,6 +21,7 @@ export type SourceRow = {
   active: boolean;
   trust: string;
   polling_enabled: boolean;
+  render_js: boolean;
   poll_frequency_hours: number;
   last_checked_at: string | null;
 };
@@ -518,7 +520,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promise<ScanResult> {
   const source = await queryOne<SourceRow>(
     `select id, name, url, feed_url, source_type, active, trust, polling_enabled,
-            poll_frequency_hours, last_checked_at::text
+            poll_frequency_hours, render_js, last_checked_at::text
        from event_sources where id = $1`,
     [sourceId]
   );
@@ -529,7 +531,11 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
     [sourceId]
   );
   const scanId = scan!.id;
-  const fetcher = ctx.fetcher ?? safeFetch;
+  // A source flagged as client-rendered goes through a hosted browser; every
+  // other source, and every source when no renderer is configured, fetches
+  // exactly as it always has. A test's own fetcher always wins — the suite
+  // must never reach a network, rendering or not.
+  const fetcher = ctx.fetcher ?? fetcherFor(source.render_js);
 
   const finish = async (r: Omit<ScanResult, 'scanId' | 'couldPoll' | 'outcomes'> & { outcomes?: OutcomeTally }): Promise<ScanResult> => {
     await query(
