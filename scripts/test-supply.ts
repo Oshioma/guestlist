@@ -29,7 +29,7 @@ import { zonedTimeToUtc, parseLocalInTimezone, parseFoundDate, resolveEndCrossin
 import { mapGenreProposals, loadGenres } from '@/lib/supply/genres';
 import { computeOverallConfidence, canAutoPublish } from '@/lib/supply/confidence';
 import { runExtractionPipeline } from '@/lib/supply/pipeline';
-import { scanSource, identifyCandidateLinks, identifyEmbeddedLinks, parseFeedLinks, canonicaliseCandidateUrl, sitemapEventUrls, sitemapIndexUrls } from '@/lib/supply/scanner';
+import { scanSource, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, sitemapEventUrls, sitemapIndexUrls } from '@/lib/supply/scanner';
 import { explainScan, outcomeLabel } from '@/lib/supply/outcomes';
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
@@ -1382,6 +1382,7 @@ async function main() {
     check('a page that already lists its events is not rummaged through',
       identifyCandidateLinks(PLAIN, 'https://plain.example/whats-on').length === 5);
 
+
     // And end to end: the shell scans, and its embedded events become events.
     const shell = (await q(
       `insert into event_sources (source_type, name, url, trust) values ('venue_website', 'Payload site', 'https://payload.example/en/program/filter/', 'trusted') returning id`
@@ -1400,6 +1401,45 @@ async function main() {
     });
     check('a client-rendered shell still yields its events',
       shellScan.method === 'html' && shellScan.extracted === 2, JSON.stringify(shellScan));
+
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— a listing page\u2019s own filters are not events —');
+  {
+    // Verbatim from ADE: the four "candidate event links" on its programme
+    // page were that same page again, with ?section=persons, ?section=venues
+    // and a different type. They passed because the PATH says programme — and
+    // it is the path we were standing on.
+    const ADE = 'https://www.amsterdam-dance-event.nl/en/program/filter/?section=events&type=8262,8263&from=2026-10-21&to=2026-10-25&category=1485951';
+    const TABS = `<html><body>
+      <ul id="event-results"></ul>
+      <a href="/en/program/filter/?section=events&type=8264&from=2026-10-21&to=2026-10-25">Other</a>
+      <a href="/en/program/filter/?section=persons&type=8262%2C8263&from=2026-10-21&to=2026-10-25">Persons</a>
+      <a href="/en/program/filter/?section=venues&type=8262%2C8263&from=2026-10-21&to=2026-10-25">Venues</a>
+    </body></html>`;
+    check('a listing page\u2019s own filter tabs are not candidate events',
+      identifyCandidateLinks(TABS, ADE).length === 0,
+      JSON.stringify(identifyCandidateLinks(TABS, ADE)));
+    check('and they are counted so zero has a reason',
+      pageFilterLinks(TABS, ADE) === 3, String(pageFilterLinks(TABS, ADE)));
+
+    // The exception that keeps older sites working: a query key the page does
+    // not have is identity, not a facet.
+    const listing = new URL('https://old.example/events/?view=list');
+    check('a link introducing a new query key is identity, not a filter',
+      !isFacetOfPage(new URL('https://old.example/events/?id=1234'), listing));
+    check('a narrower value of a key the page already has is a filter',
+      isFacetOfPage(new URL('https://old.example/events/?view=grid'), listing));
+    check('a different path is never a filter of this one',
+      !isFacetOfPage(new URL('https://old.example/events/friday-night'), listing));
+    check('a trailing slash does not make a page a different page',
+      isFacetOfPage(new URL('https://old.example/events?view=grid'), listing));
+    check('an event addressed by query string still survives',
+      identifyCandidateLinks(
+        '<html><body><a href="/events/detail?id=1234">Friday</a></body></html>',
+        'https://old.example/events/detail?view=list'
+      ).length === 1);
   }
 
   // -------------------------------------------------------------------------

@@ -8,7 +8,7 @@
 
 import { parse } from 'node-html-parser';
 import { safeFetch, type SafeFetchResult } from './safeFetch';
-import { identifyCandidateLinks, identifyEmbeddedLinks, parseFeedLinks, looksLikeFeed, looksLikeSitemap, walkSitemap, canonicaliseCandidateUrl, findSitemapEvents, looksClientRendered } from './scanner';
+import { identifyCandidateLinks, identifyEmbeddedLinks, pageFilterLinks, parseFeedLinks, looksLikeFeed, looksLikeSitemap, walkSitemap, canonicaliseCandidateUrl, findSitemapEvents, looksClientRendered } from './scanner';
 import { supplyConfig } from './config';
 import type { FetchProbe, ProbeResult } from './verdict';
 
@@ -69,6 +69,7 @@ export async function probeTarget(
   let found: string[] = [];
   let embedded = 0;
   let sampleUrls: string[] = [];
+  let ownFilters = 0;
   if (asBot.ok) {
     if (looksLikeSitemap(asBot.body)) {
       // Somebody pointed the source straight at a sitemap. Read it as one:
@@ -91,6 +92,7 @@ export async function probeTarget(
       // "this page shipped them, just not as links".
       const inMarkup = new Set(found);
       embedded = identifyEmbeddedLinks(asBot.body, asBot.finalUrl).filter((u) => inMarkup.has(u)).length;
+      ownFilters = pageFilterLinks(asBot.body, asBot.finalUrl);
     }
   }
   const candidates: number | null = asBot.ok ? found.length : null;
@@ -123,7 +125,7 @@ export async function probeTarget(
 
   const result: ProbeResult = {
     target, bot: toProbe(asBot), browser: toProbe(asBrowser), method, candidates,
-    candidateUrls, clientRendered, embedded, sampleUrls, browserCandidates,
+    candidateUrls, clientRendered, embedded, sampleUrls, browserCandidates, ownFilters,
     servesBrowsersMore,
   };
 
