@@ -1,11 +1,11 @@
 // YOUR MEMBERSHIP — the member area. Not a dashboard of coupons: your
-// membership, your events, offers worth your time, what's dropping, and
-// what being part of Guestlist is doing for others.
+// membership, ASK GUESTLIST, your requests, offers worth your time, what's
+// dropping, and what being part of Guestlist is doing for others.
 
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { billingEnabled, currentMemberWithMembership, formatPence, getPlan, membershipLabel } from '@/lib/membership';
-import { memberRequests } from '@/lib/accessRequests';
+import { memberRequests, requestTypeLabel, type MemberRequest } from '@/lib/accessRequests';
 import { listApprovedBusinesses, memberClaims, offerHeadline } from '@/lib/market';
 import { liveDrops, liveGoodCauses, memberDropClaims } from '@/lib/drops';
 import { fmtEventDate } from '@/lib/util';
@@ -15,15 +15,41 @@ import { MemberBadge } from '@/components/membership/MemberBadge';
 
 export const dynamic = 'force-dynamic';
 
-// Upcoming first; a night that has finished (six hours' grace) is history.
-function splitRequests<T extends { start_at: string; end_at: string | null; friendly: { key: string } }>(rows: T[]) {
-  const cutoff = Date.now() - 6 * 3600_000;
-  const upcoming = rows.filter((r) => new Date(r.end_at ?? r.start_at).getTime() > cutoff && r.friendly.key !== 'cancelled');
-  return { upcoming, past: rows.filter((r) => !upcoming.includes(r)) };
+// Live first; a night that has finished (six hours' grace) is history. A
+// request with no date yet stays live for a month.
+function splitRequests(rows: MemberRequest[]) {
+  const now = Date.now();
+  const live = rows.filter((r) => {
+    if (r.friendly.key === 'cancelled') return false;
+    const when = r.end_at ?? r.start_at;
+    return when ? new Date(when).getTime() > now - 6 * 3600_000 : new Date(r.requested_at).getTime() > now - 30 * 86400_000;
+  });
+  return { live, past: rows.filter((r) => !live.includes(r)) };
 }
 
 const fmtMonth = (s: string) => new Date(s).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 const fmtDay = (s: string) => new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+function RequestLine({ r, closed = false }: { r: MemberRequest; closed?: boolean }) {
+  const when = r.start_at ? fmtEventDate(r.start_at, r.end_at, r.timezone ?? 'Europe/London') : `asked ${fmtDay(r.requested_at)}`;
+  return (
+    <div className="requestRow">
+      <div>
+        {r.slug ? <Link href={`/events/${r.slug}`} className="title">{r.title}</Link> : <span className="title">{r.title}</span>}
+        <div className="meta">
+          {[
+            r.origin === 'ask_guestlist' && r.request_type !== 'event_access' ? requestTypeLabel(r.request_type) : null,
+            when, r.venue_name, r.city,
+            r.places > 1 ? 'you +1' : null,
+            r.friendly.key === 'discount' && r.member_price_pence != null ? formatPence(r.member_price_pence, r.currency) : null,
+          ].filter(Boolean).join(' · ')}
+        </div>
+        {!closed && r.friendly.key !== 'working' && <div className="meta">{r.friendly.body}</div>}
+      </div>
+      <span className={`reqChip ${r.friendly.key}`}>{closed && r.friendly.key === 'working' ? 'Closed' : r.friendly.key === 'working' ? 'Working on it' : r.friendly.title}</span>
+    </div>
+  );
+}
 
 export default async function YourMembershipPage() {
   const me = await currentMemberWithMembership();
@@ -34,7 +60,7 @@ export default async function YourMembershipPage() {
   ]);
   const price = formatPence(plan?.price_pence ?? 3000, plan?.currency ?? 'GBP');
   const m = me.membership;
-  const { upcoming, past } = splitRequests(requests);
+  const { live, past } = splitRequests(requests);
   const since = m?.member_since ? fmtMonth(m.member_since) : null;
   const periodEnd = m?.current_period_end ? fmtDay(m.current_period_end) : null;
   const membershipMeta = [
@@ -70,60 +96,28 @@ export default async function YourMembershipPage() {
           </div>
         </section>
 
-        <section className="youPanel">
-          <h2 className="youPanelTitle">Your impact</h2>
-          <p className="youPanelSub">Do good for others.</p>
-          {causes.length > 0 ? (
-            <div>
-              {causes.map((c) => (
-                <div className="requestRow" key={c.id}>
-                  <div>
-                    <div className="title">{c.title}</div>
-                    {c.summary && <div className="meta">{c.summary}</div>}
-                  </div>
-                  {c.link_url && <a className="btnGhost" href={c.link_url} target="_blank" rel="noopener noreferrer" style={{ padding: '6px 12px', fontSize: 11 }}>More</a>}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="impactBox">
-              Being part of Guestlist contributes something positive. The community projects the membership supports will appear here as they’re confirmed — with what they are, not just a number.
-            </div>
-          )}
+        <section className="youPanel askPanelMember">
+          <h2 className="youPanelTitle">Ask Guestlist</h2>
+          <p className="youPanelSub">Want to go somewhere? Need a +1? Found an event we don’t have? Ask us.</p>
+          <div className="youPanelActions">
+            {me.isMember
+              ? <Link href="/you/ask?context=membership_area" className="btnAccent">Ask Guestlist</Link>
+              : <Link href="/membership" className="btnAccent">Members ask Guestlist</Link>}
+            <span className="youHistoryMeta">Paste a link from anywhere — Instagram, RA, a flyer.</span>
+          </div>
         </section>
 
         <section className="youPanel wide">
-          <h2 className="youPanelTitle">Your events</h2>
-          <p className="youPanelSub">Requests and confirmed guestlists. See something you want to go to? Press GET ME IN on the event.</p>
-          {upcoming.length === 0 && (
-            <div className="impactBox">Nothing on the list yet. <Link href="/events" style={{ textDecoration: 'underline' }}>Find something →</Link></div>
+          <h2 className="youPanelTitle">Your requests</h2>
+          <p className="youPanelSub">Everything you’ve asked us for. On an event page, press GET ME IN; anywhere else, Ask Guestlist.</p>
+          {live.length === 0 && (
+            <div className="impactBox">Nothing open right now. <Link href="/events" style={{ textDecoration: 'underline' }}>Find something →</Link>{me.isMember && <> or <Link href="/you/ask" style={{ textDecoration: 'underline' }}>ask Guestlist</Link>.</>}</div>
           )}
-          {upcoming.map((r) => (
-            <div className="requestRow" key={r.id}>
-              <div>
-                <Link href={`/events/${r.slug}`} className="title">{r.title}</Link>
-                <div className="meta">
-                  {fmtEventDate(r.start_at, r.end_at, r.timezone)}{r.venue_name && ` · ${r.venue_name}`}{r.city && ` · ${r.city}`}
-                  {r.places > 1 && ' · you +1'}
-                  {r.friendly.key === 'discount' && r.member_price_pence != null && ` · ${formatPence(r.member_price_pence, r.currency)}`}
-                </div>
-                {r.friendly.key !== 'working' && <div className="meta">{r.friendly.body}</div>}
-              </div>
-              <span className={`reqChip ${r.friendly.key}`}>{r.friendly.key === 'working' ? 'Working on it' : r.friendly.title}</span>
-            </div>
-          ))}
+          {live.map((r) => <RequestLine key={r.id} r={r} />)}
           {past.length > 0 && (
             <details style={{ marginTop: 12 }}>
               <summary className="youHistoryMeta" style={{ cursor: 'pointer' }}>Past requests ({past.length})</summary>
-              {past.map((r) => (
-                <div className="requestRow" key={r.id}>
-                  <div>
-                    <Link href={`/events/${r.slug}`} className="title">{r.title}</Link>
-                    <div className="meta">{fmtEventDate(r.start_at, r.end_at, r.timezone)}</div>
-                  </div>
-                  <span className={`reqChip ${r.friendly.key}`}>{r.friendly.key === 'working' ? 'Closed' : r.friendly.title}</span>
-                </div>
-              ))}
+              {past.map((r) => <RequestLine key={r.id} r={r} closed />)}
             </details>
           )}
         </section>
@@ -182,6 +176,28 @@ export default async function YourMembershipPage() {
             </div>
           ))}
           <div className="youPanelActions"><Link href="/market" className="youHistoryMeta" style={{ textDecoration: 'underline' }}>Everything in the Market →</Link></div>
+        </section>
+
+        <section className="youPanel">
+          <h2 className="youPanelTitle">Your impact</h2>
+          <p className="youPanelSub">Do good for others.</p>
+          {causes.length > 0 ? (
+            <div>
+              {causes.map((c) => (
+                <div className="requestRow" key={c.id}>
+                  <div>
+                    <div className="title">{c.title}</div>
+                    {c.summary && <div className="meta">{c.summary}</div>}
+                  </div>
+                  {c.link_url && <a className="btnGhost" href={c.link_url} target="_blank" rel="noopener noreferrer" style={{ padding: '6px 12px', fontSize: 11 }}>More</a>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="impactBox">
+              Being part of Guestlist contributes something positive. The community projects the membership supports will appear here as they’re confirmed — with what they are, not just a number.
+            </div>
+          )}
         </section>
       </div>
     </main>

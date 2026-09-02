@@ -95,7 +95,18 @@ export type AnalyticsEventType =
   | 'market_business_applied'
   | 'market_business_decided'
   | 'member_drop_viewed'
-  | 'member_drop_claimed';
+  | 'member_drop_claimed'
+  // ASK GUESTLIST
+  | 'ask_guestlist_opened'
+  | 'ask_guestlist_submitted'
+  | 'external_event_requested'
+  | 'external_event_linked'
+  | 'external_event_created'
+  | 'plus_one_requested'
+  | 'sold_out_help_requested'
+  | 'recommendation_requested'
+  | 'ask_guestlist_fulfilled'
+  | 'ask_guestlist_declined';
 
 export async function track(
   type: AnalyticsEventType,

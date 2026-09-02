@@ -7,6 +7,7 @@ import { adminActOnRequest, type AdminAction, type AdminActionBody } from '@/lib
 const ACTIONS: AdminAction[] = [
   'reviewing', 'contact_promoter', 'log_outreach', 'confirm_free', 'offer_discount',
   'purchase', 'waitlist', 'decline', 'attended', 'note', 'reopen', 'cancel',
+  'link_event', 'import_event', 'assign_promoter', 'message_member', 'answer',
 ];
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

@@ -66,7 +66,7 @@ export async function requestOverview(): Promise<RequestOverview> {
        from member_access_requests`
     ),
     query<{ reason: string; n: number }>(
-      `select coalesce(decline_reason, 'other') as reason, count(*)::int as n from member_access_requests
+      `select coalesce(outcome_reason, 'other') as reason, count(*)::int as n from member_access_requests
         where status = 'unavailable' group by 1 order by 2 desc`
     ),
     query<RequestOverview['top_events'][number]>(
@@ -211,4 +211,75 @@ export async function waitlistRows(limit = 200): Promise<{ email: string; displa
        left join members m on m.id = w.member_id order by w.created_at desc limit $1`,
     [limit]
   );
+}
+
+// --- ASK GUESTLIST: what members want that Guestlist does not have -----------------------------
+
+export type ExternalDemand = {
+  asks_total: number; asks_30d: number; external: number; linked: number; created: number;
+  fulfilled: number; declined: number; promoters_assigned: number; new_relationships: number;
+  by_type: { request_type: string; n: number }[];
+  by_host: { host: string; n: number; members: number; fulfilled: number }[];
+  by_city: { city: string; n: number }[];
+  by_venue: { venue: string; city: string | null; n: number }[];
+  by_promoter: { id: string; name: string; slug: string; relationship_status: string; n: number; fulfilled: number }[];
+  wanted: { id: string; name: string | null; host: string | null; url: string | null; city: string | null; starts_at: string | null; n: number; status: string; linked: boolean }[];
+};
+
+export async function externalDemand(): Promise<ExternalDemand> {
+  const FULFILLED = `('confirmed_free','discounted','purchased_by_guestlist','attended','answered')`;
+  const [s, by_type, by_host, by_city, by_venue, by_promoter, wanted] = await Promise.all([
+    queryOne<Omit<ExternalDemand, 'by_type' | 'by_host' | 'by_city' | 'by_venue' | 'by_promoter' | 'wanted'>>(
+      `select
+         count(*) filter (where r.origin = 'ask_guestlist' and r.status <> 'cancelled')::int as asks_total,
+         count(*) filter (where r.origin = 'ask_guestlist' and r.status <> 'cancelled' and r.requested_at > now() - interval '30 days')::int as asks_30d,
+         count(*) filter (where x.request_id is not null and r.status <> 'cancelled')::int as external,
+         count(*) filter (where x.request_id is not null and r.event_id is not null and r.match_confidence in ('admin','url'))::int as linked,
+         count(*) filter (where x.created_event_id is not null)::int as created,
+         count(*) filter (where r.origin = 'ask_guestlist' and r.status in ${FULFILLED})::int as fulfilled,
+         count(*) filter (where r.origin = 'ask_guestlist' and r.status = 'unavailable')::int as declined,
+         count(*) filter (where r.origin = 'ask_guestlist' and r.promoter_id is not null)::int as promoters_assigned,
+         (select count(distinct o.promoter_id)::int from promoter_outreach o
+           join member_access_requests r2 on r2.id = o.request_id and r2.origin = 'ask_guestlist'
+           where not exists (select 1 from promoter_outreach o2 where o2.promoter_id = o.promoter_id and o2.created_at < o.created_at
+                              and o2.request_id in (select id from member_access_requests where origin = 'get_me_in'))) as new_relationships
+       from member_access_requests r left join member_request_external_events x on x.request_id = r.id`
+    ),
+    query<{ request_type: string; n: number }>(
+      `select request_type, count(*)::int as n from member_access_requests
+        where origin = 'ask_guestlist' and status <> 'cancelled' group by 1 order by 2 desc`),
+    query<ExternalDemand['by_host'][number]>(
+      `select x.url_host as host, count(*)::int as n, count(distinct r.member_id)::int as members,
+              count(*) filter (where r.status in ${FULFILLED})::int as fulfilled
+         from member_request_external_events x join member_access_requests r on r.id = x.request_id
+        where x.url_host is not null and r.status <> 'cancelled' group by 1 order by 2 desc limit 15`),
+    query<{ city: string; n: number }>(
+      `select coalesce(e.city, x.city) as city, count(*)::int as n
+         from member_access_requests r
+         left join events e on e.id = r.event_id
+         left join member_request_external_events x on x.request_id = r.id
+        where r.origin = 'ask_guestlist' and r.status <> 'cancelled' and coalesce(e.city, x.city) is not null
+        group by 1 order by 2 desc limit 15`),
+    query<ExternalDemand['by_venue'][number]>(
+      `select x.venue_name as venue, x.city, count(*)::int as n
+         from member_request_external_events x join member_access_requests r on r.id = x.request_id
+        where x.venue_name is not null and r.status <> 'cancelled' group by 1, 2 order by 3 desc limit 15`),
+    query<ExternalDemand['by_promoter'][number]>(
+      `select p.id, p.name, p.slug, p.relationship_status, count(*)::int as n,
+              count(*) filter (where r.status in ${FULFILLED})::int as fulfilled
+         from member_access_requests r join promoters p on p.id = r.promoter_id
+        where r.origin = 'ask_guestlist' and r.status <> 'cancelled' group by p.id order by n desc limit 15`),
+    query<ExternalDemand['wanted'][number]>(
+      `select r.id, x.name, x.url_host as host, x.url, x.city, x.starts_at::text, r.status,
+              (r.event_id is not null) as linked,
+              (select count(*)::int from member_request_external_events x2 join member_access_requests r2 on r2.id = x2.request_id
+                where x2.url_normalised = x.url_normalised and r2.status <> 'cancelled') as n
+         from member_request_external_events x join member_access_requests r on r.id = x.request_id
+        where r.status <> 'cancelled' and r.event_id is null
+        order by n desc, r.requested_at desc limit 25`),
+  ]);
+  return {
+    ...(s ?? { asks_total: 0, asks_30d: 0, external: 0, linked: 0, created: 0, fulfilled: 0, declined: 0, promoters_assigned: 0, new_relationships: 0 }),
+    by_type, by_host, by_city, by_venue, by_promoter, wanted,
+  };
 }

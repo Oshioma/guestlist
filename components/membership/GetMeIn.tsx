@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { track } from '@/lib/track';
 
-export type FriendlyView = { key: 'working' | 'guestlisted' | 'discount' | 'sorry' | 'cancelled'; title: string; body: string };
+export type FriendlyView = { key: 'working' | 'guestlisted' | 'discount' | 'answered' | 'sorry' | 'cancelled'; title: string; body: string };
 export type RequestView = { id: string; places: number; friendly: FriendlyView; member_price_pence: number | null; currency: string } | null;
 
 export function GetMeIn({
