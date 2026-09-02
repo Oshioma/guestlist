@@ -293,6 +293,38 @@ export function parseFeedLinks(xml: string, baseUrl: string): string[] {
 // without pretending to be a browser.
 const SITEMAP_PATHS = ['/sitemap.xml', '/sitemap_index.xml'];
 
+// ASK THE SITE WHERE ITS SITEMAPS ARE.
+//
+// /sitemap.xml is a convention, not a rule, and on a big site it is often the
+// least interesting one — ADE's holds /en/about/ and nothing else, while its
+// programme lives somewhere our two guessed paths never look. robots.txt is
+// where a site DECLARES its sitemaps, and it is the mechanism every crawler
+// uses. We were guessing at a door the site had already given us the key to.
+//
+// Read only for the Sitemap: lines. Nothing here interprets a rule about what
+// may be fetched; that is a separate question from where the sitemaps are.
+export function sitemapsFromRobots(body: string, baseUrl: string): string[] {
+  const out: string[] = [];
+  for (const line of body.split(/\r?\n/)) {
+    const m = /^\s*sitemap\s*:\s*(\S+)/i.exec(line);
+    if (!m) continue;
+    const canonical = canonicaliseCandidateUrl(m[1], baseUrl);
+    if (!canonical || out.includes(canonical)) continue;
+    let url: URL;
+    try { url = new URL(canonical); } catch { continue; }
+    // Same site only: a declared sitemap on somebody else's host is not this
+    // site's to hand us, and following it would be a crawl we did not intend.
+    if (url.hostname.replace(/^www\./, '') !== new URL(baseUrl).hostname.replace(/^www\./, '')) continue;
+    out.push(canonical);
+    if (out.length >= ROBOTS_SITEMAP_LIMIT) break;
+  }
+  return out;
+}
+
+// Enough to cover a site that splits by section or by year, few enough that a
+// misconfigured robots.txt cannot turn one scan into a crawl.
+const ROBOTS_SITEMAP_LIMIT = 10;
+
 // How a sitemap is asked for, in one place: XML, and a budget that fits one.
 export const sitemapFetchOptions = (): SafeFetchOptions => ({
   accept: 'application/xml,text/xml',
@@ -362,8 +394,18 @@ export async function findSitemapEvents(
 ): Promise<{ url: string; found: number; urls: string[]; sample?: string[]; skipped?: string[] } | null> {
   let sample: string[] = [];
   let skipped: string[] = [];
+
+  // What the site says first, then the two conventional paths. A declared
+  // sitemap is the site telling us where to look; the paths are us guessing.
+  const robots = await fetcher(`${origin}/robots.txt`, { accept: 'text/plain' });
+  const declared = robots.ok ? sitemapsFromRobots(robots.body, origin) : [];
+  const targets = [...declared];
   for (const path of SITEMAP_PATHS) {
-    const target = `${origin}${path}`;
+    if (!targets.includes(`${origin}${path}`)) targets.push(`${origin}${path}`);
+  }
+
+  for (const target of targets) {
+    await sleep(delayMs);
     const res = await fetcher(target, sitemapFetchOptions());
     if (!res.ok || !/<(urlset|sitemapindex)[\s>]/i.test(res.body)) continue;
 
@@ -375,7 +417,7 @@ export async function findSitemapEvents(
     if (walked.skipped.length) skipped = walked.skipped;
   }
   return sample.length || skipped.length
-    ? { url: `${origin}${SITEMAP_PATHS[0]}`, found: 0, urls: [], sample, skipped }
+    ? { url: targets[0] ?? `${origin}${SITEMAP_PATHS[0]}`, found: 0, urls: [], sample, skipped }
     : null;
 }
 

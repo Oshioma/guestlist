@@ -29,7 +29,7 @@ import { zonedTimeToUtc, parseLocalInTimezone, parseFoundDate, resolveEndCrossin
 import { mapGenreProposals, loadGenres } from '@/lib/supply/genres';
 import { computeOverallConfidence, canAutoPublish } from '@/lib/supply/confidence';
 import { runExtractionPipeline } from '@/lib/supply/pipeline';
-import { scanSource, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, sitemapEventUrls, sitemapIndexUrls } from '@/lib/supply/scanner';
+import { scanSource, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, sitemapEventUrls, sitemapIndexUrls, sitemapsFromRobots } from '@/lib/supply/scanner';
 import { explainScan, outcomeLabel } from '@/lib/supply/outcomes';
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
@@ -1348,6 +1348,40 @@ async function main() {
     });
     check('a sitemap is fetched with a sitemap-sized budget, not a page-sized one',
       sitemapBudget > 2_000_000, `${sitemapBudget} — ${JSON.stringify(budgetScan)}`);
+
+    // /sitemap.xml is a convention, not a rule. ADE's holds /en/about/ and
+    // nothing else while its programme lives elsewhere — and robots.txt is
+    // where a site DECLARES the sitemaps it actually has.
+    const ROBOTS = `User-agent: *\nDisallow: /admin\n\nSitemap: https://declared.example/sitemap-program.xml\nsitemap: https://declared.example/sitemap-news.xml\nSitemap: https://someoneelse.example/sitemap.xml\n`;
+    check('sitemaps declared in robots.txt are read out of it',
+      JSON.stringify(sitemapsFromRobots(ROBOTS, 'https://declared.example'))
+        === JSON.stringify(['https://declared.example/sitemap-program.xml','https://declared.example/sitemap-news.xml']),
+      JSON.stringify(sitemapsFromRobots(ROBOTS, 'https://declared.example')));
+    check('another site\u2019s sitemap is never followed from robots.txt',
+      !sitemapsFromRobots(ROBOTS, 'https://declared.example').some((u) => u.includes('someoneelse')));
+    check('a robots.txt with no sitemap lines yields nothing',
+      sitemapsFromRobots('User-agent: *\nDisallow: /', 'https://declared.example').length === 0);
+
+    // End to end: the guessed path is a dead end, the declared one is not.
+    const declaredSrc = (await q(
+      `insert into event_sources (source_type, name, url, trust) values ('venue_website', 'Declared sitemap', 'https://declared.example/whats-on', 'trusted') returning id`
+    ))[0] as { id: string };
+    const declaredScan = await scanSource(declaredSrc.id, {
+      fetcher: mockFetcher({
+        // No /whats-on and no /sitemap.xml: exactly ADE's shape, where the
+        // conventional path holds nothing that looks like an event.
+        'https://declared.example/robots.txt': { body: ROBOTS, contentType: 'text/plain' },
+        'https://declared.example/sitemap-program.xml': {
+          body: '<?xml version="1.0"?><urlset><url><loc>https://declared.example/en/program/2026/come2gether/2669726/</loc></url></urlset>',
+          contentType: 'application/xml',
+        },
+        'https://declared.example/en/program/2026/come2gether/2669726/': { body: '<html><title>Come2gether</title><body><main>c</main></body></html>' },
+      }),
+      ai: mockAI({ 'https://declared.example/en/program/2026/come2gether/2669726/': proposal('Come2gether') }),
+      delayMs: 1,
+    });
+    check('a sitemap the site declares is found when the guessed path is not',
+      declaredScan.method === 'sitemap' && declaredScan.extracted === 1, JSON.stringify(declaredScan));
   }
 
   // -------------------------------------------------------------------------
