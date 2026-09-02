@@ -30,7 +30,7 @@ import { zonedTimeToUtc, parseLocalInTimezone, parseFoundDate, resolveEndCrossin
 import { mapGenreProposals, loadGenres } from '@/lib/supply/genres';
 import { computeOverallConfidence, canAutoPublish } from '@/lib/supply/confidence';
 import { runExtractionPipeline } from '@/lib/supply/pipeline';
-import { scanSource, candidateCap, nextPageUrl, isPaged, identifyJsonLinks, looksLikeJson, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, countSitemapUrls, sitemapEventUrls, sitemapIndexUrls, sitemapsFromRobots } from '@/lib/supply/scanner';
+import { scanSource, getScan, startScan, sweepStaleScans, candidateCap, nextPageUrl, isPaged, identifyJsonLinks, looksLikeJson, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, countSitemapUrls, sitemapEventUrls, sitemapIndexUrls, sitemapsFromRobots } from '@/lib/supply/scanner';
 import { explainScan, outcomeLabel } from '@/lib/supply/outcomes';
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
@@ -2047,6 +2047,91 @@ async function main() {
       !testVerdict({ ...twoFaced, clientRendered: true }).text.includes('builds its listings'));
     check('a browser seeing a couple more links is not called a different page',
       !testVerdict({ ...probe(true, 4), browserCandidates: 6 }).text.includes('different page'));
+  }
+
+  // -------------------------------------------------------------------------
+  // A SCAN THAT RUNS OUT OF TIME.
+  //
+  // A big, slow site does not fail — it just takes longer than whatever is
+  // hosting the scan will allow. Before this the function was killed mid-flight
+  // with nothing written down, and the desk spun for ever waiting on a reply
+  // that was never coming. Now the scan watches its own clock, stops cleanly,
+  // says what it left, and the next scan picks it up.
+  console.log('\n— a scan that runs out of time —');
+  {
+    const SLOW_LISTING = `<!doctype html><html><head><title>Slow — What's on</title></head><body><main>
+<a href="/events/slow-one">Slow One</a>
+<a href="/events/slow-two">Slow Two</a>
+<a href="/events/slow-three">Slow Three</a>
+</main></body></html>`;
+    const night = (title: string, days: number) => ({
+      is_event: true, is_music_event: true, title,
+      start_date: new Date(FUTURE.getTime() + days * 86400_000).toISOString().slice(0, 10),
+      start_time: '23:00', venue_name: 'The Long Room', city: 'Manchester', country: 'United Kingdom',
+      genres: [{ name: 'Techno', confidence: 88 }],
+      field_confidence: { title: 90, date: 88, venue: 85, city: 88, genres: 85 },
+    });
+    const slowFetcher = mockFetcher({
+      'https://slow.example/whats-on': { body: SLOW_LISTING },
+      'https://slow.example/events/slow-one': { body: '<html><title>Slow One</title><body><main>one</main></body></html>' },
+      'https://slow.example/events/slow-two': { body: '<html><title>Slow Two</title><body><main>two</main></body></html>' },
+      'https://slow.example/events/slow-three': { body: '<html><title>Slow Three</title><body><main>three</main></body></html>' },
+    });
+    const slowAI = mockAI({
+      'https://slow.example/events/slow-one': night('Slow One', 21),
+      'https://slow.example/events/slow-two': night('Slow Two', 22),
+      'https://slow.example/events/slow-three': night('Slow Three', 23),
+    });
+    const src = (await q(
+      `insert into event_sources (source_type, name, url)
+       values ('promoter_website', 'Slow Site', 'https://slow.example/whats-on') returning id`
+    ))[0] as { id: string };
+
+    // No time at all: the clock is already spent when the first link comes up.
+    const outOfTime = await scanSource(src.id, { fetcher: slowFetcher, ai: slowAI, delayMs: 1, budgetMs: 0 });
+    check('a scan out of time finishes rather than dying', outOfTime.status === 'succeeded');
+    check('it still found and recorded the links', outOfTime.candidatesFound === 3 && outOfTime.newCandidates === 3);
+    check('it extracted nothing, because it had no time to', outOfTime.extracted === 0);
+    check('and it says what it left behind',
+      (outOfTime.note ?? '').includes('3 left'), outOfTime.note ?? '(no note)');
+
+    // Seen is not processed: the next scan picks up exactly what was left.
+    const rest = await scanSource(src.id, { fetcher: slowFetcher, ai: slowAI, delayMs: 1 });
+    check('the next scan carries on where it stopped', rest.extracted === 3);
+    check('nothing is new the second time — they were already seen', rest.newCandidates === 0);
+    check('and a scan that finished has nothing left to say', rest.note === null, rest.note ?? '');
+
+    // The desk reads the finished row back and gets the same answer.
+    const readBack = await getScan(rest.scanId);
+    check('the desk can read a finished scan back',
+      readBack?.status === 'succeeded' && readBack.extracted === 3 && readBack.running === false);
+    check('with the outcomes that explain it', Object.keys(readBack?.outcomes ?? {}).length > 0);
+    check('a scan id that does not exist is nothing, not a crash',
+      (await getScan('00000000-0000-0000-0000-000000000000')) === null);
+  }
+
+  // -------------------------------------------------------------------------
+  // A row still calling itself 'running' hours later did not finish — it was
+  // killed. Saying so is what lets the desk tell "still working" apart from
+  // "gone", instead of spinning on a job nobody is doing.
+  console.log('\n— a scan that was killed —');
+  {
+    const src = (await q(
+      `insert into event_sources (source_type, name, url)
+       values ('promoter_website', 'Killed Mid-Scan', 'https://killed.example/whats-on') returning id`
+    ))[0] as { id: string };
+    const scanId = await startScan(src.id);
+    await q(`update source_scans set started_at = now() - interval '2 hours' where id = $1`, [scanId]);
+
+    const live = await getScan(scanId);
+    check('a scan killed mid-flight is not left running for ever', live?.running === false);
+    check('it is reported as failed, and says why',
+      live?.status === 'failed' && (live?.error ?? '').includes('stopped before it finished'), live?.error ?? '');
+
+    // A scan that is genuinely still going is left alone.
+    const fresh = await startScan(src.id);
+    check('a scan that has only just started is still running', (await getScan(fresh))?.running === true);
+    check('and the sweep does not touch it', (await sweepStaleScans(src.id)) === 0);
   }
 
   // -------------------------------------------------------------------------

@@ -41,6 +41,7 @@ export const MIGRATION_FILES: string[] = [
   '034_source_scan_cap.sql',
   '035_signup_provenance.sql',
   '036_email_verification.sql',
+  '037_scan_progress.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
@@ -223,6 +224,8 @@ export const EXPECTED_COLUMNS: string[] = [
   'promoters.socials',
   'promoters.standard_allocation',
   'scene_entities.slug',
+  'source_scans.note',
+  'source_scans.outcomes',
   'venues.description',
   'venues.hero_image_url',
   'venues.location_id',

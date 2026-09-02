@@ -598,6 +598,9 @@ export async function walkSitemap(
 
 export type ScanContext = Pick<PipelineContext, 'ai' | 'fetcher' | 'fetchOptions'> & {
   delayMs?: number;
+  // How long this scan is allowed to take, in wall-clock milliseconds.
+  // Tests pass a tiny one to prove the stop is real without waiting for it.
+  budgetMs?: number;
 };
 
 export type ScanResult = {
@@ -617,6 +620,8 @@ export type ScanResult = {
   // Every extraction status this scan produced, counted. "0 extracted" is
   // not a diagnosis; "5 not_an_event" is.
   outcomes: OutcomeTally;
+  // Set when the scan stopped early — how much it left for the next one.
+  note: string | null;
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -633,7 +638,8 @@ async function followPages(
   read: (body: string, at: string, asked: string) => string[],
   fetcher: (url: string, options?: SafeFetchOptions) => Promise<SafeFetchResult>,
   ctx: ScanContext,
-  limit = candidateCap()
+  limit = candidateCap(),
+  deadline = Infinity
 ): Promise<string[]> {
   if (!isPaged(target)) return first;
   const candidates = [...first];
@@ -641,6 +647,9 @@ async function followPages(
   let pageUrl: string | null = target;
   for (let page = 0; page < supplyConfig.listing.maxPagesPerScan; page++) {
     if (candidates.length >= limit) break;
+    // Twenty pages at a twelve-second fetch timeout is four minutes spent
+    // before a single event is read. The clock stops the walk too.
+    if (Date.now() > deadline) break;
     pageUrl = nextPageUrl(pageUrl);
     if (!pageUrl) break;
     await sleep(ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
@@ -656,7 +665,44 @@ async function followPages(
   return candidates.slice(0, limit);
 }
 
+// A SCAN IS A JOB, NOT A REQUEST.
+//
+// Starting one is instant: a row appears, and its id is what the desk watches.
+// The work happens after, on whatever clock the caller gives it. Holding an
+// HTTP request open for the whole thing was what left the desk spinning for
+// ever on a big site — the browser waited on a function that had already been
+// killed, and nothing was ever written down.
+export async function startScan(sourceId: string): Promise<string> {
+  // Anything still calling itself 'running' past its budget was killed. Say so
+  // now, so a stale row can never be mistaken for this scan.
+  await sweepStaleScans(sourceId);
+  const scan = await queryOne<{ id: string }>(
+    `insert into source_scans (source_id) values ($1) returning id`,
+    [sourceId]
+  );
+  return scan!.id;
+}
+
+// A row left 'running' long past any budget did not finish; it died. Finishing
+// it honestly is what lets the desk tell "still working" from "gone".
+export async function sweepStaleScans(sourceId?: string): Promise<number> {
+  const rows = await query<{ id: string }>(
+    `update source_scans set status = 'failed', finished_at = now(),
+            error = coalesce(error, 'Scan stopped before it finished')
+      where status = 'running'
+        and started_at < now() - make_interval(secs => $1::float)
+        and ($2::uuid is null or source_id = $2)
+      returning id`,
+    [supplyConfig.scan.staleAfterMs / 1000, sourceId ?? null]
+  );
+  return rows.length;
+}
+
 export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promise<ScanResult> {
+  return runScan(sourceId, await startScan(sourceId), ctx);
+}
+
+export async function runScan(sourceId: string, scanId: string, ctx: ScanContext = {}): Promise<ScanResult> {
   const source = await queryOne<SourceRow>(
     `select id, name, url, feed_url, source_type, active, trust, polling_enabled,
             poll_frequency_hours, render_js, max_candidates, last_checked_at::text
@@ -665,24 +711,24 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
   );
   if (!source) throw new Error('Source not found');
 
-  const scan = await queryOne<{ id: string }>(
-    `insert into source_scans (source_id) values ($1) returning id`,
-    [sourceId]
-  );
-  const scanId = scan!.id;
+  // Everything this scan does happens before this moment.
+  const deadline = Date.now() + (ctx.budgetMs ?? supplyConfig.scan.budgetMs);
   // A source flagged as client-rendered goes through a hosted browser; every
   // other source, and every source when no renderer is configured, fetches
   // exactly as it always has. A test's own fetcher always wins — the suite
   // must never reach a network, rendering or not.
   const fetcher = ctx.fetcher ?? fetcherFor(source.render_js);
 
-  const finish = async (r: Omit<ScanResult, 'scanId' | 'couldPoll' | 'outcomes'> & { outcomes?: OutcomeTally }): Promise<ScanResult> => {
+  const finish = async (
+    r: Omit<ScanResult, 'scanId' | 'couldPoll' | 'outcomes' | 'note'> & { outcomes?: OutcomeTally; note?: string | null }
+  ): Promise<ScanResult> => {
     await query(
       `update source_scans set status = $2, method = $3, candidates_found = $4,
               new_candidates = $5, extracted = $6, failed = $7, duplicates = $8,
-              error = $9, finished_at = now()
+              error = $9, outcomes = $10, note = $11, finished_at = now()
         where id = $1`,
-      [scanId, r.status, r.method, r.candidatesFound, r.newCandidates, r.extracted, r.failed, r.duplicates, r.error]
+      [scanId, r.status, r.method, r.candidatesFound, r.newCandidates, r.extracted,
+       r.failed, r.duplicates, r.error, JSON.stringify(r.outcomes ?? {}), r.note ?? null]
     );
     // WHETHER A SOURCE POLLS IS A PERSON'S DECISION.
     //
@@ -705,7 +751,7 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
         where id = $1`,
       [sourceId, wasSuccess, r.extracted]
     );
-    return { scanId, ...r, outcomes: r.outcomes ?? {}, couldPoll: worthPolling };
+    return { scanId, ...r, outcomes: r.outcomes ?? {}, note: r.note ?? null, couldPoll: worthPolling };
   };
 
   if (!source.active || source.trust === 'blocked') {
@@ -774,12 +820,12 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
     method = 'json';
     const readJson = (body: string, at: string, asked: string) => identifyJsonLinks(body, at, asked, cap);
     candidates = readJson(fetched.body, fetched.finalUrl, target);
-    candidates = await followPages(candidates, target, readJson, fetcher, ctx, cap);
+    candidates = await followPages(candidates, target, readJson, fetcher, ctx, cap, deadline);
   } else {
     method = 'html';
     const readHtml = (body: string, at: string, asked: string) => identifyCandidateLinks(body, at, asked, cap);
     candidates = readHtml(fetched.body, fetched.finalUrl, target);
-    candidates = await followPages(candidates, target, readHtml, fetcher, ctx, cap);
+    candidates = await followPages(candidates, target, readHtml, fetcher, ctx, cap, deadline);
     // An advertised feed is a FALLBACK, not an upgrade. Only look at one when
     // the listing page itself yielded nothing: sites routinely advertise a
     // generic blog or news feed, and adopting one while the page was working
@@ -855,13 +901,25 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
     );
   }
 
+  // What it found goes down before any of it is read, for the same reason:
+  // a scan that dies during extraction still knows how many links it had.
+  await query(
+    `update source_scans set candidates_found = $2, new_candidates = $3, method = $4 where id = $1`,
+    [scanId, candidates.length, newCandidates.length, method]
+  );
+
   let extracted = 0;
   let failedCount = 0;
   let duplicates = 0;
   const outcomes: OutcomeTally = {};
   const tally = (status: string) => { outcomes[status] = (outcomes[status] ?? 0) + 1; };
   const toProcess = pending.slice(0, supplyConfig.scan.maxExtractionsPerScan);
+  // WHAT IT DID NOT GET TO IS PART OF THE ANSWER. A scan stops for two
+  // reasons — it ran out of links, or it ran out of time — and the difference
+  // is the whole difference between "this source is dry" and "come back".
+  let stoppedAt = -1;
   for (let i = 0; i < toProcess.length; i++) {
+    if (Date.now() > deadline) { stoppedAt = i; break; }
     if (i > 0) await sleep(ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
     try {
       const outcome = await runExtractionPipeline(toProcess[i], {
@@ -880,29 +938,104 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
       tally('failed');
       failedCount++;
     }
+    // PROGRESS IS WRITTEN DOWN AS IT HAPPENS, not only at the end. A scan that
+    // is killed part way through has still done real work — the events exist —
+    // and the row should say so rather than reporting nothing. It is also what
+    // lets the desk show a scan moving instead of a spinner that could mean
+    // anything.
+    await query(
+      `update source_scans set extracted = $2, failed = $3, duplicates = $4,
+              outcomes = $5, note = $6 where id = $1`,
+      [scanId, extracted, failedCount, duplicates, JSON.stringify(outcomes),
+       `${i + 1} of ${toProcess.length} read…`]
+    );
   }
+
+  // Anything not attempted this time is still pending next time: it was
+  // recorded as seen but carries no extraction_id, so it comes back around.
+  const leftOver = stoppedAt >= 0
+    ? (toProcess.length - stoppedAt) + (pending.length - toProcess.length)
+    : pending.length - toProcess.length;
+  const note = stoppedAt >= 0
+    ? `Stopped at the time budget after ${stoppedAt} of ${toProcess.length}. ${leftOver} left — scan again to continue.`
+    : leftOver > 0
+      ? `${leftOver} candidate${leftOver === 1 ? '' : 's'} left for the next scan.`
+      : null;
 
   return finish({
     status: 'succeeded', method,
     candidatesFound: candidates.length, newCandidates: newCandidates.length,
-    extracted, failed: failedCount, duplicates, error: null, outcomes,
+    extracted, failed: failedCount, duplicates, error: null, outcomes, note,
   });
+}
+
+// The row the desk watches while a scan runs, shaped exactly like the result
+// the scan returns when it finishes — so one renderer draws both.
+export async function getScan(scanId: string): Promise<(ScanResult & { running: boolean }) | null> {
+  await sweepStaleScans();
+  const row = await queryOne<{
+    id: string; status: string; method: ScanResult['method'];
+    candidates_found: number; new_candidates: number; extracted: number;
+    failed: number; duplicates: number; error: string | null;
+    outcomes: OutcomeTally | null; note: string | null; polling_enabled: boolean;
+  }>(
+    `select s.id, s.status, s.method, s.candidates_found, s.new_candidates, s.extracted,
+            s.failed, s.duplicates, s.error, s.outcomes, s.note, src.polling_enabled
+       from source_scans s join event_sources src on src.id = s.source_id
+      where s.id = $1`,
+    [scanId]
+  );
+  if (!row) return null;
+  return {
+    scanId: row.id,
+    running: row.status === 'running',
+    status: row.status === 'failed' ? 'failed' : 'succeeded',
+    method: row.method,
+    candidatesFound: row.candidates_found,
+    newCandidates: row.new_candidates,
+    extracted: row.extracted,
+    failed: row.failed,
+    duplicates: row.duplicates,
+    error: row.error,
+    outcomes: row.outcomes ?? {},
+    note: row.note,
+    // The same offer the scan itself would have made: this source brought
+    // events back and is not on the schedule.
+    couldPoll: row.status === 'succeeded' && row.extracted > 0 && !row.polling_enabled,
+  };
 }
 
 // Scan every source whose polling schedule is due. Designed to be called
 // from a cron-hit job endpoint — no browser involved.
 export async function scanDueSources(ctx: ScanContext = {}): Promise<{ scanned: number; results: ScanResult[] }> {
+  // HOW MANY THE CLOCK CAN ACTUALLY SERVE. Taking twenty sources into a run
+  // that has four minutes gives each twelve seconds — not a scan, a gesture.
+  // Least-recently-checked first, so a smaller batch still works through
+  // every source across successive runs.
+  const runBudgetMs = ctx.budgetMs ?? supplyConfig.scan.budgetMs;
+  const batch = Math.max(1, Math.min(20, Math.floor(runBudgetMs / supplyConfig.scan.minPerSourceMs)));
   const due = await query<{ id: string }>(
     `select id from event_sources
       where active and polling_enabled and trust <> 'blocked'
         and (last_checked_at is null or last_checked_at < now() - make_interval(hours => poll_frequency_hours))
       order by last_checked_at asc nulls first
-      limit 20`
+      limit $1`,
+    [batch]
   );
+  // THE RUN HAS A BUDGET, AND EACH SOURCE GETS A SHARE OF WHAT IS LEFT.
+  // Twenty sources at a four-minute ceiling each is eighty minutes, which is
+  // longer than anything hosting this will allow — so the run would be killed
+  // part way and the sources it never reached would look like they had been
+  // scanned. Sharing the clock means every due source gets a real turn, and a
+  // slow one cannot eat the whole run. What a source does not finish is still
+  // pending for the next one.
+  const runDeadline = Date.now() + runBudgetMs;
   const results: ScanResult[] = [];
-  for (const s of due) {
+  for (let i = 0; i < due.length; i++) {
+    const left = runDeadline - Date.now();
+    if (left <= 0) break;
     try {
-      results.push(await scanSource(s.id, ctx));
+      results.push(await scanSource(due[i].id, { ...ctx, budgetMs: Math.floor(left / (due.length - i)) }));
     } catch {
       /* per-source failures are recorded on the scan rows */
     }
@@ -910,7 +1043,7 @@ export async function scanDueSources(ctx: ScanContext = {}): Promise<{ scanned: 
   // ONE refresh for the whole run, not one per event. A scan that brings in
   // fifty nights should move the admin's review count once.
   if (results.some((r) => r.extracted > 0)) await refreshAdminReviewDigest();
-  return { scanned: due.length, results };
+  return { scanned: results.length, results };
 }
 
 // A PAGE THAT BUILDS ITSELF IN THE BROWSER.
