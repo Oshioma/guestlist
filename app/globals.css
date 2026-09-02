@@ -18,6 +18,7 @@
   --on-accent: #ffffff; /* type on purple fills */
   --danger: #b3423a;
   --ok: #45704c;
+  --gold-ink: #9a7b1f; /* the brand gold as TEXT on the light ground */
   --header-bg: rgba(255, 255, 255, 0.86);
   --media-ph: #eae8e1;
   color-scheme: light;
@@ -45,6 +46,7 @@
   --accent-soft: rgba(124, 74, 158, 0.3);
   --danger: #e57373;
   --ok: #7a9e7e;
+  --gold-ink: #e8c46a; /* in the dark it goes back to the bright brand yellow */
   --header-bg: rgba(7, 7, 7, 0.82);
   --media-ph: #141414;
   color-scheme: dark;
@@ -3401,3 +3403,169 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 .verifyBtn { font-size: 11px; padding: 5px 11px; }
 .verifyWarn { font-size: 11.5px; color: var(--danger); }
 .verifyNote { font-size: 11.5px; color: var(--text-muted); }
+
+/* ===========================================================================
+   MEMBERSHIP BENEFITS — the section that says what you get.
+   A hierarchy rather than six identical boxes: the reason you join spans the
+   top, the two you feel on the night take a row, the standing three sit
+   underneath.
+   =========================================================================== */
+.mbPerks { display: grid; gap: 14px; margin-top: 22px; }
+
+/* --- The hero claim ------------------------------------------------------ */
+.mbPerkHero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.mbPerkHeroText { padding: clamp(26px, 4vw, 44px); align-self: center; }
+.mbPerkKicker {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--accent-ink);
+}
+.mbPerkBig {
+  font-size: clamp(38px, 6.4vw, 68px);
+  font-weight: 800; letter-spacing: -0.035em; line-height: 0.92;
+  margin: 14px 0 0; text-transform: uppercase;
+}
+.mbPerkSub {
+  font-size: clamp(18px, 2.4vw, 24px); font-weight: 750;
+  letter-spacing: -0.3px; color: var(--accent-ink); margin-top: 8px;
+}
+.mbPerkLead {
+  font-size: clamp(15px, 1.8vw, 17.5px); line-height: 1.55;
+  color: var(--text); margin: 16px 0 0; max-width: 40ch;
+}
+.mbPerkBody {
+  font-size: 13.5px; line-height: 1.62; color: var(--text-muted);
+  margin: 10px 0 0; max-width: 46ch;
+}
+.mbPerkFine {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; color: var(--accent-ink); margin-top: 18px;
+}
+.mbPerkFine svg { width: 16px; height: 16px; flex: 0 0 auto; }
+
+/* The picture fills whatever height the words need — it must never be the
+   thing that sets it, or an 800px-tall photograph drags the whole card with it. */
+.mbPerkHeroArt { position: relative; min-height: 280px; }
+.mbPerkHeroArt img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+/* The number sits over the picture, tilted, so the claim reads before the
+   photograph does. */
+.mbPerkPrice {
+  position: absolute; left: -6%; top: 50%;
+  transform: translateY(-50%) rotate(-6deg);
+  /* Deliberately light in both themes: it sits on a photograph, not on the
+     page ground, and a dark card on a dark photo disappears. */
+  background: #ede4f6;
+  border-radius: var(--radius);
+  padding: clamp(18px, 3vw, 30px) clamp(20px, 3.4vw, 34px);
+  text-align: center;
+  box-shadow: 0 18px 40px rgba(15, 14, 10, 0.16);
+}
+.mbPerkPriceNum {
+  display: block;
+  font-size: clamp(46px, 7vw, 76px); font-weight: 800;
+  letter-spacing: -0.05em; line-height: 0.86; color: var(--accent);
+}
+.mbPerkPriceWord {
+  display: block; margin-top: 6px;
+  font-size: clamp(13px, 1.6vw, 17px); font-weight: 800;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent);
+}
+
+/* --- Cards --------------------------------------------------------------- */
+.mbPerkPair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.mbPerkTrio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+
+.mbPerkCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: clamp(20px, 2.6vw, 28px);
+  display: flex; flex-direction: column;
+}
+.mbPerkCard.lilac { background: rgba(124, 74, 158, 0.09); border-color: rgba(124, 74, 158, 0.2); }
+.mbPerkCard.cream { background: rgba(180, 145, 40, 0.09); border-color: rgba(180, 145, 40, 0.22); }
+.mbPerkCard h3 {
+  font-size: 17px; font-weight: 800; letter-spacing: -0.2px;
+  margin: 14px 0 0; text-transform: uppercase;
+}
+.mbPerkTag {
+  font-size: 13.5px; font-weight: 650; color: var(--accent-ink);
+  margin-top: 4px; line-height: 1.4;
+}
+.mbPerkCard p {
+  font-size: 13.5px; line-height: 1.62; color: var(--text-muted);
+  margin: 12px 0 16px;
+  /* A rule above the body, the way the reference separates label from detail. */
+  padding-top: 12px; border-top: 1px solid var(--border);
+}
+.mbPerkIcon {
+  width: 40px; height: 40px; border-radius: 12px;
+  display: grid; place-items: center; flex: 0 0 auto;
+  background: var(--accent-soft); color: var(--accent-ink);
+}
+.mbPerkIcon svg { width: 20px; height: 20px; }
+.mbPerkIcon.gold { background: rgba(180, 145, 40, 0.16); color: var(--gold-ink); }
+.mbPerkLink {
+  font-size: 12.5px; font-weight: 700; color: var(--accent-ink);
+  /* Pushed to the foot so the links line up across cards of different lengths. */
+  margin-top: auto; padding-top: 14px;
+}
+.mbPerkNote { font-size: 12px; color: var(--text-faint); line-height: 1.55; margin-top: auto; padding-top: 12px; }
+
+/* The drop status: a real state, not decoration. */
+.mbPerkDrop {
+  margin-top: auto; padding: 11px 14px;
+  border: 1px solid rgba(180, 145, 40, 0.3);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+}
+.mbPerkDropLabel {
+  display: block; font-size: 10px; font-weight: 800;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold-ink);
+}
+.mbPerkDropState { display: block; font-size: 14px; font-weight: 750; margin-top: 3px; color: var(--text); }
+a.mbPerkDropState.live { color: var(--accent-ink); }
+
+/* --- The closing bar ----------------------------------------------------- */
+.mbPerkFoot {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  border: 1px solid rgba(124, 74, 158, 0.2);
+  border-radius: var(--radius);
+  background: rgba(124, 74, 158, 0.09);
+  padding: clamp(18px, 2.4vw, 26px);
+}
+.mbPerkFootText { flex: 1 1 340px; min-width: 0; }
+.mbPerkFootTitle {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--accent-ink);
+}
+.mbPerkFoot p { font-size: 13.5px; line-height: 1.6; color: var(--text-soft); margin: 6px 0 0; }
+.mbPerkFootCta {
+  flex: 0 0 auto;
+  background: var(--accent); color: var(--on-accent);
+  font-size: 13.5px; font-weight: 800; letter-spacing: 0.02em;
+  padding: 14px 26px; border-radius: 999px; text-decoration: none;
+}
+.mbPerkFootCta:hover { filter: brightness(1.06); color: var(--on-accent); }
+
+@media (max-width: 900px) {
+  .mbPerkHero { grid-template-columns: 1fr; }
+  .mbPerkHeroArt { min-height: 220px; order: -1; }
+  .mbPerkPrice { left: auto; right: 18px; top: auto; bottom: -26px; transform: rotate(-6deg); }
+  .mbPerkHeroText { padding-top: 40px; }
+  .mbPerkTrio { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .mbPerkPair { grid-template-columns: 1fr; }
+  .mbPerkFootCta { width: 100%; text-align: center; }
+}

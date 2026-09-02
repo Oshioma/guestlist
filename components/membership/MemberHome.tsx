@@ -3,6 +3,7 @@
 // to use the membership, and everything they have got, in the present tense.
 
 import Link from 'next/link';
+import { MembershipBenefits } from '@/components/membership/MembershipBenefits';
 import { formatPence, membershipLabel, type MemberWithMembership } from '@/lib/membership';
 import { memberRequests, type MemberRequest } from '@/lib/accessRequests';
 import { listApprovedBusinesses, memberClaims } from '@/lib/market';
@@ -120,41 +121,7 @@ export async function MemberHome({ me }: { me: MemberWithMembership }) {
         </div>
       </div>
 
-      <div className="sectionLabel" style={{ marginTop: 34 }}>What you’ve got</div>
-      <div className="mbBenefits" style={{ marginTop: 10 }}>
-        <div className="mbBenefit lead">
-          <h3>Get in free</h3>
-          <p>Free entrance to parties whenever we can make it happen — through the promoter, the venue, our own allocations, or by buying access where that’s reasonable. When we can’t, we’ll say so, and often find a member price instead.</p>
-          <div className="small">Subject to availability and fair use.</div>
-        </div>
-        <div className="mbBenefit">
-          <h3>Queue jump</h3>
-          <p>Priority and fast-track entrance where available, through participating events and venues. Less time on the pavement, more time inside.</p>
-        </div>
-        <div className="mbBenefit">
-          <h3>Member prices</h3>
-          <p>When free isn’t possible, a discounted ticket or a special Guestlist price often is. It shows on your membership page the moment we have it.</p>
-        </div>
-        <div className="mbBenefit">
-          <h3>Guestlist Market</h3>
-          <p>Restaurants, bars, record shops, studios, clothing, places to stay — chosen by Guestlist, not listed by anyone. Your offers are live now.</p>
-          <div className="small"><Link href="/market" style={{ textDecoration: 'underline' }}>Browse the Market →</Link></div>
-        </div>
-        <div className="mbBenefit">
-          <h3>Member drops</h3>
-          <p>Surprise tickets, last-minute guestlists, special events, secret parties. You hear first — on your membership page and by email.</p>
-          <div className="small">{drops.length > 0 ? `${drops.length} live now` : 'Nothing live at the moment — you’ll know first.'}</div>
-        </div>
-        <div className="mbBenefit">
-          <h3>Do good for others</h3>
-          <p>Being part of Guestlist contributes something positive. Members support community projects chosen with the community — and see exactly what those projects are.</p>
-          {causes.length > 0 ? (
-            <div className="small">{causes.map((c) => c.title).join(' · ')}</div>
-          ) : (
-            <div className="small">The first projects will be announced to members. Nothing is claimed here until it’s real.</div>
-          )}
-        </div>
-      </div>
+      <MembershipBenefits variant="member" drops={drops.length} causes={causes} />
 
       {businesses.length > 0 && (
         <section style={{ marginTop: 30 }}>

@@ -8,6 +8,7 @@
 // checkout the moment STRIPE_SECRET_KEY exists.
 
 import Link from 'next/link';
+import { MembershipBenefits } from '@/components/membership/MembershipBenefits';
 import { billingEnabled, currentMemberWithMembership, formatPence, getPlan, isOnWaitlist } from '@/lib/membership';
 import { liveGoodCauses } from '@/lib/drops';
 import { listApprovedBusinesses } from '@/lib/market';
@@ -45,39 +46,7 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
         <JoinCta mode={live ? 'checkout' : 'waitlist'} isSignedIn={!!me} isMember={!!me?.isMember} onWaitlist={onWaitlist} price={price} />
       </section>
 
-      <div className="mbBenefits">
-        <div className="mbBenefit lead">
-          <h3>Get in free</h3>
-          <p>See an event you want to go to? Ask Guestlist. We’ll try to arrange free entrance through the promoter, the venue, our own allocations — or by buying access where that’s reasonable. Members get free entrance to parties whenever we can make it happen.</p>
-          <div className="small">Subject to availability and fair use.</div>
-        </div>
-        <div className="mbBenefit">
-          <h3>Queue jump</h3>
-          <p>Priority and fast-track entrance where available, through participating events and venues. Less time on the pavement, more time inside.</p>
-        </div>
-        <div className="mbBenefit">
-          <h3>Member prices</h3>
-          <p>When we can’t get a member in free, we can often arrange a discounted ticket or a special Guestlist price instead.</p>
-        </div>
-        <div className="mbBenefit">
-          <h3>Guestlist Market</h3>
-          <p>Special offers from independent businesses selected by Guestlist — restaurants, bars, record shops, studios, clothing, places to stay. People we like, giving members something extra.</p>
-          <div className="small"><Link href="/market" style={{ textDecoration: 'underline' }}>Browse the Market →</Link></div>
-        </div>
-        <div className="mbBenefit">
-          <h3>Member drops</h3>
-          <p>Surprise tickets, last-minute guestlists, special events, secret parties and other occasional opportunities. You’ll hear first.</p>
-        </div>
-        <div className="mbBenefit">
-          <h3>Do good for others</h3>
-          <p>Being part of Guestlist contributes something positive. Members support community projects chosen with the community — and see exactly what those projects are.</p>
-          {causes.length > 0 ? (
-            <div className="small">{causes.map((c) => c.title).join(' · ')}</div>
-          ) : (
-            <div className="small">The first projects will be announced to members. Nothing is claimed here until it’s real.</div>
-          )}
-        </div>
-      </div>
+      <MembershipBenefits variant="prospect" causes={causes} />
 
       {businesses.length > 0 && (
         <section style={{ marginTop: 30 }}>
