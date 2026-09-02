@@ -952,6 +952,25 @@ console.log('\n— Signup is for people —');
   await q(`delete from members where email = 'slow-human@example.invalid'`);
 }
 
+// A ticket link is a link out. Somebody who taps it is not done with the
+// event page — and on a phone, "back" from a ticketing site is a coin toss.
+console.log('\n— Links out open in a new tab —');
+{
+  const [ev] = await q(
+    `select slug, id from events where status = 'live' and ticket_url is not null limit 1`);
+  if (!ev) {
+    check('an event with tickets exists to check', false, 'no live ticketed event in the seed');
+  } else {
+    const page = await (await client().fetch(`/events/${ev.slug}`)).text();
+    const outLink = page.match(new RegExp(`<a[^>]*/out/${ev.id}[^>]*>`));
+    check('the tickets link is on the page', !!outLink, 'no /out/ link rendered');
+    check('and it opens away from Guestlist',
+      !!outLink && outLink[0].includes('target="_blank"'), outLink?.[0] ?? '');
+    check('with the opener closed behind it',
+      !!outLink && /rel="[^"]*noopener/.test(outLink[0]), outLink?.[0] ?? '');
+  }
+}
+
 // The admin desk is a work surface, not a shop window.
 console.log('\n— The desk does not advertise to itself —');
 {

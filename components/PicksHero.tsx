@@ -6,6 +6,7 @@
 // Guest list / Tickets actions. Keeps the recommendation contract:
 // reasons shown, Hide / Not for me feedback, clicks + impressions tracked.
 
+import { OutboundLink } from './OutboundLink';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { track } from '@/lib/track';
@@ -143,9 +144,9 @@ export function PicksHero({ events, title, surface }: {
             >
               Guest list
             </Link>
-            <a className="picksBtn outline" href={`/out/${active.id}`} target="_blank" rel="noopener">
+            <OutboundLink className="picksBtn outline" href={`/out/${active.id}`}>
               Tickets
-            </a>
+            </OutboundLink>
           </div>
         </div>
 

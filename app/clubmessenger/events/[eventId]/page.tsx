@@ -3,6 +3,7 @@
 // canAccessRoom here AND in every API route — the page is a view, not the
 // security boundary.
 
+import { OutboundLink } from '@/components/OutboundLink';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
@@ -140,7 +141,7 @@ export default async function ClubEventPage({ params }: { params: Promise<{ even
             {goingCount > 0 && <span>{goingCount} going</span>}
             <Link href={`/events/${event.slug}`} className="clubDetailLink">Event details →</Link>
             {(event.ticket_url || event.source_url) && !cancelled && event.listing_status !== 'sold_out' && (
-              <a href={`/out/${event.id}?src=clubmessenger`} className="clubDetailLink">Tickets →</a>
+              <OutboundLink href={`/out/${event.id}?src=clubmessenger`} className="clubDetailLink">Tickets →</OutboundLink>
             )}
           </div>
         </div>
