@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentMember } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { sendGuestlistConfirmed } from '@/lib/guestlistEmail';
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const member = await getCurrentMember();
@@ -13,8 +14,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   try {
     await client.query('begin');
     const settingsRes = await client.query<{
-      promoter_id:string; mode:string; max_guestlist_places:number; guestlist_closes_at:string|null; max_plus_ones:number;
-    }>(`select promoter_id,mode,max_guestlist_places,guestlist_closes_at,max_plus_ones
+      promoter_id:string; mode:string; max_guestlist_places:number; guestlist_closes_at:string|null;
+      max_plus_ones:number; updated_by_member_id:string|null;
+    }>(`select promoter_id,mode,max_guestlist_places,guestlist_closes_at,max_plus_ones,updated_by_member_id
           from event_guestlist_settings where event_id=$1 for update`,[eventId]);
     const settings = settingsRes.rows[0];
     if (!settings || settings.mode === 'promoter_only') {
@@ -42,9 +44,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
     const status = settings.mode === 'auto_fill' ? 'confirmed' : 'pending';
     const name = (member.display_name || member.email.split('@')[0]).trim().slice(0,140);
-    await client.query(`insert into event_guestlist_entries(event_id,promoter_id,member_id,guest_name,plus_ones,source,status,created_by_member_id)
-      values($1,$2,$3,$4,$5,'guestlist',$6,$3)`,[eventId,settings.promoter_id,member.id,name,plusOnes,status]);
+    // On auto-fill nobody presses a button, but somebody still decided: the
+    // person who set the guestlist to fill itself. That is the honest answer
+    // to "who here confirmed this", so it is the one the pass carries.
+    const entry = await client.query<{id:string}>(
+      `insert into event_guestlist_entries(event_id,promoter_id,member_id,guest_name,plus_ones,source,status,created_by_member_id,confirmed_by_member_id,confirmed_at)
+       values($1,$2,$3,$4,$5,'guestlist',$6,$3,$7,case when $6='confirmed' then now() else null end)
+       returning id`,
+      [eventId,settings.promoter_id,member.id,name,plusOnes,status,
+       status === 'confirmed' ? settings.updated_by_member_id : null]);
     await client.query('commit');
+    const entryId = entry.rows[0]?.id;
+    if (status === 'confirmed' && entryId) {
+      await sendGuestlistConfirmed(entryId).catch((err) => console.error('guestlist email failed', err));
+    }
     return NextResponse.json({ ok:true, status });
   } catch (err) {
     await client.query('rollback').catch(()=>{});

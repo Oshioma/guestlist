@@ -3221,3 +3221,145 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 .adminItemActionsBtn { font-size: 11.5px; padding: 6px 12px; }
 .adminItemActionsDanger { color: var(--danger); }
 .adminItemActionsWarn { font-size: 11.5px; color: var(--danger); }
+
+/* THE DOOR PASS — read in the dark, at arm's length, in a queue. Big type,
+   one verdict, high contrast, and nothing else competing for the eye. */
+.doorPass {
+  min-height: 70vh;
+  display: grid;
+  place-items: center;
+  padding: 34px 18px 60px;
+}
+.doorPassInner {
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+}
+.doorVerdict {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.doorVerdict.good { background: rgba(124, 74, 158, 0.12); border-color: var(--accent); color: var(--accent-ink); }
+.doorVerdict.warn { background: rgba(154, 123, 31, 0.12); border-color: rgba(154, 123, 31, 0.4); color: #9a7b1f; }
+.doorVerdict.bad  { background: rgba(229, 115, 115, 0.12); border-color: rgba(229, 115, 115, 0.45); color: var(--danger); }
+
+.doorName {
+  font-size: clamp(30px, 9vw, 44px);
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1.06;
+  margin-top: 22px;
+  overflow-wrap: anywhere;
+}
+.doorPlaces {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  margin-top: 10px;
+}
+.doorEvent { margin-top: 28px; }
+.doorEventTitle { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+.doorEventMeta { font-size: 13.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.6; }
+
+.doorFacts {
+  margin: 28px 0 0;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  text-align: left;
+  display: grid;
+  gap: 10px;
+}
+.doorFacts > div { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; }
+.doorFacts dt {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted); margin: 0;
+}
+.doorFacts dd { font-size: 13.5px; margin: 0; text-align: right; }
+
+.doorAction { margin-top: 24px; }
+.doorBtn {
+  width: 100%;
+  padding: 17px 24px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.doorBtn.undo { background: transparent; color: var(--text-muted); border-color: var(--border-strong); }
+.doorBtn:disabled { opacity: 0.5; cursor: default; }
+.doorError { color: var(--danger); font-size: 12.5px; margin-top: 10px; }
+.doorFoot { font-size: 12.5px; color: var(--text-muted); margin-top: 18px; }
+
+/* 404 — the site's voice, not the framework's. Large enough to read as
+   deliberate, with the four ways on doing the actual work. */
+.notFound { padding: 60px 18px 90px; }
+.notFoundInner { max-width: 760px; margin: 0 auto; }
+.notFoundCode {
+  font-size: clamp(64px, 16vw, 128px);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+  color: var(--border-strong);
+  user-select: none;
+}
+.notFoundTitle {
+  font-size: clamp(28px, 6vw, 44px);
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1.08;
+  margin: 18px 0 0;
+}
+.notFoundTitle span { color: var(--accent-ink); font-style: italic; }
+.notFoundBody {
+  font-size: 15.5px;
+  color: var(--text-soft);
+  line-height: 1.65;
+  max-width: 52ch;
+  margin: 16px 0 0;
+}
+.notFoundWays {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+  margin-top: 32px;
+}
+.notFoundWay {
+  display: block;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.notFoundWay:hover { border-color: var(--accent); transform: translateY(-1px); }
+.notFoundWayLabel {
+  display: block;
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: -0.2px;
+  color: var(--accent-ink);
+}
+.notFoundWayBlurb {
+  display: block;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.notFoundFoot { font-size: 12.5px; color: var(--text-muted); margin-top: 28px; }
