@@ -19,6 +19,7 @@ import { articlesForEvent } from '@/lib/articles';
 import { billingEnabled, formatPence, getMembership, getPlan, membershipIsActive } from '@/lib/membership';
 import { eventEligible, liveRequestFor } from '@/lib/accessRequests';
 import { GetMeIn } from '@/components/membership/GetMeIn';
+import { AdminItemActions } from '@/components/admin/AdminItemActions';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,6 +72,7 @@ export default async function EventDetailPage({ params, searchParams }: {params:
   return <main className="wrap"><TrackView eventId={event.id} src={src}/>
     <section className="detailHero">{event.primary_image_url&&<img className="bg" src={event.primary_image_url} alt=""/>}<div className="detailHeroInner"><div className="detailKicker">{eventTypeLabel(event.event_type)}{past&&' · Past event'}{event.status!=='live'&&` · ${event.status.replace('_',' ')} (admin preview)`}</div><h1 className="detailTitle">{event.title}</h1>{listingBadge&&<div style={{marginBottom:12}}><span className={`listingBadge ${listingBadge}`}>{listingBadge.replace('_',' ')}</span></div>}<div className="detailMetaRow"><span><strong>{fmtEventDate(event.start_at,event.end_at,event.timezone)}</strong></span><span>{fmtEventTime(event.start_at,event.end_at,event.timezone)}</span>{event.venue&&<span>{event.venue.name}</span>}{location&&<span>{location}</span>}</div>{event.genres.length>0&&<div className="tagRow" style={{marginTop:16}}>{event.genres.map(g=><Link key={g.slug} href={`/events?genre=${g.slug}`} className="tag">{g.name}</Link>)}</div>}</div></section>
     {cancelled&&<div className="cancelBanner">CANCELLED — this event is no longer going ahead.</div>}
+    {member?.role==='admin'&&<AdminItemActions noun="event" name={event.title} editHref={`/admin/events/${event.id}`} deleteUrl={`/api/admin/events/${event.id}`} afterDelete="/events"/>}
     <div className="detailColumns"><div>
       {event.short_description&&<p className="prose" style={{fontSize:18,color:'var(--text)'}}>{event.short_description}</p>}
       {event.description&&<><div className="sectionLabel">About</div><p className="prose">{event.description}</p></>}

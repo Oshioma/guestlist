@@ -1,5 +1,6 @@
 import { query, queryOne } from './db';
 import { notifyAdminsArticleEdited, notifyAdminsNewArticle } from './adminNotify';
+import { audit } from './audit';
 
 export type Article = {
   id:string; section_slug:string; section_name:string; author_id:string; author_name:string; author_slug:string|null; author_avatar_url:string|null;
@@ -77,6 +78,15 @@ export async function adminEditArticle(id:string,adminId:string,p:ArticlePatch){
   await snapshot(current,adminId); const x=normalizedPatch(current,p);
   await query(`update articles set title=$2,subtitle=$3,excerpt=$4,body=$5,article_type=$6,hero_image_url=$7,hero_image_alt=$8,image_provider=$9,image_credit=$10,image_source_url=$11,tags=$12,reading_minutes=$13,updated_at=now() where id=$1`,[id,x.title,x.subtitle,x.excerpt,x.body,x.article_type,x.hero_image_url,x.hero_image_alt,x.image_provider,x.image_credit,x.image_source_url,x.tags,x.reading_minutes]);
   return queryOne<Article>(`${SELECT} where a.id=$1`,[id]);
+}
+export async function adminDeleteArticle(id:string,adminId:string){
+  // Admin deletion is permanent and reaches anything an author's own delete
+  // would reach — views, revisions and event links all cascade. The audit row
+  // is written first so the record survives the row.
+  const a=await queryOne<{title:string;author_id:string}>(`select title,author_id from articles where id=$1`,[id]); if(!a)return false;
+  await audit('article_deleted',{actorId:adminId,detail:{articleId:id,title:a.title,authorId:a.author_id}});
+  await query(`delete from articles where id=$1`,[id]);
+  return true;
 }
 export async function adminReviewArticle(id:string,adminId:string,action:'request_changes'|'approve'|'publish'|'reject'|'archive'|'feature',note?:string,featured?:boolean){
   const a=await queryOne<Article>(`${SELECT} where a.id=$1`,[id]); if(!a) return null; await snapshot(a,adminId);

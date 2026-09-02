@@ -3179,3 +3179,28 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
   background: var(--accent); color: var(--on-accent);
 }
 .mbHow .mbBenefit p strong { color: var(--text); }
+
+/* Admin edit / delete bar, shown on public event and article pages to admins
+   only. Deliberately quiet — it sits above the content it acts on without
+   competing with it. */
+.adminItemActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+}
+.adminItemActionsTag {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.adminItemActionsBtn { font-size: 11.5px; padding: 6px 12px; }
+.adminItemActionsDanger { color: var(--danger); }
+.adminItemActionsWarn { font-size: 11.5px; color: var(--danger); }
