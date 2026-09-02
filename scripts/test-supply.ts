@@ -38,7 +38,7 @@ import { pickPageImage, findPageImages, largestInSrcset, backgroundImageUrl } fr
 import { canonicalCity, isCanonicalCity } from '@/lib/cityNames';
 import { looksClientRendered } from '@/lib/supply/scanner';
 import { isLiveSource } from '@/lib/supply/health';
-import { findListingLink } from '@/lib/supply/probe';
+import { findListingLink, previewBody } from '@/lib/supply/probe';
 import { testVerdict } from '@/lib/supply/verdict';
 import { fetcherFor, renderingConfigured } from '@/lib/supply/render';
 import { parse } from 'node-html-parser';
@@ -1792,6 +1792,18 @@ async function main() {
     check('a candidate with event links reads as OK', !testVerdict(probe(true, 3)).bad);
     check('a reachable page with no event links reads as a problem', testVerdict(probe(true, 0)).bad);
     check('an unreachable candidate reads as a problem', testVerdict(probe(false, null)).bad);
+
+    // Every "reachable but nothing found" in this file's history was settled
+    // by LOOKING at the response. These are the three things that produce an
+    // identical HTTP 200 and need telling apart at a glance.
+    check('a preview collapses whitespace so a fragment is readable',
+      previewBody('<div>\n\n   <a href="/x">One</a>\n</div>') === '<div> <a href="/x">One</a> </div>');
+    check('a long body is cut rather than dumped',
+      previewBody('x'.repeat(5000)).length <= 701);
+    check('a compressed body is called that, not printed as mojibake',
+      previewBody('\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0010' .repeat(20)).includes('probably compressed'));
+    check('an empty results list previews as itself',
+      previewBody('<div class="results"></div>') === '<div class="results"></div>');
 
     // A sitemap that reads fine but has nothing event-shaped in it must not be
     // told it "renders its listings with JavaScript". XML does not render.

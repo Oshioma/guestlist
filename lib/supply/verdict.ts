@@ -58,6 +58,17 @@ export type ProbeResult = {
   // rather than left for an admin to discover by ticking a box.
   renderedCandidates?: number | null;
   renderNote?: string | null;
+  // WHAT WE ACTUALLY GOT. Every round of "reachable but nothing found" so far
+  // has been solved by seeing the response rather than reasoning about it: an
+  // empty results list, a bot challenge, a compressed body we cannot read and
+  // a page of filter tabs all produce the same "HTTP 200, no event links".
+  // Showing the first few hundred characters ends that guessing in one click.
+  bodyPreview?: string | null;
+  bodyBytes?: number | null;
+  responseType?: string | null;
+  // The same page as the browser saw it. A big difference in size when the
+  // link counts match is its own clue.
+  browserBytes?: number | null;
   // A sitemap with more event pages than the listing page gave us. Offered
   // rather than substituted: the admin was looking at a filtered view, and the
   // sitemap is the whole site.

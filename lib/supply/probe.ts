@@ -15,6 +15,21 @@ import type { FetchProbe, ProbeResult } from './verdict';
 
 export type { FetchProbe, ProbeResult } from './verdict';
 
+// The first stretch of a response, made readable. Not a parse and not a
+// judgement — the bytes, so a person can see whether they got an empty list,
+// a bot challenge, or something we simply do not know how to read yet.
+//
+// Binary is called binary rather than printed: a compressed body rendered as
+// mojibake looks like a broken page when it is a header problem.
+export function previewBody(body: string, limit = 700): string {
+  const control = (body.match(/[\u0000-\u0008\u000e-\u001f]/g) ?? []).length;
+  if (control > body.length / 50) {
+    return `[not text — ${control} control bytes in the first ${body.length}. The response is probably compressed or binary.]`;
+  }
+  const flat = body.replace(/\s+/g, ' ').trim();
+  return flat.length > limit ? `${flat.slice(0, limit)}…` : flat;
+}
+
 const BROWSER_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 // Below this many links, a page is worth re-reading in a browser.
@@ -171,6 +186,10 @@ export async function probeTarget(
   }
 
   const result: ProbeResult = {
+    bodyPreview: asBot.ok ? previewBody(asBot.body) : null,
+    bodyBytes: asBot.ok ? asBot.body.length : null,
+    responseType: asBot.ok ? asBot.contentType : null,
+    browserBytes: asBrowser.ok ? asBrowser.body.length : null,
     target, bot: toProbe(asBot), browser: toProbe(asBrowser), method, candidates,
     candidateUrls, clientRendered, embedded, sampleUrls, browserCandidates, ownFilters,
     skippedSitemaps, declaredSitemap, urlsSeen, sitemapsRead,
