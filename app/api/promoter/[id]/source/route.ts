@@ -54,8 +54,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ error: 'That URL is already connected to another source' }, { status: 409 });
     }
     const source = await queryOne<{ id: string }>(
+      // NOT polling. Connecting a site says "read this", not "read this
+      // every day forever" — and a schedule nobody chose is a schedule
+      // nobody is watching. An admin turns it on once the scans look right.
       `insert into event_sources (source_type, name, url, promoter_id, polling_enabled, poll_frequency_hours, notes)
-       values ('promoter_website', $1, $2, $3, true, 24, 'Connected by promoter team')
+       values ('promoter_website', $1, $2, $3, false, 24, 'Connected by promoter team')
        returning id`,
       [`${promoter.name} — website`, url, id]
     );
