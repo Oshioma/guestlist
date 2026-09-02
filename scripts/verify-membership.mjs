@@ -426,6 +426,13 @@ try {
       check('creating with a website fills photo + logo from the site', withSite.status === 200 && withSite.data.images?.hero === true && withSite.data.images?.logo === true);
       const [img] = await q(`select hero_image_url, logo_url from market_businesses where id = $1`, [withSite.data.id]);
       check('og:image → photo, apple-touch-icon → logo (absolute URLs)', img.hero_image_url === 'http://127.0.0.1:4597/images/hero.jpg' && img.logo_url === 'http://127.0.0.1:4597/apple-touch-icon.png');
+      // The edit page must show what was found straight away — the admin
+      // saw blank fields after FIND IMAGES, and saving those blanks cleared
+      // the pictures again.
+      const editPage = await oshi.html(`/admin/market/${withSite.data.id}`);
+      check('edit page shows the found photo + logo in the fields, with previews',
+        editPage.includes('value="http://127.0.0.1:4597/images/hero.jpg"') && editPage.includes('value="http://127.0.0.1:4597/apple-touch-icon.png"')
+        && editPage.includes('class="imagePreviewPhoto"') && editPage.includes('class="imagePreviewLogo"'));
       await oshi.json('/api/admin/market', 'POST', { action: 'update', businessId: withSite.data.id, business: { heroImageUrl: 'https://cdn.example/chosen.jpg' } });
       const again = await oshi.json('/api/admin/market', 'POST', { action: 'find_images', businessId: withSite.data.id });
       check('FIND IMAGES never overwrites a picture admin chose', again.status === 200 && again.data.images.hero === false
