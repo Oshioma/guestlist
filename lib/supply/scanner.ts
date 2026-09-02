@@ -79,6 +79,46 @@ export function canonicaliseCandidateUrl(raw: string, baseUrl: string): string |
   return url.toString();
 }
 
+// A LISTING PAGE'S OWN FILTERS ARE NOT EVENTS.
+//
+// ADE's programme is one path, /en/program/filter/, re-queried for every view
+// of it. Its four "candidate event links" were that same page again with
+// ?section=persons, ?section=venues and a different type — its own tabs. They
+// passed because the PATH says programme, and the path is the same path we
+// are standing on.
+//
+// So: same path as the page we fetched is navigation, UNLESS the link
+// introduces a query key the page itself does not have. That exception is
+// what keeps an older site's /events/?id=1234 — an id is identity, a narrower
+// value of a key the page already carries is a facet.
+export function isFacetOfPage(candidate: URL, page: URL): boolean {
+  if (candidate.pathname.replace(/\/+$/, '') !== page.pathname.replace(/\/+$/, '')) return false;
+  const pageKeys = new Set([...page.searchParams.keys()]);
+  for (const key of candidate.searchParams.keys()) {
+    if (!pageKeys.has(key)) return false;
+  }
+  return true;
+}
+
+// How many links on the page were the page again under a different filter.
+// Reported rather than silently dropped, because "0 candidates" where there
+// were 4 a moment ago needs a reason, and "those four were your own tabs" is
+// the reason.
+export function pageFilterLinks(html: string, pageUrl: string): number {
+  const base = new URL(pageUrl);
+  const seen = new Set<string>();
+  for (const a of parse(html).querySelectorAll('a[href]')) {
+    const href = a.getAttribute('href');
+    const canonical = href && canonicaliseCandidateUrl(href, pageUrl);
+    if (!canonical || seen.has(canonical)) continue;
+    let url: URL;
+    try { url = new URL(canonical); } catch { continue; }
+    if (!EVENT_PATH_HINT.test(url.pathname)) continue;
+    if (isFacetOfPage(url, base)) seen.add(canonical);
+  }
+  return seen.size;
+}
+
 export function identifyCandidateLinks(html: string, pageUrl: string): string[] {
   const root = parse(html);
   const base = new URL(pageUrl);
@@ -98,6 +138,7 @@ export function identifyCandidateLinks(html: string, pageUrl: string): string[] 
       continue;
     }
     if (NON_EVENT_PATH.test(url.pathname)) continue;
+    if (isFacetOfPage(url, base)) continue;
 
     const sameSite = url.hostname.replace(/^www\./, '') === base.hostname.replace(/^www\./, '');
     const pathLooksEventy = EVENT_PATH_HINT.test(url.pathname);
@@ -171,6 +212,7 @@ export function identifyEmbeddedLinks(html: string, pageUrl: string): string[] {
       if (url.hostname.replace(/^www\./, '') !== base.hostname.replace(/^www\./, '')) continue;
       if (NOT_A_PAGE.test(url.pathname) || A_FILE.test(url.pathname)) continue;
       if (NON_EVENT_PATH.test(url.pathname)) continue;
+      if (isFacetOfPage(url, base)) continue;
       if (!EVENT_PATH_HINT.test(url.pathname)) continue;
       seen.add(canonical);
       out.push(canonical);
