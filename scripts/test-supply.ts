@@ -1440,6 +1440,20 @@ async function main() {
         '<html><body><a href="/events/detail?id=1234">Friday</a></body></html>',
         'https://old.example/events/detail?view=list'
       ).length === 1);
+
+    // A redirect that drops the query must not promote the tabs to events:
+    // we asked for ?section=events&category=…, we landed on the bare path,
+    // and the tabs would otherwise look like links introducing new keys.
+    check('a redirect that drops the query does not turn tabs into events',
+      identifyCandidateLinks(TABS, 'https://www.amsterdam-dance-event.nl/en/program/filter/', ADE).length === 0,
+      JSON.stringify(identifyCandidateLinks(TABS, 'https://www.amsterdam-dance-event.nl/en/program/filter/', ADE)));
+    check('and they are still counted as the page\u2019s own filters',
+      pageFilterLinks(TABS, 'https://www.amsterdam-dance-event.nl/en/program/filter/', ADE) === 3);
+    check('a real event link survives a redirect that drops the query',
+      identifyCandidateLinks(
+        '<html><body><a href="/en/program/2026/oliver-heldens/998/">Oliver Heldens</a></body></html>',
+        'https://www.amsterdam-dance-event.nl/en/program/filter/', ADE
+      ).length === 1);
   }
 
   // -------------------------------------------------------------------------

@@ -86,13 +86,13 @@ export async function probeTarget(
       found = parseFeedLinks(asBot.body, asBot.finalUrl);
     } else {
       method = 'html';
-      found = identifyCandidateLinks(asBot.body, asBot.finalUrl);
+      found = identifyCandidateLinks(asBot.body, asBot.finalUrl, target);
       // How much of that came from the page's embedded data rather than its
       // markup — the difference between "this page hides its listings" and
       // "this page shipped them, just not as links".
       const inMarkup = new Set(found);
-      embedded = identifyEmbeddedLinks(asBot.body, asBot.finalUrl).filter((u) => inMarkup.has(u)).length;
-      ownFilters = pageFilterLinks(asBot.body, asBot.finalUrl);
+      embedded = identifyEmbeddedLinks(asBot.body, asBot.finalUrl, target).filter((u) => inMarkup.has(u)).length;
+      ownFilters = pageFilterLinks(asBot.body, asBot.finalUrl, target);
     }
   }
   const candidates: number | null = asBot.ok ? found.length : null;
@@ -116,7 +116,7 @@ export async function probeTarget(
   // But an admin cannot decide what to do about a wall nobody has named.
   let browserCandidates: number | null = null;
   if (asBrowser.ok && method === 'html') {
-    browserCandidates = identifyCandidateLinks(asBrowser.body, asBrowser.finalUrl).length;
+    browserCandidates = identifyCandidateLinks(asBrowser.body, asBrowser.finalUrl, target).length;
   }
   // A couple more links is noise — a nav that differs, a cookie banner. A
   // page of listings against a handful is a different page.

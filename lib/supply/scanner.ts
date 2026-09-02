@@ -91,11 +91,25 @@ export function canonicaliseCandidateUrl(raw: string, baseUrl: string): string |
 // introduces a query key the page itself does not have. That exception is
 // what keeps an older site's /events/?id=1234 — an id is identity, a narrower
 // value of a key the page already carries is a facet.
-export function isFacetOfPage(candidate: URL, page: URL): boolean {
-  if (candidate.pathname.replace(/\/+$/, '') !== page.pathname.replace(/\/+$/, '')) return false;
-  const pageKeys = new Set([...page.searchParams.keys()]);
+//
+// Compared against every URL that describes the page: the one we ASKED for as
+// well as the one we ended up at. A site that redirects
+// /program/filter/?section=events&category=… to /program/filter/ would
+// otherwise look like a page with no query at all, and its own tabs would
+// come back as links "introducing" section and category — facets promoted to
+// events by a redirect.
+export function isFacetOfPage(candidate: URL, ...pages: URL[]): boolean {
+  const known = new Set<string>();
+  let samePath = false;
+  const candPath = candidate.pathname.replace(/\/+$/, '');
+  for (const page of pages) {
+    if (page.pathname.replace(/\/+$/, '') !== candPath) continue;
+    samePath = true;
+    for (const key of page.searchParams.keys()) known.add(key);
+  }
+  if (!samePath) return false;
   for (const key of candidate.searchParams.keys()) {
-    if (!pageKeys.has(key)) return false;
+    if (!known.has(key)) return false;
   }
   return true;
 }
@@ -104,8 +118,9 @@ export function isFacetOfPage(candidate: URL, page: URL): boolean {
 // Reported rather than silently dropped, because "0 candidates" where there
 // were 4 a moment ago needs a reason, and "those four were your own tabs" is
 // the reason.
-export function pageFilterLinks(html: string, pageUrl: string): number {
+export function pageFilterLinks(html: string, pageUrl: string, requestedUrl?: string): number {
   const base = new URL(pageUrl);
+  const asked = new URL(requestedUrl ?? pageUrl);
   const seen = new Set<string>();
   for (const a of parse(html).querySelectorAll('a[href]')) {
     const href = a.getAttribute('href');
@@ -114,14 +129,16 @@ export function pageFilterLinks(html: string, pageUrl: string): number {
     let url: URL;
     try { url = new URL(canonical); } catch { continue; }
     if (!EVENT_PATH_HINT.test(url.pathname)) continue;
-    if (isFacetOfPage(url, base)) seen.add(canonical);
+    if (isFacetOfPage(url, base, asked)) seen.add(canonical);
   }
   return seen.size;
 }
 
-export function identifyCandidateLinks(html: string, pageUrl: string): string[] {
+export function identifyCandidateLinks(html: string, pageUrl: string, requestedUrl?: string): string[] {
   const root = parse(html);
   const base = new URL(pageUrl);
+  // What we asked for, when a redirect landed us somewhere plainer.
+  const asked = new URL(requestedUrl ?? pageUrl);
   const out: string[] = [];
   const seen = new Set<string>();
   const pageCanonical = canonicaliseCandidateUrl(pageUrl, pageUrl);
@@ -138,7 +155,7 @@ export function identifyCandidateLinks(html: string, pageUrl: string): string[] 
       continue;
     }
     if (NON_EVENT_PATH.test(url.pathname)) continue;
-    if (isFacetOfPage(url, base)) continue;
+    if (isFacetOfPage(url, base, asked)) continue;
 
     const sameSite = url.hostname.replace(/^www\./, '') === base.hostname.replace(/^www\./, '');
     const pathLooksEventy = EVENT_PATH_HINT.test(url.pathname);
@@ -157,7 +174,7 @@ export function identifyCandidateLinks(html: string, pageUrl: string): string[] 
   // Nothing in the markup, or barely anything. Before writing the page off as
   // "renders in the browser", look at the data it was served WITH.
   if (out.length < EMBEDDED_FLOOR) {
-    for (const url of identifyEmbeddedLinks(html, pageUrl)) {
+    for (const url of identifyEmbeddedLinks(html, pageUrl, requestedUrl)) {
       if (seen.has(url)) continue;
       seen.add(url);
       out.push(url);
@@ -188,9 +205,10 @@ const A_FILE = /\.(json|jsonp|js|mjs|css|map|png|jpe?g|gif|svg|webp|avif|ico|wof
 // The rule is the same one the markup pass uses: a same-site path that looks
 // like an event page. Nothing here trusts the JSON's shape, because every site
 // invents its own — it only trusts the URLs, which are the site's own.
-export function identifyEmbeddedLinks(html: string, pageUrl: string): string[] {
+export function identifyEmbeddedLinks(html: string, pageUrl: string, requestedUrl?: string): string[] {
   const root = parse(html);
   const base = new URL(pageUrl);
+  const asked = new URL(requestedUrl ?? pageUrl);
   const pageCanonical = canonicaliseCandidateUrl(pageUrl, pageUrl);
   const out: string[] = [];
   const seen = new Set<string>();
@@ -212,7 +230,7 @@ export function identifyEmbeddedLinks(html: string, pageUrl: string): string[] {
       if (url.hostname.replace(/^www\./, '') !== base.hostname.replace(/^www\./, '')) continue;
       if (NOT_A_PAGE.test(url.pathname) || A_FILE.test(url.pathname)) continue;
       if (NON_EVENT_PATH.test(url.pathname)) continue;
-      if (isFacetOfPage(url, base)) continue;
+      if (isFacetOfPage(url, base, asked)) continue;
       if (!EVENT_PATH_HINT.test(url.pathname)) continue;
       seen.add(canonical);
       out.push(canonical);
@@ -506,7 +524,7 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
     candidates = parseFeedLinks(fetched.body, fetched.finalUrl);
   } else {
     method = 'html';
-    candidates = identifyCandidateLinks(fetched.body, fetched.finalUrl);
+    candidates = identifyCandidateLinks(fetched.body, fetched.finalUrl, target);
     // An advertised feed is a FALLBACK, not an upgrade. Only look at one when
     // the listing page itself yielded nothing: sites routinely advertise a
     // generic blog or news feed, and adopting one while the page was working
