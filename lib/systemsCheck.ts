@@ -9,7 +9,7 @@
 import { query, queryOne } from './db';
 import { auditSchema } from './schemaAudit';
 import { getPlan, formatPence } from './membership';
-import { stripeRequest, StripeError } from './stripe';
+import { managedPaymentsEnabled, stripeRequest, StripeError } from './stripe';
 
 export type Verdict = 'ok' | 'warn' | 'bad' | 'off';
 export type Check = { name: string; verdict: Verdict; detail: string; hint?: string };
@@ -57,6 +57,7 @@ export const ENV_INVENTORY: { group: string; vars: { name: string; why: string; 
     { name: 'STRIPE_SECRET_KEY', why: 'Turns real checkout on' },
     { name: 'STRIPE_PRICE_MEMBERSHIP_MONTHLY', why: 'The £30/month price to sell' },
     { name: 'STRIPE_WEBHOOK_SECRET', why: 'Verifies events Stripe sends back' },
+    { name: 'STRIPE_MANAGED_PAYMENTS', why: 'true = Stripe is merchant of record (product then needs a tax code); off by default' },
   ] },
   { group: 'Resend · email', vars: [
     { name: 'RESEND_API_KEY', why: 'Sends mail' },
@@ -151,13 +152,21 @@ async function stripeGroup(): Promise<Group> {
     checks.push({ name: 'Membership price', verdict: 'bad', detail: 'STRIPE_PRICE_MEMBERSHIP_MONTHLY not set — JOIN cannot open a checkout' });
   } else {
     try {
-      const p = await stripeRequest<{ id: string; active: boolean; unit_amount: number | null; currency: string; recurring: { interval: string; interval_count: number } | null; livemode: boolean }>('GET', `/prices/${encodeURIComponent(priceId)}`);
+      const p = await stripeRequest<{ id: string; active: boolean; unit_amount: number | null; currency: string; recurring: { interval: string; interval_count: number } | null; livemode: boolean; product: { id: string; name: string; tax_code: string | { id: string } | null } | string }>('GET', `/prices/${encodeURIComponent(priceId)}`, { expand: ['product'] });
       const shown = p.unit_amount != null ? `${formatPence(p.unit_amount, p.currency.toUpperCase())} / ${p.recurring?.interval ?? 'one-off'}` : 'no amount';
       const matches = !!plan && p.unit_amount === plan.price_pence && p.currency.toUpperCase() === plan.currency.toUpperCase() && p.recurring?.interval === plan.interval;
       checks.push(!p.active ? { name: 'Membership price', verdict: 'bad', detail: `${shown} — but the price is archived in Stripe`, hint: 'Create an active price and update the variable.' }
         : !p.recurring ? { name: 'Membership price', verdict: 'bad', detail: `${shown} — not a recurring price` }
         : !matches && plan ? { name: 'Membership price', verdict: 'warn', detail: `${shown} in Stripe, but the plan here is ${formatPence(plan.price_pence, plan.currency)} / ${plan.interval}`, hint: 'Members would be charged the Stripe amount. Align one with the other.' }
         : { name: 'Membership price', verdict: 'ok', detail: `${shown}, active${p.livemode ? '' : ' (test mode)'}` });
+      // Managed Payments makes Stripe the merchant of record and refuses a
+      // product with no tax code — the exact error JOIN showed in testing.
+      const product = typeof p.product === 'object' && p.product ? p.product : null;
+      const taxCode = product ? (typeof product.tax_code === 'string' ? product.tax_code : product.tax_code?.id ?? null) : null;
+      checks.push(managedPaymentsEnabled()
+        ? taxCode ? { name: 'Managed Payments', verdict: 'ok', detail: `On (Stripe is merchant of record) · product tax code ${taxCode}` }
+          : { name: 'Managed Payments', verdict: 'bad', detail: `On, but the product${product ? ` "${product.name}"` : ''} has no tax code — Checkout refuses to open`, hint: 'Stripe → Product catalogue → the product → Tax code, or unset STRIPE_MANAGED_PAYMENTS.' }
+        : { name: 'Managed Payments', verdict: 'ok', detail: 'Off — Guestlist is the merchant; Checkout is told so each time', hint: 'Set STRIPE_MANAGED_PAYMENTS=true to let Stripe be merchant of record (then the product needs a tax code).' });
     } catch (err) {
       checks.push(err instanceof StripeError && err.status === 401 ? { name: 'Membership price', verdict: 'bad', detail: 'Stripe rejected the secret key (401)', hint: 'Copy the key again from Stripe → Developers → API keys.' }
         : err instanceof StripeError && err.status === 404 ? { name: 'Membership price', verdict: 'bad', detail: 'No price with that id — is it from the other (test/live) mode?' }

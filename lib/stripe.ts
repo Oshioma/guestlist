@@ -94,6 +94,16 @@ export async function getSubscription(id: string): Promise<StripeSubscription> {
   return stripeRequest<StripeSubscription>('GET', `/subscriptions/${encodeURIComponent(id)}`);
 }
 
+// Stripe's Managed Payments (Stripe as merchant of record, collecting tax
+// on our behalf) is switched on by default for newer accounts and refuses
+// any product without a tax code. Guestlist is the merchant here: our own
+// database is the source of truth, the webhook expects a plain subscription,
+// and receipts and refunds are ours. So it is off unless deliberately
+// turned on — and then the product needs a tax code in Stripe.
+export function managedPaymentsEnabled(): boolean {
+  return /^(1|true|yes)$/i.test((process.env.STRIPE_MANAGED_PAYMENTS ?? '').trim());
+}
+
 export async function createCheckoutSession(opts: {
   priceId: string;
   memberId: string;
@@ -112,6 +122,7 @@ export async function createCheckoutSession(opts: {
     allow_promotion_codes: true,
     metadata: { member_id: opts.memberId },
     subscription_data: { metadata: { member_id: opts.memberId } },
+    ...(managedPaymentsEnabled() ? {} : { managed_payments: { enabled: false } }),
   });
 }
 

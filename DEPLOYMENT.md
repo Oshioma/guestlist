@@ -90,6 +90,14 @@ To take money:
    member as *Active · stripe* and `/you/membership` opens the Billing
    Portal.
 
+**Managed Payments.** Newer Stripe accounts have *Managed Payments* (Stripe
+as merchant of record, collecting tax for you) switched on by default, and
+it refuses any product without a tax code — JOIN then fails with *"the
+product tax code is missing"*. Guestlist turns it off on every Checkout it
+opens, so nothing to do. If you decide you *do* want Stripe as merchant of
+record, set `STRIPE_MANAGED_PAYMENTS=true` and give the product a tax code
+in Stripe → Product catalogue; `/admin/systems` tells you if it is missing.
+
 Membership pages, GET ME IN, the Market and the admin desks work with or
 without Stripe; only the JOIN button depends on it.
 
