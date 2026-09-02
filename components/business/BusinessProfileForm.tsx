@@ -23,6 +23,17 @@ export function BusinessProfileForm({ businessId, initial, categories, endpoint,
   const [err, setErr] = useState('');
   const upd = (patch: Partial<Values>) => setV((x) => ({ ...x, ...patch }));
 
+  // FIND IMAGES (and a save that read the website) writes pictures straight
+  // to the listing, then refreshes the page. The form keeps its own copy of
+  // the fields, so pull in anything the server found for a field that is
+  // still blank — without touching edits in progress, and without ever
+  // handing a stale blank back on the next save (which would clear them).
+  const [seen, setSeen] = useState({ logo: initial.logoUrl, hero: initial.heroImageUrl });
+  if (seen.logo !== initial.logoUrl || seen.hero !== initial.heroImageUrl) {
+    setSeen({ logo: initial.logoUrl, hero: initial.heroImageUrl });
+    setV((x) => ({ ...x, logoUrl: x.logoUrl || initial.logoUrl, heroImageUrl: x.heroImageUrl || initial.heroImageUrl }));
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setErr(''); setMsg('');
@@ -58,8 +69,10 @@ export function BusinessProfileForm({ businessId, initial, categories, endpoint,
       <input id="b-web" value={v.website} onChange={(e) => upd({ website: e.target.value })} placeholder="https://…" />
       <label htmlFor="b-logo">Logo image URL</label>
       <input id="b-logo" value={v.logoUrl} onChange={(e) => upd({ logoUrl: e.target.value })} placeholder="https://… (square)" />
+      {v.logoUrl && <ImagePreview key={v.logoUrl} src={v.logoUrl} kind="logo" onClear={() => upd({ logoUrl: '' })} />}
       <label htmlFor="b-hero">Photo URL</label>
       <input id="b-hero" value={v.heroImageUrl} onChange={(e) => upd({ heroImageUrl: e.target.value })} placeholder="https://… (landscape)" />
+      {v.heroImageUrl && <ImagePreview key={v.heroImageUrl} src={v.heroImageUrl} kind="photo" onClear={() => upd({ heroImageUrl: '' })} />}
       <p className="fieldNote">Paste image links for now — the same way promoters do. Uploads come later.</p>
       {SOCIALS.map((k) => (
         <div key={k}>
@@ -76,5 +89,20 @@ export function BusinessProfileForm({ businessId, initial, categories, endpoint,
       {msg && <div className="formOk">{msg}</div>}
       <button className="btnAccent" style={{ width: '100%', marginTop: 8 }} disabled={busy} type="submit">{busy ? 'Saving…' : 'Save listing'}</button>
     </form>
+  );
+}
+
+// What the link actually shows, so nobody has to save and go looking.
+function ImagePreview({ src, kind, onClear }: { src: string; kind: 'logo' | 'photo'; onClear: () => void }) {
+  // Keyed on src by the caller, so a new link starts unbroken.
+  const [broken, setBroken] = useState(false);
+  return (
+    <div className="imagePreview" data-kind={kind}>
+      {broken
+        ? <span className="fieldNote" style={{ margin: 0 }}>That link doesn’t load as an image.</span>
+        /* eslint-disable-next-line @next/next/no-img-element */
+        : <img src={src} alt="" className={kind === 'logo' ? 'imagePreviewLogo' : 'imagePreviewPhoto'} onError={() => setBroken(true)} />}
+      <button type="button" className="btnGhost" style={{ padding: '4px 10px', fontSize: 10.5 }} onClick={onClear}>Remove</button>
+    </div>
   );
 }
