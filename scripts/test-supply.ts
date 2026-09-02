@@ -2009,6 +2009,19 @@ async function main() {
     check('a sitemap full of event pages reads as OK',
       !testVerdict({ ...probe(true, 40), method: 'sitemap' as const }).bad);
 
+    // ADE's endpoint answers [null] — six bytes — when a parameter it needs
+    // is missing. Telling an admin that "the page may render its listings
+    // with JavaScript" sends them after a problem that is not there.
+    const emptyJson = { ...probe(true, 0), method: 'json' as const, bodyBytes: 6 };
+    check('an empty JSON answer is not blamed on JavaScript',
+      !testVerdict(emptyJson).text.includes('JavaScript')
+      && !testVerdict(emptyJson).text.includes('raw HTML'),
+      testVerdict(emptyJson).text);
+    check('and it points at the parameter rather than the site',
+      testVerdict(emptyJson).text.includes('missing a parameter')
+      && testVerdict(emptyJson).text.includes('6 bytes'),
+      testVerdict(emptyJson).text);
+
     // The wall a status-code comparison walks straight past: same HTTP 200
     // both times, but the browser was handed the listings and we were not.
     const twoFaced = { ...probe(true, 4), browserCandidates: 38, servesBrowsersMore: true };
