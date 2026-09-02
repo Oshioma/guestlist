@@ -6,6 +6,7 @@
 
 import { execSync } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
+import { gzipSync, brotliCompressSync, deflateSync } from 'node:zlib';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
@@ -263,6 +264,35 @@ async function main() {
         case '/ok':
           res.writeHead(200, { 'Content-Type': 'text/html' }).end('<html><title>ok</title></html>');
           break;
+        // A CDN handing back a compressed variant. Read as UTF-8 this is a
+        // page of mojibake with no links in it — HTTP 200, right size,
+        // nothing found — which is indistinguishable from an empty site.
+        case '/gzipped':
+          res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Encoding': 'gzip' })
+            .end(gzipSync(Buffer.from('<html><a href="/events/gzip-night">Gzip Night</a></html>')));
+          break;
+        case '/brotli':
+          res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Encoding': 'br' })
+            .end(brotliCompressSync(Buffer.from('<html><a href="/events/br-night">Brotli Night</a></html>')));
+          break;
+        case '/deflated':
+          res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Encoding': 'deflate' })
+            .end(deflateSync(Buffer.from('<html><title>deflated</title></html>')));
+          break;
+        case '/identity':
+          res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Encoding': 'identity' })
+            .end('<html><title>plain</title></html>');
+          break;
+        case '/lying':
+          // Says gzip, is not. A broken stream must be reported, never handed
+          // on as text for the rest of the pipeline to find nothing in.
+          res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Encoding': 'gzip' })
+            .end('<html>not actually compressed</html>');
+          break;
+        case '/bomb':
+          res.writeHead(200, { 'Content-Type': 'text/html', 'Content-Encoding': 'gzip' })
+            .end(gzipSync(Buffer.alloc(4_000_000, 0x61)));
+          break;
         default:
           res.writeHead(500).end();
       }
@@ -292,6 +322,26 @@ async function main() {
     const fb = await safeFetch(T('/forbidden'), opts);
     check('403 → blocked_by_site (no anti-bot escalation)', !fb.ok && fb.code === 'blocked_by_site');
     check('localhost blocked WITHOUT test allowlist', !(await safeFetch(T('/ok'))).ok);
+
+    // COMPRESSED RESPONSES. We ask for them now, so we had better be able to
+    // read them — and a CDN will hand one over whether we asked or not.
+    const gz = await safeFetch(T('/gzipped'), opts);
+    check('a gzipped page is read, not handed on as mojibake',
+      gz.ok && gz.body.includes('Gzip Night'), gz.ok ? gz.body.slice(0, 60) : gz.detail);
+    const br = await safeFetch(T('/brotli'), opts);
+    check('a brotli page is read too — the shape ADE serves',
+      br.ok && br.body.includes('Brotli Night'), br.ok ? br.body.slice(0, 60) : br.detail);
+    const df = await safeFetch(T('/deflated'), opts);
+    check('deflate is read', df.ok && df.body.includes('deflated'));
+    const id = await safeFetch(T('/identity'), opts);
+    check('an identity encoding is left alone', id.ok && id.body.includes('plain'));
+    const lying = await safeFetch(T('/lying'), opts);
+    check('a body that lies about its encoding fails loudly',
+      !lying.ok && lying.code === 'fetch_failed' && /decompress/i.test(lying.detail),
+      JSON.stringify(lying));
+    const bomb = await safeFetch(T('/bomb'), opts);
+    check('a small response that expands past the cap is stopped',
+      !bomb.ok && bomb.code === 'too_large', JSON.stringify(bomb));
     if (slowTimer) clearTimeout(slowTimer);
     server.close();
   }
