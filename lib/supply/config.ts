@@ -17,6 +17,12 @@ export const supplyConfig = {
     // A pause after the network goes quiet, for the last paint.
     waitMs: num(process.env.SUPPLY_RENDER_WAIT_MS, 1_500),
   },
+  listing: {
+    // A paginated listing is followed page by page. Twenty is more than any
+    // festival programme needs and few enough that a misread parameter cannot
+    // walk a site forever.
+    maxPagesPerScan: num(process.env.SUPPLY_MAX_PAGES_PER_SCAN, 20),
+  },
   fetch: {
     timeoutMs: num(process.env.SUPPLY_FETCH_TIMEOUT_MS, 12_000),
     maxBytes: num(process.env.SUPPLY_FETCH_MAX_BYTES, 2_000_000),

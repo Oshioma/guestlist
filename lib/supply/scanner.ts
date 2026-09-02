@@ -136,6 +136,34 @@ export function pageFilterLinks(html: string, pageUrl: string, requestedUrl?: st
   return seen.size;
 }
 
+// A LISTING THAT ARRIVES A PAGE AT A TIME.
+//
+// ADE's programme is served from /api/program/filter/?…&page=0 — an HTML
+// fragment, one page of results, exactly the shape our reader already
+// handles. Read page 0 and stop, though, and a five-day festival becomes
+// however many events fit in one screenful.
+//
+// Only these parameters, and only when the value is already a whole number.
+// Guessing at ?offset= or ?start= means guessing the page size too, and a
+// wrong guess silently skips events rather than failing loudly.
+const PAGE_PARAMS = ['page', 'p', 'pg', 'pagina', 'seite', 'pagenum', 'page_num'];
+
+export function nextPageUrl(current: string): string | null {
+  let url: URL;
+  try { url = new URL(current); } catch { return null; }
+  for (const key of PAGE_PARAMS) {
+    const raw = url.searchParams.get(key);
+    if (raw === null || !/^\d{1,6}$/.test(raw)) continue;
+    url.searchParams.set(key, String(Number(raw) + 1));
+    return url.toString();
+  }
+  return null;
+}
+
+export function isPaged(current: string): boolean {
+  return nextPageUrl(current) !== null;
+}
+
 export function identifyCandidateLinks(html: string, pageUrl: string, requestedUrl?: string): string[] {
   const root = parse(html);
   const base = new URL(pageUrl);
@@ -630,6 +658,29 @@ export async function scanSource(sourceId: string, ctx: ScanContext = {}): Promi
   } else {
     method = 'html';
     candidates = identifyCandidateLinks(fetched.body, fetched.finalUrl, target);
+    // A paged listing keeps going. Stop the moment a page adds nothing new —
+    // that is the end of the results, and it is also what a site does when it
+    // ignores a page number it has run out of, so the same check covers both.
+    if (isPaged(target)) {
+      const seen = new Set(candidates);
+      let pageUrl: string | null = target;
+      for (let page = 0; page < supplyConfig.listing.maxPagesPerScan; page++) {
+        if (candidates.length >= supplyConfig.scan.maxCandidatesPerScan) break;
+        pageUrl = nextPageUrl(pageUrl);
+        if (!pageUrl) break;
+        await sleep(ctx.delayMs ?? supplyConfig.scan.delayBetweenFetchesMs);
+        const next = await fetcher(pageUrl, {
+          ...ctx.fetchOptions,
+          accept: 'text/html,application/xhtml+xml,application/xml;q=0.9',
+        });
+        if (!next.ok) break;
+        const fresh = identifyCandidateLinks(next.body, next.finalUrl, pageUrl)
+          .filter((u) => !seen.has(u));
+        if (!fresh.length) break;
+        for (const u of fresh) { seen.add(u); candidates.push(u); }
+      }
+      candidates = candidates.slice(0, supplyConfig.scan.maxCandidatesPerScan);
+    }
     // An advertised feed is a FALLBACK, not an upgrade. Only look at one when
     // the listing page itself yielded nothing: sites routinely advertise a
     // generic blog or news feed, and adopting one while the page was working

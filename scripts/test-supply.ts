@@ -29,7 +29,7 @@ import { zonedTimeToUtc, parseLocalInTimezone, parseFoundDate, resolveEndCrossin
 import { mapGenreProposals, loadGenres } from '@/lib/supply/genres';
 import { computeOverallConfidence, canAutoPublish } from '@/lib/supply/confidence';
 import { runExtractionPipeline } from '@/lib/supply/pipeline';
-import { scanSource, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, countSitemapUrls, sitemapEventUrls, sitemapIndexUrls, sitemapsFromRobots } from '@/lib/supply/scanner';
+import { scanSource, nextPageUrl, isPaged, identifyCandidateLinks, identifyEmbeddedLinks, isFacetOfPage, pageFilterLinks, parseFeedLinks, canonicaliseCandidateUrl, countSitemapUrls, sitemapEventUrls, sitemapIndexUrls, sitemapsFromRobots } from '@/lib/supply/scanner';
 import { explainScan, outcomeLabel } from '@/lib/supply/outcomes';
 import { discoverSources, normaliseCandidates, isBannedCandidateHost, buildDiscoveryUser, DISCOVERY_SYSTEM_PROMPT, type DiscoveryClient } from '@/lib/supply/discover';
 import { matchGenreIdsByName } from '@/lib/util';
@@ -1580,6 +1580,59 @@ async function main() {
     });
     check('a client-rendered shell still yields its events',
       shellScan.method === 'html' && shellScan.extracted === 2, JSON.stringify(shellScan));
+
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— a listing that arrives a page at a time —');
+  {
+    const ADE_API = 'https://www.amsterdam-dance-event.nl/api/program/filter/?section=events&type=8262,8263&page=0';
+    check('a page parameter is followed to the next page',
+      nextPageUrl(ADE_API)?.endsWith('page=1') === true, String(nextPageUrl(ADE_API)));
+    check('a URL with no page parameter is not paged',
+      !isPaged('https://plain.example/whats-on'));
+    check('a non-numeric page value is left alone',
+      !isPaged('https://plain.example/list?page=next'));
+    check('offset and start are never guessed at',
+      !isPaged('https://plain.example/list?offset=20') && !isPaged('https://plain.example/list?start=40'));
+
+    // End to end, in ADE's exact shape: an HTML fragment per page, from an
+    // /api/ path, with the events on it.
+    const paged = (await q(
+      `insert into event_sources (source_type, name, url, trust)
+       values ('venue_website', 'Paged API listing', '${ADE_API}', 'trusted') returning id`
+    ))[0] as { id: string };
+    const fragment = (n: number) =>
+      `<div><a href="/en/program/2026/act-${n}/${900000 + n}/">Act ${n}</a></div>`;
+    const pageBodies: Record<string, { body: string }> = {};
+    const aiPages: Record<string, unknown> = {};
+    for (let n = 0; n < 3; n++) {
+      pageBodies[`https://www.amsterdam-dance-event.nl/api/program/filter/?section=events&type=8262%2C8263&page=${n}`] = { body: fragment(n) };
+      pageBodies[`https://www.amsterdam-dance-event.nl/en/program/2026/act-${n}/${900000 + n}/`] =
+        { body: `<html><title>Act ${n}</title><body><main>a</main></body></html>` };
+      aiPages[`https://www.amsterdam-dance-event.nl/en/program/2026/act-${n}/${900000 + n}/`] = {
+        is_event: true, is_music_event: true, title: `Act ${n}`,
+        start_date: FUTURE.toISOString().slice(0, 10), start_time: '23:00',
+        city: 'Amsterdam', country: 'Netherlands',
+        genres: [{ name: 'Techno', confidence: 90 }],
+        field_confidence: { title: 92, date: 90, city: 88, genres: 88 },
+      };
+    }
+    // The stored URL keeps the comma the admin typed; every URL we build from
+    // it comes back percent-encoded. Both are the same page to the site.
+    pageBodies['https://www.amsterdam-dance-event.nl/api/program/filter/?section=events&type=8262,8263&page=0'] = { body: fragment(0) };
+    // Page 3 onwards repeats page 2's content, which is what a site does when
+    // it runs out: the scan must stop there rather than loop to the cap.
+    pageBodies['https://www.amsterdam-dance-event.nl/api/program/filter/?section=events&type=8262%2C8263&page=3'] = { body: fragment(2) };
+    const pagedScan = await scanSource(paged.id, {
+      fetcher: mockFetcher(pageBodies),
+      ai: mockAI(aiPages as Parameters<typeof mockAI>[0]),
+      delayMs: 1,
+    });
+    check('every page of a paged listing becomes events',
+      pagedScan.extracted === 3, JSON.stringify(pagedScan));
+    check('and a page that repeats the last one ends the walk',
+      pagedScan.candidatesFound === 3, JSON.stringify(pagedScan));
 
   }
 
