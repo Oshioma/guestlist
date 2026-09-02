@@ -1,10 +1,12 @@
 // WHAT MEMBERSHIP ACTUALLY GETS YOU.
 //
-// Six equal grey boxes said everything was equally important, which meant
-// nothing led. This gives the section a shape: getting in free is the reason
-// anybody joins, so it takes the whole top; the two things you feel next —
-// walking past a queue, and a drop landing — take a row of their own; and the
-// three standing benefits sit underneath at the size they deserve.
+// Six benefits, six cards the same size. Nothing is a footnote to anything
+// else: getting in free is the headline reason, but somebody who joins for the
+// Market, or for what the membership funds, is joining for a real reason too —
+// and a small grey box underneath a big card says otherwise.
+//
+// The rhythm comes from alternating which side the photograph sits on, not
+// from making some cards bigger than others.
 //
 // It is one component used by both the page that sells membership and the page
 // a member already has, because the promise and the thing delivered have to be
@@ -12,8 +14,8 @@
 // only difference, and they come in as props.
 //
 // Nothing here claims more than the copy did before. "Free entrance whenever
-// we can make it happen" is a careful sentence and the fine print stays next
-// to the big number rather than at the bottom of the page.
+// we can make it happen" is a careful sentence, and its caveat stays beside it
+// rather than at the bottom of the page.
 
 import Link from 'next/link';
 import { siteImages } from '@/lib/siteImages';
@@ -25,9 +27,13 @@ type Props = {
   causes?: { title: string }[];
 };
 
-// Icons are inline because three of them are the only images on this section
-// and a request each is a request too many.
+// Icons are inline because a request each is a request too many.
 const Icon = {
+  free: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="9" /><path d="M8.5 12.3l2.4 2.4 4.6-4.9" />
+    </svg>
+  ),
   arrow: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M5 12h13M13 6l6 6-6 6" />
@@ -61,117 +67,138 @@ const Icon = {
   ),
 };
 
+type Benefit = {
+  key: string;
+  icon: React.ReactNode;
+  title: string;
+  sub: string;
+  lead: string;
+  body: string;
+  fine?: string;
+  state?: { label: string; text: string; href: string | null };
+  link?: { href: string; label: string };
+  note?: string;
+};
+
 export async function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
   const isMember = variant === 'member';
   // The photographs are settings, not code: an admin changes them on
   // /admin/site and every page showing them follows.
-  const IMAGES = await siteImages();
+  const images = await siteImages();
+
+  const benefits: Benefit[] = [
+    {
+      key: 'membership.hero',
+      icon: Icon.free,
+      title: 'Get in free',
+      sub: 'Your night. On us.',
+      lead: isMember
+        ? 'Free entrance to parties whenever we can make it happen.'
+        : 'See an event you want to go to? Ask Guestlist, and we’ll work on getting you in.',
+      body: 'Through the promoter, the venue, our own allocations, or by buying access '
+        + 'where that’s reasonable. When we can’t, we’ll say so — and often find a member price instead.',
+      fine: 'Subject to availability and fair use.',
+    },
+    {
+      key: 'membership.queueJump',
+      icon: Icon.arrow,
+      title: 'Queue jump',
+      sub: 'Less queue. More party.',
+      lead: 'Priority and fast-track entrance where available.',
+      body: 'Through participating events and venues — less time on the pavement, more time inside.',
+    },
+    {
+      key: 'membership.drops',
+      icon: Icon.spark,
+      title: 'Member drops',
+      sub: 'You never know what’s coming.',
+      lead: 'Surprise tickets, last-minute guestlists, special events and secret parties.',
+      body: isMember
+        ? 'They land on your membership page and by email, and they go fast.'
+        : 'Members hear about them first, and they go fast.',
+      state: {
+        label: 'Next drop',
+        text: drops > 0
+          ? `${drops} live now →`
+          : isMember ? 'Nothing live — you’ll know first' : 'Members hear first',
+        href: drops > 0 ? '/you/membership#drops' : null,
+      },
+    },
+    {
+      key: 'membership.prices',
+      icon: Icon.price,
+      title: 'Member prices',
+      sub: 'Pay less when free isn’t possible.',
+      lead: 'A discounted ticket or a special Guestlist price.',
+      body: isMember
+        ? 'It shows on your membership page the moment we have it.'
+        : 'Arranged for members when free entrance isn’t on the table.',
+    },
+    {
+      key: 'membership.market',
+      icon: Icon.market,
+      title: 'Guestlist Market',
+      sub: 'The best places, chosen by us.',
+      lead: 'Restaurants, bars, record shops, studios, clothing and places to stay.',
+      body: 'Handpicked by Guestlist, not listed by anyone — independent people we actually like.',
+      link: { href: '/market', label: 'Browse the Market →' },
+    },
+    {
+      key: 'membership.doGood',
+      icon: Icon.heart,
+      title: 'Do good for others',
+      sub: 'Good nights can do good things.',
+      lead: 'Members support community projects chosen with the community.',
+      body: 'And you see exactly what those projects are.',
+      // Never a promise where there is not yet a project.
+      note: causes.length > 0
+        ? causes.map((c) => c.title).join(' · ')
+        : 'The first projects will be announced to members. Nothing is claimed here until it’s real.',
+    },
+  ];
 
   return (
     <section className="mbPerks" aria-label="What membership gets you">
-
-      {/* THE REASON ANYBODY JOINS, at the size that says so.
-          A photograph carries it rather than a coloured box: this is a night
-          out being sold, and the page should feel like one. */}
-      <div className="mbPerkHero">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="mbPerkHeroImg" src={IMAGES['membership.hero']} alt="" aria-hidden />
-        <div className="mbPerkHeroText">
-          {/* A member already has these; everybody else is being told about
-              them. Same six things, two different sentences. */}
-          <div className="mbPerkKicker">{isMember ? 'What you’ve got' : 'Membership benefits'}</div>
-          {/* Natural case in the markup, uppercased in CSS: what gets read aloud
-              and what gets copied should be words, not shouting. */}
-          <h2 className="mbPerkBig">Get in free</h2>
-          <div className="mbPerkSub">Your night. On us.</div>
-          <p className="mbPerkLead">
-            {isMember
-              ? 'Free entrance to parties whenever we can make it happen.'
-              : 'See an event you want to go to? Ask Guestlist, and we’ll work on getting you in.'}
-          </p>
-          <p className="mbPerkBody">
-            Through the promoter, the venue, our own allocations, or by buying access
-            where that’s reasonable. When we can’t, we’ll say so — and often find a
-            member price instead.
-          </p>
-          {/* The caveat sits with the claim, not at the bottom of the page. */}
-          <div className="mbPerkFine">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <circle cx="12" cy="12" r="9" /><path d="M8.5 12.3l2.4 2.4 4.6-4.9" />
-            </svg>
-            Subject to availability and fair use.
-          </div>
-        </div>
+      <div className="mbPerkKicker mbPerkKickerTop">
+        {isMember ? 'What you’ve got' : 'Membership benefits'}
       </div>
 
-      {/* The two you feel on the night. */}
-      <div className="mbPerkPair">
-        <div className="mbPerkCard lilac photo">
-          <span className="mbPerkShot">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={IMAGES['membership.queueJump']} alt="" aria-hidden />
-          </span>
-          <span className="mbPerkIcon">{Icon.arrow}</span>
-          <h3>Queue jump</h3>
-          <div className="mbPerkTag">Less queue. More party.</div>
-          <p>Priority and fast-track entrance where available, through participating events and venues.</p>
-        </div>
+      {benefits.map((b, i) => (
+        // The photograph swaps sides down the run. Six identical cards need
+        // rhythm from somewhere, and this is better than making some bigger.
+        <div className={`mbPerkHero${i % 2 ? ' flip' : ''}`} key={b.key}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="mbPerkHeroImg" src={images[b.key]} alt="" aria-hidden />
+          <div className="mbPerkHeroText">
+            <span className="mbPerkIcon">{b.icon}</span>
+            {/* Natural case in the markup, uppercased in CSS: what gets read
+                aloud and what gets copied should be words, not shouting. */}
+            <h2 className="mbPerkBig">{b.title}</h2>
+            <div className="mbPerkSub">{b.sub}</div>
+            <p className="mbPerkLead">{b.lead}</p>
+            <p className="mbPerkBody">{b.body}</p>
 
-        <div className="mbPerkCard cream photo">
-          <span className="mbPerkShot">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={IMAGES['membership.drops']} alt="" aria-hidden />
-          </span>
-          <span className="mbPerkIcon gold">{Icon.spark}</span>
-          <h3>Member drops</h3>
-          <div className="mbPerkTag">You never know what’s coming.</div>
-          <p>Surprise tickets, last-minute guestlists, special events and secret parties.</p>
-          <div className="mbPerkDrop">
-            <span className="mbPerkDropLabel">Next drop</span>
-            {drops > 0 ? (
-              <Link href="/you/membership#drops" className="mbPerkDropState live">
-                {`${drops} live now →`}
-              </Link>
-            ) : (
-              <span className="mbPerkDropState">
-                {isMember ? 'Nothing live — you’ll know first' : 'Members hear first'}
-              </span>
+            {b.fine && (
+              <div className="mbPerkFine">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="12" cy="12" r="9" /><path d="M8.5 12.3l2.4 2.4 4.6-4.9" />
+                </svg>
+                {b.fine}
+              </div>
             )}
+            {b.state && (
+              <div className="mbPerkDrop">
+                <span className="mbPerkDropLabel">{b.state.label}</span>
+                {b.state.href
+                  ? <Link href={b.state.href} className="mbPerkDropState live">{b.state.text}</Link>
+                  : <span className="mbPerkDropState">{b.state.text}</span>}
+              </div>
+            )}
+            {b.link && <Link href={b.link.href} className="mbPerkLink">{b.link.label}</Link>}
+            {b.note && <div className="mbPerkNote">{b.note}</div>}
           </div>
         </div>
-      </div>
-
-      {/* The three standing benefits. */}
-      <div className="mbPerkTrio">
-        <div className="mbPerkCard">
-          <span className="mbPerkIcon">{Icon.price}</span>
-          <h3>Member prices</h3>
-          <div className="mbPerkTag">Pay less when free isn’t possible.</div>
-          <p>
-            A discounted ticket or a special Guestlist price
-            {isMember ? ' shows on your membership page the moment we have it.' : ', arranged for members.'}
-          </p>
-        </div>
-
-        <div className="mbPerkCard">
-          <span className="mbPerkIcon">{Icon.market}</span>
-          <h3>Guestlist Market</h3>
-          <div className="mbPerkTag">The best places, chosen by us.</div>
-          <p>Restaurants, bars, record shops, studios, clothing and places to stay — handpicked by Guestlist, not listed by anyone.</p>
-          <Link href="/market" className="mbPerkLink">Browse the Market →</Link>
-        </div>
-
-        <div className="mbPerkCard">
-          <span className="mbPerkIcon">{Icon.heart}</span>
-          <h3>Do good for others</h3>
-          <div className="mbPerkTag">Good nights can do good things.</div>
-          <p>Members support community projects chosen with the community — and you see exactly what those projects are.</p>
-          {/* Never a promise where there is not yet a project. */}
-          {causes.length > 0
-            ? <div className="mbPerkNote">{causes.map((c) => c.title).join(' · ')}</div>
-            : <div className="mbPerkNote">The first projects will be announced to members. Nothing is claimed here until it’s real.</div>}
-        </div>
-      </div>
+      ))}
 
       <div className="mbPerkFoot">
         <span className="mbPerkIcon">{Icon.crown}</span>

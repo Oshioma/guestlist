@@ -9,6 +9,7 @@ import { getCurrentMember } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { peopleFromScene, peopleYouMayHaveDancedWith, sceneReasons, yourPeopleUpcoming } from '@/lib/scene';
 import { listConnections } from '@/lib/connections';
+import { followedArtists } from '@/lib/profiles';
 import { discoverableSql } from '@/lib/privacy';
 import { notBlockedSql, connectedSql } from '@/lib/connections';
 import { ConnectButton } from '@/components/v2c/ConnectButton';
@@ -55,7 +56,7 @@ export default async function PeoplePage() {
   const member = await getCurrentMember();
   if (!member) redirect('/login?next=/people');
 
-  const [danced, scenePeople, connections, peoplePlans, sameEvents, recent] = await Promise.all([
+  const [danced, scenePeople, connections, peoplePlans, sameEvents, recent, artists] = await Promise.all([
     peopleYouMayHaveDancedWith(member.id, 6),
     peopleFromScene(member.id, { limit: 12 }),
     listConnections(member.id),
@@ -89,6 +90,7 @@ export default async function PeoplePage() {
         order by m.created_at desc limit 6`,
       [member.id]
     ),
+    followedArtists(member.id),
   ]);
 
   const sceneIds = new Set(scenePeople.map((p) => p.id));
@@ -280,6 +282,34 @@ export default async function PeoplePage() {
           <div className="peopleGrid">
             {recent.filter((p) => !sceneIds.has(p.id)).map((p) => (
               <PersonCard key={p.id} p={p} reasons={['New to Guestlist']} isSignedIn relation={relationFor.get(p.id)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ARTISTS, UNDER THE PEOPLE.
+          One follower is the bar. An artist nobody follows is a name that
+          arrived attached to an event listing, and a directory of those is a
+          phone book; the moment somebody cares, they are part of this scene. */}
+      {artists.length > 0 && (
+        <section>
+          <div className="sectionLabel">Artists people follow</div>
+          <div className="artistFollowGrid">
+            {artists.map((a) => (
+              <Link key={a.id} href={`/artists/${a.slug}`} className="artistFollowCard">
+                {a.image_url
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img className="artistFollowArt" src={a.image_url} alt="" />
+                  : <span className="artistFollowArt artistFollowBlank" aria-hidden>{a.name.charAt(0)}</span>}
+                <span className="artistFollowBody">
+                  <span className="artistFollowName">{a.name}</span>
+                  <span className="artistFollowMeta">
+                    {`${a.follower_count} follower${a.follower_count === 1 ? '' : 's'}`}
+                    {a.upcoming_count > 0 && ` · ${a.upcoming_count} coming up`}
+                  </span>
+                  {a.following && <span className="artistFollowYou">You follow them</span>}
+                </span>
+              </Link>
             ))}
           </div>
         </section>

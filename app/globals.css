@@ -3413,132 +3413,88 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 .mbPerks { display: grid; gap: 14px; margin-top: 34px; }
 
 /* --- The hero claim ------------------------------------------------------ */
-/* THE LIGHT TREATMENT.
-   A card, not a dark band: the photograph takes the right half and the words
-   sit on the page's own ground. On /membership this matters — the hero above
-   is already near-black, and two dark blocks in a row is a lot of night
-   before any relief. */
+/* SIX BENEFITS, SIX CARDS THE SAME SIZE.
+   The photograph takes one half, the words the other, and the sides alternate
+   down the run so six identical cards still have a rhythm. */
 .mbPerkHero {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-raised);
   overflow: hidden;
+  min-height: 340px;
+  --mbFade: clamp(36px, 5vw, 80px);
 }
-.mbPerkHeroText {
-  padding: clamp(28px, 4vw, 52px);
-  align-self: center;
-}
+.mbPerkHeroText { padding: clamp(26px, 3.4vw, 46px); align-self: center; }
 .mbPerkHeroImg {
   /* The picture fills whatever height the words need — it must never be the
      thing that sets it, or a tall photograph drags the card with it. */
-  position: absolute; inset: 0 0 0 auto;
-  width: 48%; height: 100%;
+  position: absolute; top: 0; bottom: 0; right: 0;
+  width: 50%; height: 100%;
   object-fit: cover; display: block;
   background: var(--media-ph);
 }
-/* A short fade on the picture's inner edge so it joins the card rather than
-   butting against it. */
+/* A short fade INSIDE the picture's inner edge, so it joins the card rather
+   than butting against it. It has to sit over the photograph, never over the
+   words — a gradient across the first letter of every line is worse than a
+   hard edge. */
 .mbPerkHero::after {
   content: "";
-  position: absolute; top: 0; bottom: 0; right: 48%;
-  width: clamp(40px, 6vw, 90px);
+  position: absolute; top: 0; bottom: 0;
+  left: 50%; width: var(--mbFade);
   background: linear-gradient(90deg, var(--bg-raised), transparent);
   pointer-events: none;
 }
+.mbPerkHero.flip .mbPerkHeroText { grid-column: 2; }
+.mbPerkHero.flip .mbPerkHeroImg { right: auto; left: 0; }
+.mbPerkHero.flip::after {
+  left: calc(50% - var(--mbFade));
+  background: linear-gradient(270deg, var(--bg-raised), transparent);
+}
+
 .mbPerkKicker {
   font-size: 11px; font-weight: 800; letter-spacing: 0.22em;
   text-transform: uppercase; color: var(--accent-ink);
 }
+.mbPerkKickerTop { margin-bottom: -2px; }
 .mbPerkBig {
-  font-size: clamp(34px, 5.2vw, 56px);
-  font-weight: 800; letter-spacing: -0.035em; line-height: 0.94;
-  margin: 12px 0 0; text-transform: uppercase;
+  font-size: clamp(28px, 3.6vw, 42px);
+  font-weight: 800; letter-spacing: -0.03em; line-height: 0.98;
+  margin: 14px 0 0; text-transform: uppercase;
 }
 .mbPerkSub {
-  font-size: clamp(18px, 2.4vw, 24px); font-weight: 750;
-  letter-spacing: -0.3px; color: var(--accent-ink); margin-top: 8px;
+  font-size: clamp(16px, 1.9vw, 20px); font-weight: 750;
+  letter-spacing: -0.25px; color: var(--accent-ink); margin-top: 7px;
 }
 .mbPerkLead {
-  font-size: clamp(15px, 1.8vw, 17.5px); line-height: 1.55;
-  color: var(--text); margin: 16px 0 0; max-width: 38ch;
+  font-size: clamp(14.5px, 1.6vw, 16.5px); line-height: 1.55;
+  color: var(--text); margin: 14px 0 0; max-width: 38ch;
 }
 .mbPerkBody {
   font-size: 13.5px; line-height: 1.62; color: var(--text-muted);
-  margin: 10px 0 0; max-width: 42ch;
+  margin: 9px 0 0; max-width: 42ch;
 }
 .mbPerkFine {
   display: flex; align-items: center; gap: 7px;
-  font-size: 12.5px; color: var(--accent-ink); margin-top: 20px;
+  font-size: 12.5px; color: var(--accent-ink); margin-top: 18px;
 }
 .mbPerkFine svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.mbPerkLink { display: inline-block; font-size: 13px; font-weight: 700; color: var(--accent-ink); margin-top: 18px; }
+.mbPerkNote { font-size: 12px; color: var(--text-faint); line-height: 1.55; margin-top: 18px; max-width: 44ch; }
 
-/* --- Cards --------------------------------------------------------------- */
-.mbPerkPair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.mbPerkTrio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-
-.mbPerkCard {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-raised);
-  padding: clamp(20px, 2.6vw, 28px);
-  display: flex; flex-direction: column;
-  overflow: hidden;
-}
-/* A picture card: the photograph runs to the card's edges, and the icon
-   straddles the join between the image and the words. */
-.mbPerkCard.photo { padding-top: 0; padding-left: 0; padding-right: 0; }
-.mbPerkCard.photo > :not(.mbPerkShot) { margin-left: clamp(20px, 2.6vw, 28px); margin-right: clamp(20px, 2.6vw, 28px); }
-.mbPerkShot {
-  display: block; position: relative;
-  height: clamp(150px, 17vw, 200px);
-  margin: 0 0 clamp(20px, 2.6vw, 28px);
-  background: var(--media-ph);
-}
-.mbPerkShot img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.mbPerkCard.photo .mbPerkIcon {
-  /* Lifted over the photograph's bottom edge. */
-  margin-top: calc(-1 * clamp(20px, 2.6vw, 28px) - 20px);
-  position: relative; z-index: 1;
-  box-shadow: 0 6px 18px rgba(15, 14, 10, 0.14);
-}
-.mbPerkCard.photo.lilac .mbPerkIcon { background: #efe6f8; }
-.mbPerkCard.photo.cream .mbPerkIcon { background: #f8efdb; }
-.mbPerkCard.lilac { background: rgba(124, 74, 158, 0.09); border-color: rgba(124, 74, 158, 0.2); }
-.mbPerkCard.cream { background: rgba(180, 145, 40, 0.09); border-color: rgba(180, 145, 40, 0.22); }
-.mbPerkCard h3 {
-  font-size: 17px; font-weight: 800; letter-spacing: -0.2px;
-  margin: 14px 0 0; text-transform: uppercase;
-}
-.mbPerkTag {
-  font-size: 13.5px; font-weight: 650; color: var(--accent-ink);
-  margin-top: 4px; line-height: 1.4;
-}
-.mbPerkCard p {
-  font-size: 13.5px; line-height: 1.62; color: var(--text-muted);
-  margin: 12px 0 16px;
-  /* A rule above the body, the way the reference separates label from detail. */
-  padding-top: 12px; border-top: 1px solid var(--border);
-}
 .mbPerkIcon {
   width: 40px; height: 40px; border-radius: 12px;
   display: grid; place-items: center; flex: 0 0 auto;
   background: var(--accent-soft); color: var(--accent-ink);
 }
 .mbPerkIcon svg { width: 20px; height: 20px; }
-.mbPerkIcon.gold { background: rgba(180, 145, 40, 0.16); color: var(--gold-ink); }
-.mbPerkLink {
-  font-size: 12.5px; font-weight: 700; color: var(--accent-ink);
-  /* Pushed to the foot so the links line up across cards of different lengths. */
-  margin-top: auto; padding-top: 14px;
-}
-.mbPerkNote { font-size: 12px; color: var(--text-faint); line-height: 1.55; margin-top: auto; padding-top: 12px; }
 
 /* The drop status: a real state, not decoration. */
 .mbPerkDrop {
-  margin-top: auto; padding: 11px 14px;
+  margin-top: 18px; padding: 11px 14px;
+  display: inline-block;
   border: 1px solid rgba(180, 145, 40, 0.3);
   border-radius: var(--radius-sm);
   background: var(--bg-raised);
@@ -3577,13 +3533,15 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 @media (max-width: 900px) {
   /* The picture goes above the words rather than beside them — half a
      photograph beside a paragraph is neither. */
-  .mbPerkHero { display: block; }
-  .mbPerkHeroImg { position: static; width: 100%; height: clamp(180px, 42vw, 260px); }
-  .mbPerkHero::after { display: none; }
-  .mbPerkTrio { grid-template-columns: 1fr; }
+  .mbPerkHero { display: block; min-height: 0; }
+  .mbPerkHeroImg,
+  .mbPerkHero.flip .mbPerkHeroImg {
+    position: static; width: 100%; height: clamp(170px, 40vw, 240px);
+  }
+  .mbPerkHero::after, .mbPerkHero.flip::after { display: none; }
+  .mbPerkHero.flip .mbPerkHeroText { grid-column: auto; }
 }
 @media (max-width: 620px) {
-  .mbPerkPair { grid-template-columns: 1fr; }
   .mbPerkFootCta { width: 100%; text-align: center; }
 }
 
@@ -3634,3 +3592,69 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
   background: var(--bg); color: var(--text);
 }
 .siteImgError { font-size: 12px; color: var(--danger); margin-top: 9px; }
+
+
+/* ===========================================================================
+   ARTIST CLIPS — the two minutes worth watching, and what they are about.
+   =========================================================================== */
+.clipGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+.clipCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.clipArt { position: relative; display: block; background: var(--media-ph); }
+.clipArt img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
+.clipTime {
+  position: absolute; right: 10px; bottom: 10px;
+  background: rgba(0, 0, 0, 0.82); color: #fff;
+  padding: 4px 8px; border-radius: 6px;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.02em;
+}
+.clipBody { padding: 15px 16px 17px; display: flex; flex-direction: column; flex: 1; }
+.clipTitle { margin: 0; font-size: 16.5px; line-height: 1.28; letter-spacing: -0.2px; }
+.clipTopic {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--accent-ink); margin-top: 7px;
+}
+.clipSummary { margin: 10px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--text-muted); }
+.clipPlay { font-size: 12.5px; font-weight: 700; margin-top: auto; padding-top: 14px; }
+
+/* ===========================================================================
+   ARTISTS ON THE PEOPLE PAGE — under the members, once anybody follows them.
+   =========================================================================== */
+.artistFollowGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.artistFollowCard {
+  display: flex; align-items: center; gap: 13px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  text-decoration: none; color: inherit;
+  transition: border-color 0.15s ease;
+}
+.artistFollowCard:hover { border-color: var(--accent); }
+.artistFollowArt {
+  width: 48px; height: 48px; flex: 0 0 auto;
+  border-radius: 50%; object-fit: cover;
+  border: 1px solid var(--border-strong);
+}
+.artistFollowBlank {
+  display: grid; place-items: center;
+  background: var(--surface-hover);
+  font-size: 19px; font-weight: 800; color: var(--text-muted);
+}
+.artistFollowBody { min-width: 0; }
+.artistFollowName { display: block; font-size: 14.5px; font-weight: 700; letter-spacing: -0.2px; }
+.artistFollowMeta { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.artistFollowYou { display: block; font-size: 11px; font-weight: 700; color: var(--accent-ink); margin-top: 3px; }

@@ -40,11 +40,14 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
         </div>
       </section>
 
-      <VideoArchive videos={videos} legacy={artist.slug === 'dj-cassidy'} />
-
-      <div className="sectionLabel" style={{ marginTop: 42 }}>Playing next</div>
+      {/* WHERE THEY ARE PLAYING COMES FIRST. Somebody on an artist's page
+          most often wants a date, not an archive — the clips are why you stay,
+          not why you arrived. */}
+      <div className="sectionLabel" style={{ marginTop: 34 }}>Playing next</div>
       {upcoming.length ? <div className="cardGrid">{upcoming.map((e) => <EventCard key={e.id} event={e} saved={savedIds.has(e.id)} isSignedIn={!!member} />)}</div>
-        : <p className="adminSub" style={{ paddingBottom: 60 }}>No upcoming Guestlist events — follow to hear when they play.</p>}
+        : <p className="adminSub">No upcoming Guestlist events — follow to hear when they play.</p>}
+
+      <VideoArchive videos={videos} />
     </main>
   );
 }
