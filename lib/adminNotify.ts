@@ -29,6 +29,8 @@ export type ReviewQueue = {
   corrections: number;
   reports: number;
   genreSuggestions: number;
+  accessRequests: number;
+  marketApplications: number;
   total: number;
 };
 
@@ -49,7 +51,7 @@ async function count(sql: string): Promise<number> {
 // Everything waiting on a person. This is the one definition — the digest,
 // the admin dashboard panel and the tests all read it, so they cannot drift.
 export async function reviewQueue(): Promise<ReviewQueue> {
-  const [events, articles, claims, corrections, reports, genreSuggestions] = await Promise.all([
+  const [events, articles, claims, corrections, reports, genreSuggestions, accessRequests, marketApplications] = await Promise.all([
     count(`select count(*)::int as n from events
             where status in ('new', 'needs_review')
               and coalesce(end_at, start_at + interval '6 hours') > now()`),
@@ -62,10 +64,17 @@ export async function reviewQueue(): Promise<ReviewQueue> {
                  + (select count(*) from archive_memories
                      where status = 'visible' and report_count > 0))::int as n`),
     count(`select count(*)::int as n from genre_suggestions where status = 'pending'`),
+    // GET ME IN requests the desk still has to broker — a request the
+    // promoter's own list is already handling is not waiting on us.
+    count(`select count(*)::int as n from member_access_requests r
+            left join event_guestlist_entries g on g.id = r.guestlist_entry_id
+            where r.status in ('requested', 'reviewing', 'contacting_promoter')
+              and (g.id is null or g.status = 'declined')`),
+    count(`select count(*)::int as n from market_businesses where status in ('applied', 'pending')`),
   ]);
   return {
-    events, articles, claims, corrections, reports, genreSuggestions,
-    total: events + articles + claims + corrections + reports + genreSuggestions,
+    events, articles, claims, corrections, reports, genreSuggestions, accessRequests, marketApplications,
+    total: events + articles + claims + corrections + reports + genreSuggestions + accessRequests + marketApplications,
   };
 }
 
@@ -79,6 +88,8 @@ export function reviewQueueSummary(q: ReviewQueue): string {
     q.corrections && `${q.corrections} correction${q.corrections === 1 ? '' : 's'}`,
     q.reports && `${q.reports} report${q.reports === 1 ? '' : 's'}`,
     q.genreSuggestions && `${q.genreSuggestions} genre suggestion${q.genreSuggestions === 1 ? '' : 's'}`,
+    q.accessRequests && `${q.accessRequests} GET ME IN request${q.accessRequests === 1 ? '' : 's'}`,
+    q.marketApplications && `${q.marketApplications} Market application${q.marketApplications === 1 ? '' : 's'}`,
   ].filter(Boolean) as string[];
   if (!parts.length) return 'Nothing waiting for review.';
   const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;

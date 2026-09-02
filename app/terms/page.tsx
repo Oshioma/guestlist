@@ -22,6 +22,9 @@ export default function TermsPage() {
         <h2>3. Guestlists</h2>
         <p>Promoters and organisers may operate guestlists through Guestlist, and Guestlist may allow members to request places. A confirmation does not guarantee entry. Venue capacity, arrival deadlines, identification, dress or conduct rules, age restrictions and the organiser or venue’s final admission decision still apply.</p>
 
+        <h2>3A. Guestlist Membership</h2>
+        <p>Guestlist offers a paid monthly membership. Membership benefits — including asking Guestlist to arrange free or discounted event entrance, priority entrance where available, Guestlist Market offers from independent businesses and member drops — are provided subject to availability and fair use and are described in full in the <Link href="/membership/terms">Guestlist Membership Terms</Link>, which form part of these Terms for members. Guestlist does not guarantee entry to any specific event, and organisers and venues retain the final right of admission.</p>
+
         <h2>4. Promoters and organisers</h2>
         <p>People claiming or managing promoter profiles must be authorised to act for that promoter. Organisers are responsible for information they submit, guestlist decisions they make and their lawful handling of member information made available to operate an event or guestlist.</p>
 

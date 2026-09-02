@@ -9,6 +9,9 @@ import { myHistory } from '@/lib/scene';
 import { memberPlaces } from '@/lib/locations';
 import { getEmailPrefs, getPrivacy } from '@/lib/privacy';
 import { HistoryPanel, PlacesPanel, SettingsPanel, TastePanel } from '@/components/v2c/YouPanels';
+import Link from 'next/link';
+import { billingEnabled, getMembership, membershipIsActive, membershipLabel } from '@/lib/membership';
+import { MemberBadge } from '@/components/membership/MemberBadge';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +19,8 @@ export default async function YouPage() {
   const member = await getCurrentMember();
   if (!member) redirect('/login?next=/you');
 
+  const membership = await getMembership(member.id);
+  const isMember = membershipIsActive(membership);
   const [taste, allGenres, history, places, plans, privacy, emailPrefs, profile] = await Promise.all([
     tasteProfile(member.id),
     query<{ id: string; name: string; slug: string; parent_genre_id: string | null }>(
@@ -56,11 +61,28 @@ export default async function YouPage() {
         You’re in control of all of it.
       </p>
       <nav className="chipRow" style={{ marginBottom: 8 }}>
+        <Link href="/you/membership" className="chip">Membership</Link>
         <a href="#music" className="chip">Music</a>
         <a href="#history" className="chip">Rave history</a>
         <a href="#places" className="chip">Places & travel</a>
         <a href="#settings" className="chip">Profile & privacy</a>
       </nav>
+
+      {/* Membership first: it is the part of Guestlist that gets you in. */}
+      <section className="youPanel">
+        <h2 className="youPanelTitle">Membership {isMember && <MemberBadge style={{ marginLeft: 8, verticalAlign: 'middle' }} />}</h2>
+        <p className="youPanelSub">
+          {isMember
+            ? `${membershipLabel(membership)}. See something you want to go to? Press GET ME IN on the event.`
+            : 'Free entrance to parties when we can make it happen, member prices, the Market, drops — and a membership that does some good.'}
+        </p>
+        <div className="youPanelActions">
+          {isMember
+            ? <Link href="/you/membership" className="btnAccent">Your membership →</Link>
+            : <Link href="/membership" className="btnAccent">{billingEnabled() ? 'Join Guestlist' : 'Membership — coming soon'}</Link>}
+          <Link href="/market" className="youHistoryMeta" style={{ textDecoration: 'underline' }}>Guestlist Market</Link>
+        </div>
+      </section>
 
       <TastePanel
         allGenres={allGenres}

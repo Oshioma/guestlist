@@ -70,7 +70,32 @@ export type AnalyticsEventType =
   | 'promoter_followers_viewed'
   // V2H
   | 'ask_question'
-  | 'ask_feedback';
+  | 'ask_feedback'
+  // Membership
+  | 'membership_page_viewed'
+  | 'membership_waitlist_joined'
+  | 'membership_checkout_started'
+  | 'membership_started'
+  | 'membership_renewed'
+  | 'membership_payment_failed'
+  | 'membership_cancelled'
+  | 'membership_expired'
+  | 'membership_portal_opened'
+  | 'get_me_in_viewed'
+  | 'get_me_in_requested'
+  | 'get_me_in_guestlisted'
+  | 'get_me_in_decided'
+  | 'get_me_in_cancelled'
+  | 'promoter_contacted'
+  // Market
+  | 'market_viewed'
+  | 'market_business_viewed'
+  | 'market_offer_claimed'
+  | 'market_offer_redeemed'
+  | 'market_business_applied'
+  | 'market_business_decided'
+  | 'member_drop_viewed'
+  | 'member_drop_claimed';
 
 export async function track(
   type: AnalyticsEventType,

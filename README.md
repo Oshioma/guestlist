@@ -69,6 +69,38 @@ around rave, club and electronic music culture.
     admin review; every important promoter action lands in `audit_log`;
     notification rows stored for future delivery.
 
+- **Guestlist Membership — GET IN.** £30/month (`membership_plans`, more
+  tiers later without a schema change).
+  - `/membership` sells it: GET IN FREE · QUEUE JUMP · MEMBER PRICES ·
+    GUESTLIST MARKET · MEMBER DROPS · DO GOOD FOR OTHERS. Live before
+    payments are switched on (COMING SOON + waitlist); with
+    `STRIPE_SECRET_KEY` set the same page runs Stripe Checkout. Billing
+    Portal for manage/cancel; signed, idempotent webhooks at
+    `POST /api/webhooks/stripe`. `memberships` is the only source of truth —
+    `requireActiveMember()` reads it on every gated action.
+  - Admin can GRANT MEMBERSHIP (`billing_source` complimentary / lifetime /
+    manual, optional expiry) for DJs, promoters, press, partners.
+  - **GET ME IN** on every eligible event page (JUST ME / ME +1). If the
+    promoter's own guestlist is open on Guestlist the member goes straight
+    onto it; otherwise a brokered request lands on `/admin/getmein`, where
+    the desk contacts the promoter, confirms free entry (writing the real
+    `event_guestlist_entries` door list), offers a discount, buys a ticket,
+    waitlists or declines — with a reason. Members only ever see four
+    friendly states. No credits, points or quotas: fair use is information
+    for a person on `/admin/members`.
+  - Promoter relationships are tracked on the promoter record (contacts,
+    outreach ledger, relationship status, standing allocation); requests /
+    members sent / places supplied / value delivered are derived.
+  - **Guestlist Market** at `/market`: independent businesses chosen by
+    Guestlist (`invited → applied → pending → approved / rejected / paused`),
+    typed offers (percentage, fixed, free item, upgrade, package,
+    member-only, other), CLAIM MEMBER OFFER mints a single-use expiring code;
+    businesses redeem it in their portal at `/business`. Every claim and
+    redemption is recorded.
+  - Member area at `/you/membership`; GUESTLIST MEMBER badge on profiles;
+    member drops and community projects (`good_causes`, ships empty) on
+    `/admin/drops`; membership terms at `/membership/terms`.
+
 ## Stack
 
 - Next.js (App Router, TypeScript), hand-rolled CSS design system.
@@ -106,6 +138,13 @@ The promoter network has its own suite — `node scripts/verify-v2b.mjs`
 (108 checks: claims, teams, permission boundaries, source connection,
 import queue, lifecycle states, follows, analytics, event claiming,
 suspension — including the full promoter loop end to end).
+
+Membership, GET ME IN and the Market have their own suite —
+`node scripts/verify-membership.mjs` (waitlist, comp memberships, signed
+Stripe webhooks, GET ME IN routing and the desk, promoter outreach, Market
+claims and redemption, business portal permissions). Set
+`STRIPE_WEBHOOK_SECRET=whsec_test` in `.env.local` for the webhook checks;
+leave `STRIPE_SECRET_KEY` unset so the page is in COMING SOON mode.
 
 The Event Supply Engine has its own deterministic suite —
 `npm run test:supply` — 153 checks over fixtures with an injected fetcher

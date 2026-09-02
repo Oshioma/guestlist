@@ -16,6 +16,9 @@ import { CLUB_LIMITS, PRESENCE_ACTIVE_SQL, friendPairSql, presenceVisibleSql } f
 import { eventSocialContext } from '@/lib/scene';
 import { interviewsForEventArtists, youtubeTimestampUrl } from '@/lib/videoArchive';
 import { articlesForEvent } from '@/lib/articles';
+import { billingEnabled, formatPence, getMembership, getPlan, membershipIsActive } from '@/lib/membership';
+import { eventEligible, liveRequestFor } from '@/lib/accessRequests';
+import { GetMeIn } from '@/components/membership/GetMeIn';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +38,16 @@ export default async function EventDetailPage({ params, searchParams }: {params:
     `select mode,max_plus_ones,guestlist_closes_at from event_guestlist_settings where event_id=$1`,[event.id]
   );
   const guestlistOpen = !!guestlistSettings && guestlistSettings.mode !== 'promoter_only' && (!guestlistSettings.guestlist_closes_at || new Date(guestlistSettings.guestlist_closes_at).getTime() > Date.now());
+
+  // GET ME IN — for members, the way in. For everyone else, the reason to
+  // become one. Only on events that are live, upcoming and not cancelled.
+  const getMeInEligible = eventEligible(event);
+  const isMember = member ? membershipIsActive(await getMembership(member.id)) : false;
+  const getMeInViewer = !member ? 'anon' : isMember ? 'member' : 'nonmember';
+  const [liveRequest, plan] = getMeInEligible
+    ? await Promise.all([isMember && member ? liveRequestFor(member.id, event.id) : Promise.resolve(null), getPlan()])
+    : [null, null];
+  const membershipPrice = formatPence(plan?.price_pence ?? 3000, plan?.currency ?? 'GBP');
 
   // Artist IDs are deliberately resolved here rather than exposed in the public lineup payload.
   // This lets an event quietly unlock Guestlist's archive when a lineup artist has published moments.
@@ -69,7 +82,7 @@ export default async function EventDetailPage({ params, searchParams }: {params:
 
       {event.promoter&&<><div className="sectionLabel">Organiser</div><div className="organiserCard">{event.promoter.image_url?<img className="logo" src={event.promoter.image_url} alt="" style={{width:52,height:52,borderRadius:14,objectFit:'cover'}}/>:<div className="logo" style={{width:52,height:52,borderRadius:14,background:'var(--surface-hover)',border:'1px solid var(--border)',display:'grid',placeItems:'center',fontWeight:750,fontSize:19,color:'var(--text-muted)',flexShrink:0}}>{event.promoter.name[0]}</div>}<div style={{flex:1,minWidth:0}}><div className="big" style={{fontSize:17,fontWeight:700}}>{event.promoter.name} {event.promoter.verified&&<span className="verifiedMark" title="Verified promoter">✓</span>}</div>{event.promoter.verified&&<div style={{fontSize:12,color:'var(--text-muted)'}}>Verified promoter</div>}</div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{promoterSlug&&<Link className="btnGhost" style={{padding:'7px 13px',fontSize:11}} href={`/promoters/${promoterSlug}`}>View promoter</Link>}<FollowButton entityType="promoter" entityId={event.promoter.id} initialFollowing={followingPromoter} isSignedIn={!!member} compact/></div></div></>}
       {claimablePromoters.length>0&&!past&&<ClaimEventPrompt eventId={event.id} promoters={claimablePromoters}/>}</div>
-      <aside><div className="sideCard"><div className="big">{fmtEventDate(event.start_at,event.end_at,event.timezone)}</div><div className="muted">{fmtEventTime(event.start_at,event.end_at,event.timezone)} · {event.timezone}</div>{event.venue&&<><hr/><div className="big"><Link href={`/venues/${event.venue.slug}`} style={{textDecoration:'underline',textDecorationColor:'var(--border-strong)'}}>{event.venue.name}</Link></div><div className="muted">{[event.venue.address,event.venue.city,event.venue.country].filter(Boolean).join(', ')}</div></>}{mapsUrl&&<a className="mapLink" href={mapsUrl} target="_blank" rel="noopener noreferrer" style={{marginTop:14}}>View on map ↗<div className="coords">{Number(event.latitude).toFixed(4)}, {Number(event.longitude).toFixed(4)}</div></a>}<hr/><div className="muted">{price??'Price to be announced'}</div>{(event.ticket_url||event.source_url)&&!past&&!cancelled&&event.listing_status!=='sold_out'&&<a className="ctaTickets" href={`/out/${event.id}${src?`?src=${encodeURIComponent(src)}`:''}`}>Get Tickets →</a>}{event.listing_status==='sold_out'&&!past&&<div className="listingBadge sold_out" style={{marginTop:12,textAlign:'center',display:'block'}}>Sold out</div>}{cancelled&&<div className="muted" style={{marginTop:10}}>Tickets are no longer available.</div>}{past&&<div className="muted" style={{marginTop:10}}>This event has already happened.</div>}</div>
+      <aside>{getMeInEligible&&<GetMeIn eventId={event.id} viewer={getMeInViewer} billingLive={billingEnabled()} price={membershipPrice} initialRequest={liveRequest?{id:liveRequest.id,places:liveRequest.places,friendly:liveRequest.friendly,member_price_pence:liveRequest.member_price_pence,currency:liveRequest.currency}:null}/>}<div className="sideCard"><div className="big">{fmtEventDate(event.start_at,event.end_at,event.timezone)}</div><div className="muted">{fmtEventTime(event.start_at,event.end_at,event.timezone)} · {event.timezone}</div>{event.venue&&<><hr/><div className="big"><Link href={`/venues/${event.venue.slug}`} style={{textDecoration:'underline',textDecorationColor:'var(--border-strong)'}}>{event.venue.name}</Link></div><div className="muted">{[event.venue.address,event.venue.city,event.venue.country].filter(Boolean).join(', ')}</div></>}{mapsUrl&&<a className="mapLink" href={mapsUrl} target="_blank" rel="noopener noreferrer" style={{marginTop:14}}>View on map ↗<div className="coords">{Number(event.latitude).toFixed(4)}, {Number(event.longitude).toFixed(4)}</div></a>}<hr/><div className="muted">{price??'Price to be announced'}</div>{(event.ticket_url||event.source_url)&&!past&&!cancelled&&event.listing_status!=='sold_out'&&<a className="ctaTickets" href={`/out/${event.id}${src?`?src=${encodeURIComponent(src)}`:''}`}>Get Tickets →</a>}{event.listing_status==='sold_out'&&!past&&<div className="listingBadge sold_out" style={{marginTop:12,textAlign:'center',display:'block'}}>Sold out</div>}{cancelled&&<div className="muted" style={{marginTop:10}}>Tickets are no longer available.</div>}{past&&<div className="muted" style={{marginTop:10}}>This event has already happened.</div>}</div>
       {guestlistOpen&&!past&&!cancelled&&guestlistSettings&&<GuestlistRequest eventId={event.id} isSignedIn={!!member} mode={guestlistSettings.mode as 'approve_requests'|'auto_fill'} maxPlusOnes={guestlistSettings.max_plus_ones}/>} 
       {tonight&&<Link href={`/clubmessenger/events/${event.id}`} className="tonightModule"><div className="tonightModuleTitle">⚡ Tonight on Guestlist</div><div className="tonightModuleBody">{liveStats&&liveStats.friends_here>0?`${liveStats.friends_here} friend${liveStats.friends_here===1?'':'s'} here now`:liveStats&&liveStats.visible_here>0?`${liveStats.visible_here} here now`:'Live room is open'} · see who’s out, check in when you arrive →</div></Link>}
       {contextBits.length>0&&<div className="socialContextLine">{`✦ ${contextBits.join(' · ')}`}</div>}

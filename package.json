@@ -13,6 +13,7 @@
     "verify": "node scripts/verify.mjs",
     "test:supply": "tsx scripts/test-supply.ts",
     "verify:v2b": "node scripts/verify-v2b.mjs",
+    "verify:membership": "node scripts/verify-membership.mjs",
     "schema:snapshot": "node scripts/schema-snapshot.mjs"
   },
   "dependencies": {

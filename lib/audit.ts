@@ -10,7 +10,15 @@ export type AuditAction =
   | 'source_scanned' | 'team_member_added' | 'team_member_removed' | 'role_changed'
   | 'team_invited' | 'claim_submitted' | 'claim_approved' | 'claim_rejected'
   | 'claim_info_requested' | 'promoter_suspended' | 'promoter_unsuspended'
-  | 'room_message_removed' | 'member_club_suspended' | 'member_club_unsuspended';
+  | 'room_message_removed' | 'member_club_suspended' | 'member_club_unsuspended'
+  // Membership
+  | 'access_request_created' | 'access_request_updated' | 'access_request_note'
+  | 'promoter_contact_added' | 'promoter_outreach_logged' | 'promoter_relationship_changed'
+  | 'membership_changed'
+  // Market
+  | 'market_business_created' | 'market_business_updated' | 'market_business_decided'
+  | 'market_offer_created' | 'market_offer_updated' | 'market_offer_decided'
+  | 'market_offer_redeemed' | 'member_drop_changed' | 'good_cause_changed';
 
 export async function audit(
   action: AuditAction,
