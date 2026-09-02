@@ -2,7 +2,7 @@
 
 // Per-source admin controls: trust level, polling, frequency, Scan Now.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GenrePicker, type GenreOpt } from '@/components/admin/GenrePicker';
 import { probeLabel, testVerdict, type ProbeResult } from '@/lib/supply/verdict';
@@ -11,8 +11,13 @@ import { explainScan, type OutcomeTally } from '@/lib/supply/outcomes';
 type ScanSummary = {
   status: string; method: string | null; candidatesFound: number;
   newCandidates: number; extracted: number; failed: number; duplicates: number;
-  error: string | null; outcomes: OutcomeTally;
+  error: string | null; outcomes: OutcomeTally; note?: string | null;
 };
+
+// How often the desk asks a running scan how it is doing, and how long it
+// keeps asking before it stops rather than spinning for ever.
+const WATCH_EVERY_MS = 2_000;
+const WATCH_FOR_MS = 6 * 60_000;
 
 export function SourceControls({
   id, name, url, feedUrl, active, trust, pollingEnabled, pollFrequencyHours, renderJs, maxCandidates,
@@ -38,6 +43,7 @@ export function SourceControls({
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanSummary | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ProbeResult | null>(null);
   const [error, setError] = useState('');
@@ -49,6 +55,10 @@ export function SourceControls({
   const [tagCountry, setTagCountry] = useState(country ?? '');
   const [tagGenres, setTagGenres] = useState<string[]>(genreIds);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // The scan this component is currently watching. Cleared on unmount so the
+  // watch loop stops instead of setting state on a component that is gone.
+  const watching = useRef<string | null>(null);
+  useEffect(() => () => { watching.current = null; }, []);
 
   async function remove() {
     setBusy(true);
@@ -73,21 +83,46 @@ export function SourceControls({
     return false;
   }
 
+  // A SCAN IS WATCHED, NOT WAITED ON. The POST returns the moment the job
+  // exists; from there the desk asks the row how it is doing. A big site whose
+  // scan outlives its request used to leave this button spinning for ever.
   async function scanNow() {
     setScanning(true);
     setError('');
     setScanResult(null);
+    setProgress(null);
     // A test fetch from a previous URL left on screen under a fresh scan
     // reads as though it described the scan. It cost us two rounds of
     // "why does it say HTML when I scanned the sitemap".
     setTestResult(null);
     const res = await fetch(`/api/admin/sources/${id}/scan`, { method: 'POST' });
-    setScanning(false);
-    if (res.ok) {
-      setScanResult(await res.json());
-      router.refresh();
-    } else {
+    if (!res.ok) {
+      setScanning(false);
       setError((await res.json().catch(() => ({})))?.error ?? 'Scan failed');
+      return;
+    }
+    const { scanId } = await res.json();
+    watching.current = scanId;
+    const until = Date.now() + WATCH_FOR_MS;
+    while (watching.current === scanId) {
+      await new Promise((r) => setTimeout(r, WATCH_EVERY_MS));
+      if (watching.current !== scanId) return;   // unmounted, or a newer scan
+      if (Date.now() > until) {
+        setScanning(false);
+        setError('Still running. It keeps going without this page — reload to see how it finished.');
+        return;
+      }
+      const poll = await fetch(`/api/admin/sources/${id}/scan?scanId=${scanId}`).catch(() => null);
+      if (!poll?.ok) continue;                    // a blip is not a verdict
+      const scan: ScanSummary & { running: boolean } = await poll.json();
+      // Progress is written down as it happens, so a running scan has
+      // something honest to show rather than an indefinite spinner.
+      if (scan.running) { setProgress(scan.note ?? null); continue; }
+      setProgress(null);
+      setScanning(false);
+      setScanResult(scan);
+      router.refresh();
+      return;
     }
   }
 
@@ -198,7 +233,7 @@ export function SourceControls({
           disabled={scanning || trust === 'blocked'}
           type="button"
         >
-          {scanning ? 'Scanning…' : 'Scan now'}
+          {scanning ? (progress ?? 'Scanning…') : 'Scan now'}
         </button>
         <button
           className="btnGhost"
@@ -282,6 +317,13 @@ export function SourceControls({
           </button>
         </div>
       )}
+      {/* The scan is a job on the server. Saying so is the difference between
+          waiting and wondering. */}
+      {scanning && (
+        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          Running on the server — this carries on if you leave the page.
+        </div>
+      )}
       {scanResult && (
         <div style={{ fontSize: 11.5, color: 'var(--text-soft)', lineHeight: 1.5 }}>
           {scanResult.status === 'succeeded' ? (
@@ -306,6 +348,9 @@ export function SourceControls({
               {explainScan(scanResult.outcomes, scanResult.extracted) && (
                 <div style={{ marginTop: 3 }}>{explainScan(scanResult.outcomes, scanResult.extracted)}</div>
               )}
+              {/* A scan that ran out of links and one that ran out of time
+                  both stop; only one of them is finished. */}
+              {scanResult.note && <div style={{ marginTop: 3 }}>{scanResult.note}</div>}
             </>
           ) : (
             <span style={{ color: 'var(--danger)' }}>{scanResult.error ?? 'Scan failed'}</span>
