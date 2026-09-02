@@ -3414,75 +3414,89 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 
 /* --- The hero claim ------------------------------------------------------ */
 .mbPerkHero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  gap: 0;
-  border: 1px solid var(--border);
+  position: relative;
+  isolation: isolate;
   border-radius: var(--radius);
-  background: var(--bg-raised);
   overflow: hidden;
+  min-height: clamp(400px, 42vw, 520px);
+  display: flex;
+  align-items: center;
+  /* The ground under the photograph, so the card never flashes white while
+     the image loads and never goes transparent if it fails. */
+  background: #0a0810;
 }
-.mbPerkHeroText { padding: clamp(26px, 4vw, 44px); align-self: center; }
+.mbPerkHeroImg {
+  position: absolute; inset: 0; z-index: -2;
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+/* A scrim, heaviest where the words are. Without it the type is at the mercy
+   of whatever photograph happens to be behind it — and the photographs are
+   going to change. */
+.mbPerkHero::after {
+  content: "";
+  position: absolute; inset: 0; z-index: -1;
+  background:
+    linear-gradient(100deg, rgba(10,8,16,0.95) 0%, rgba(10,8,16,0.86) 38%,
+                    rgba(10,8,16,0.5) 66%, rgba(10,8,16,0.28) 100%),
+    radial-gradient(circle at 12% 15%, rgba(124,74,158,0.4), transparent 55%);
+}
+.mbPerkHeroText {
+  position: relative;
+  padding: clamp(30px, 4.6vw, 60px);
+  max-width: 640px;
+  color: #f4f2ee;
+}
 .mbPerkKicker {
-  font-size: 11px; font-weight: 800; letter-spacing: 0.2em;
-  text-transform: uppercase; color: var(--accent-ink);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.22em;
+  text-transform: uppercase; color: #c9a2e8;
 }
 .mbPerkBig {
   font-size: clamp(34px, 5.2vw, 56px);
   font-weight: 800; letter-spacing: -0.035em; line-height: 0.94;
-  margin: 12px 0 0; text-transform: uppercase;
+  margin: 12px 0 0; text-transform: uppercase; color: #fbfaf7;
 }
 .mbPerkSub {
   font-size: clamp(18px, 2.4vw, 24px); font-weight: 750;
-  letter-spacing: -0.3px; color: var(--accent-ink); margin-top: 8px;
+  letter-spacing: -0.3px; color: #c9a2e8; margin-top: 8px;
 }
 .mbPerkLead {
   font-size: clamp(15px, 1.8vw, 17.5px); line-height: 1.55;
-  color: var(--text); margin: 16px 0 0; max-width: 40ch;
+  color: rgba(244,242,238,0.92); margin: 16px 0 0; max-width: 40ch;
 }
 .mbPerkBody {
-  font-size: 13.5px; line-height: 1.62; color: var(--text-muted);
+  font-size: 13.5px; line-height: 1.62; color: rgba(244,242,238,0.66);
   margin: 10px 0 0; max-width: 46ch;
 }
 .mbPerkFine {
   display: flex; align-items: center; gap: 7px;
-  font-size: 12.5px; color: var(--accent-ink); margin-top: 18px;
+  font-size: 12.5px; color: #c9a2e8; margin-top: 20px;
 }
 .mbPerkFine svg { width: 16px; height: 16px; flex: 0 0 auto; }
 
-/* The picture fills whatever height the words need — it must never be the
-   thing that sets it, or an 800px-tall photograph drags the whole card with it. */
-.mbPerkHeroArt { position: relative; min-height: 280px; }
-.mbPerkHeroArt img {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%; object-fit: cover; display: block;
-}
-/* The number sits over the picture, tilted, so the claim reads before the
-   photograph does. */
 /* The stamp on the photograph. Two words in the brand's own arrangement —
    a big weight over a letterspaced lockup — so it reads as the wordmark does
    rather than as a price tag. */
 .mbPerkStamp {
-  position: absolute; left: -8%; top: 50%;
+  position: absolute; right: clamp(24px, 6vw, 84px); top: 50%;
   transform: translateY(-50%) rotate(-6deg);
   /* Deliberately light in both themes: it sits on a photograph, not on the
      page ground, and a dark card on a dark photo disappears. */
-  background: #ede4f6;
+  background: #f2ecf9;
   border-radius: var(--radius);
-  padding: clamp(16px, 2.6vw, 26px) clamp(20px, 3.2vw, 32px);
+  padding: clamp(18px, 2.8vw, 30px) clamp(22px, 3.4vw, 38px);
   text-align: center;
-  box-shadow: 0 18px 40px rgba(15, 14, 10, 0.16);
+  box-shadow: 0 26px 60px rgba(0, 0, 0, 0.45);
 }
 .mbPerkStampBig {
   display: block;
-  font-size: clamp(38px, 5.6vw, 62px); font-weight: 800;
+  font-size: clamp(40px, 5.8vw, 66px); font-weight: 800;
   letter-spacing: -0.045em; line-height: 0.86;
   text-transform: uppercase; color: var(--accent);
 }
 .mbPerkStampWord {
   display: block; margin-top: 7px;
-  font-size: clamp(11.5px, 1.5vw, 15px); font-weight: 800;
-  letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent);
+  font-size: clamp(12px, 1.5vw, 15px); font-weight: 800;
+  letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent);
 }
 
 /* --- Cards --------------------------------------------------------------- */
@@ -3495,7 +3509,27 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
   background: var(--bg-raised);
   padding: clamp(20px, 2.6vw, 28px);
   display: flex; flex-direction: column;
+  overflow: hidden;
 }
+/* A picture card: the photograph runs to the card's edges, and the icon
+   straddles the join between the image and the words. */
+.mbPerkCard.photo { padding-top: 0; padding-left: 0; padding-right: 0; }
+.mbPerkCard.photo > :not(.mbPerkShot) { margin-left: clamp(20px, 2.6vw, 28px); margin-right: clamp(20px, 2.6vw, 28px); }
+.mbPerkShot {
+  display: block; position: relative;
+  height: clamp(150px, 17vw, 200px);
+  margin: 0 0 clamp(20px, 2.6vw, 28px);
+  background: var(--media-ph);
+}
+.mbPerkShot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mbPerkCard.photo .mbPerkIcon {
+  /* Lifted over the photograph's bottom edge. */
+  margin-top: calc(-1 * clamp(20px, 2.6vw, 28px) - 20px);
+  position: relative; z-index: 1;
+  box-shadow: 0 6px 18px rgba(15, 14, 10, 0.14);
+}
+.mbPerkCard.photo.lilac .mbPerkIcon { background: #efe6f8; }
+.mbPerkCard.photo.cream .mbPerkIcon { background: #f8efdb; }
 .mbPerkCard.lilac { background: rgba(124, 74, 158, 0.09); border-color: rgba(124, 74, 158, 0.2); }
 .mbPerkCard.cream { background: rgba(180, 145, 40, 0.09); border-color: rgba(180, 145, 40, 0.22); }
 .mbPerkCard h3 {
@@ -3543,30 +3577,36 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 /* --- The closing bar ----------------------------------------------------- */
 .mbPerkFoot {
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  border: 1px solid rgba(124, 74, 158, 0.2);
+  border: 1px solid var(--accent);
   border-radius: var(--radius);
-  background: rgba(124, 74, 158, 0.09);
-  padding: clamp(18px, 2.4vw, 26px);
+  background: var(--accent);
+  color: var(--on-accent);
+  padding: clamp(20px, 2.6vw, 28px);
 }
 .mbPerkFootText { flex: 1 1 340px; min-width: 0; }
 .mbPerkFootTitle {
   font-size: 11px; font-weight: 800; letter-spacing: 0.18em;
-  text-transform: uppercase; color: var(--accent-ink);
+  text-transform: uppercase; color: rgba(255, 255, 255, 0.72);
 }
-.mbPerkFoot p { font-size: 13.5px; line-height: 1.6; color: var(--text-soft); margin: 6px 0 0; }
+.mbPerkFoot p { font-size: 13.5px; line-height: 1.6; color: rgba(255, 255, 255, 0.92); margin: 6px 0 0; }
+.mbPerkFoot .mbPerkIcon { background: rgba(255, 255, 255, 0.16); color: #fff; }
 .mbPerkFootCta {
   flex: 0 0 auto;
-  background: var(--accent); color: var(--on-accent);
+  background: #fff; color: var(--accent);
   font-size: 13.5px; font-weight: 800; letter-spacing: 0.02em;
   padding: 14px 26px; border-radius: 999px; text-decoration: none;
 }
-.mbPerkFootCta:hover { filter: brightness(1.06); color: var(--on-accent); }
+.mbPerkFootCta:hover { filter: brightness(0.97); color: var(--accent); }
 
 @media (max-width: 900px) {
-  .mbPerkHero { grid-template-columns: 1fr; }
-  .mbPerkHeroArt { min-height: 220px; order: -1; }
-  .mbPerkStamp { left: auto; right: 16px; top: auto; bottom: -24px; transform: rotate(-6deg); }
-  .mbPerkHeroText { padding-top: 40px; }
+  .mbPerkHero { min-height: 0; display: block; }
+  .mbPerkHeroText { max-width: none; padding-bottom: clamp(120px, 26vw, 170px); }
+  /* Under the words, not across them — a stamp over body copy is unreadable
+     however good the photograph is. */
+  .mbPerkStamp {
+    right: clamp(18px, 5vw, 30px); top: auto;
+    bottom: clamp(20px, 4vw, 30px); transform: rotate(-6deg);
+  }
   .mbPerkTrio { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {

@@ -17,6 +17,14 @@
 
 import Link from 'next/link';
 
+// EVERY PICTURE THIS SECTION USES, IN ONE PLACE.
+// Swap the paths when the real photography lands — nothing else needs to move.
+const IMAGES = {
+  hero: '/images/hero.jpg',            // the city at night, behind the claim
+  queueJump: '/images/secret-party.jpg',
+  drops: '/images/travel-ocean.jpg',
+} as const;
+
 type Props = {
   // A member is being shown what they have; everybody else, what they'd get.
   variant: 'member' | 'prospect';
@@ -66,8 +74,12 @@ export function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
   return (
     <section className="mbPerks" aria-label="What membership gets you">
 
-      {/* THE REASON ANYBODY JOINS, at the size that says so. */}
+      {/* THE REASON ANYBODY JOINS, at the size that says so.
+          A photograph carries it rather than a coloured box: this is a night
+          out being sold, and the page should feel like one. */}
       <div className="mbPerkHero">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="mbPerkHeroImg" src={IMAGES.hero} alt="" aria-hidden />
         <div className="mbPerkHeroText">
           {/* A member already has these; everybody else is being told about
               them. Same six things, two different sentences. */}
@@ -94,28 +106,32 @@ export function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
             Subject to availability and fair use.
           </div>
         </div>
-        <div className="mbPerkHeroArt" aria-hidden>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/images/secret-party.jpg" alt="" />
-          {/* The words, not a number. A price of £0 invites the reader to
-              start pricing the thing; "free guestlist" names what they get. */}
-          <div className="mbPerkStamp">
-            <span className="mbPerkStampBig">Free</span>
-            <span className="mbPerkStampWord">Guestlist</span>
-          </div>
+        {/* The words, not a number. A price of £0 invites the reader to start
+            pricing the thing; "free guestlist" names what they get. */}
+        <div className="mbPerkStamp" aria-hidden>
+          <span className="mbPerkStampBig">Free</span>
+          <span className="mbPerkStampWord">Guestlist</span>
         </div>
       </div>
 
       {/* The two you feel on the night. */}
       <div className="mbPerkPair">
-        <div className="mbPerkCard lilac">
+        <div className="mbPerkCard lilac photo">
+          <span className="mbPerkShot">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={IMAGES.queueJump} alt="" aria-hidden />
+          </span>
           <span className="mbPerkIcon">{Icon.arrow}</span>
           <h3>Queue jump</h3>
           <div className="mbPerkTag">Less queue. More party.</div>
           <p>Priority and fast-track entrance where available, through participating events and venues.</p>
         </div>
 
-        <div className="mbPerkCard cream">
+        <div className="mbPerkCard cream photo">
+          <span className="mbPerkShot">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={IMAGES.drops} alt="" aria-hidden />
+          </span>
           <span className="mbPerkIcon gold">{Icon.spark}</span>
           <h3>Member drops</h3>
           <div className="mbPerkTag">You never know what’s coming.</div>
