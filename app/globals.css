@@ -3117,3 +3117,36 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 .imagePreview { display: flex; align-items: center; gap: 10px; margin: -6px 0 12px; }
 .imagePreviewLogo { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); background: var(--bg-raised); }
 .imagePreviewPhoto { width: 140px; height: 80px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); background: var(--bg-raised); }
+
+/* ADMIN → SYSTEMS: one card per service, one row per check. */
+.sysGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; margin-top: 18px; }
+.sysGroup { border: 1px solid var(--border); border-left-width: 4px; border-radius: 12px; padding: 14px 16px; background: var(--surface); }
+.sysGroup.ok { border-left-color: var(--ok); }
+.sysGroup.warn { border-left-color: #c78a1e; }
+.sysGroup.bad { border-left-color: var(--danger); }
+.sysGroup.off { border-left-color: var(--border-strong); }
+.sysGroup header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sysGroup h2 { font-size: 15px; margin: 0; }
+.sysGroup .adminSub { margin: 4px 0 10px; }
+.sysPill { font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 800; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--border); color: var(--text-muted); white-space: nowrap; }
+.sysPill.ok { color: var(--ok); border-color: var(--ok); }
+.sysPill.warn { color: #c78a1e; border-color: #c78a1e; }
+.sysPill.bad { color: var(--danger); border-color: var(--danger); }
+.sysList { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sysRow { display: grid; grid-template-columns: 12px 1fr; gap: 10px; align-items: start; }
+.sysDot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--border-strong); }
+.sysDot.ok { background: var(--ok); }
+.sysDot.warn { background: #c78a1e; }
+.sysDot.bad { background: var(--danger); }
+.sysName { font-weight: 700; font-size: 13.5px; }
+.sysDetail { font-size: 13px; color: var(--text-muted); overflow-wrap: anywhere; }
+.sysHint { font-size: 12.5px; color: var(--text); margin-top: 2px; }
+.sysRow.bad .sysDetail { color: var(--danger); }
+.sysEnv { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px 28px; margin-top: 10px; }
+.sysEnv h3 { font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-faint); margin: 8px 0 6px; }
+.sysEnvRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 6px 0; border-top: 1px solid var(--border); font-size: 12.5px; }
+.sysEnvRow code { font-size: 12px; overflow-wrap: anywhere; }
+.sysEnvWhy { grid-column: 1; color: var(--text-muted); }
+.sysEnvState { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 800; color: var(--text-faint); }
+.sysEnvState.set { color: var(--ok); }
+.sysEnvState.missing, .sysEnvState.danger { color: var(--danger); }

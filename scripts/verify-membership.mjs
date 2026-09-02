@@ -605,6 +605,12 @@ try {
     check('admin promoters healthy', (await oshi.fetch('/admin/promoters')).status === 200);
     check('notifications centre renders membership lines', (await marcus.html('/notifications')).includes('SORRY — NOT THIS ONE'));
     check('schema audit passes', (await oshi.html('/admin/schema')).includes('Up to date'));
+    const systems = await oshi.html('/admin/systems');
+    check('systems page runs every group', ['Core', 'Stripe · membership billing', 'Resend · email', 'Anthropic · AI', 'Images · storage', 'YouTube · video archive', 'X · @guestlist', 'Supply engine'].every((g) => systems.includes(`aria-label="${g}"`)));
+    check('systems page: database + schema OK, Stripe off without a key', systems.includes('Up to date') && systems.includes('COMING SOON and collects the waitlist'));
+    check('systems page never prints a secret', !systems.includes(process.env.SESSION_SECRET) && !systems.includes(process.env.STRIPE_WEBHOOK_SECRET) && !systems.includes('postgres:postgres@'));
+    check('systems page: env inventory lists Resend + Stripe + Anthropic', systems.includes('RESEND_API_KEY') && systems.includes('STRIPE_WEBHOOK_SECRET') && systems.includes('ANTHROPIC_API_KEY'));
+    check('non-admin cannot open systems page', !(await jules.html('/admin/systems')).includes('Environment variables'));
   }
 } catch (err) {
   console.error('\nSUITE ERROR:', err);
