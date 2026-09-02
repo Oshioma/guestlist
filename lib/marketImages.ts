@@ -25,8 +25,16 @@ function abs(u: string | null | undefined, base: string): string | null {
 }
 
 export async function discoverBusinessImages(website: string): Promise<DiscoveredImages> {
-  const res = await safeFetch(website, { timeoutMs: 8000, maxBytes: 1_500_000, accept: 'text/html' });
-  if (!res.ok) return { hero: null, logo: null, error: res.detail };
+  // Squarespace / Wix / Shopify home pages routinely run to several MB of
+  // inlined script before the </head> we care about, and the fetcher aborts
+  // rather than truncates, so the cap is generous. Admin-triggered, once.
+  const res = await safeFetch(website, { timeoutMs: 12000, maxBytes: 12_000_000, accept: 'text/html' });
+  if (!res.ok) {
+    const error = res.code === 'too_large' ? 'Their page is too big to read — paste a photo link instead'
+      : /timeout/i.test(res.detail) ? 'Their site was too slow to answer — try again, or paste a photo link'
+      : res.detail;
+    return { hero: null, logo: null, error };
+  }
   if (!/html/i.test(res.contentType)) return { hero: null, logo: null, error: 'Not an HTML page' };
 
   // The hero: the same og:image / JSON-LD / page-image logic events use.

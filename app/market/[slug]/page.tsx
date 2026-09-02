@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getBusinessBySlug, offerHeadline, offerTypeLabel } from '@/lib/market';
 import { billingEnabled, currentMemberWithMembership } from '@/lib/membership';
+import { getMemberBusinesses } from '@/lib/marketAuth';
 import { ClaimOffer } from '@/components/market/ClaimOffer';
 import { TrackEntityView } from '@/components/TrackEntityView';
 
@@ -14,8 +15,14 @@ const SOCIAL_LABEL: Record<string, string> = { instagram: 'Instagram', tiktok: '
 
 export default async function MarketBusinessPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [me, business] = await Promise.all([currentMemberWithMembership(), getBusinessBySlug(slug)]);
+  const [me, business] = await Promise.all([currentMemberWithMembership(), getBusinessBySlug(slug, { includeUnapproved: true })]);
   if (!business) notFound();
+  // Admins and the business's own team can open the listing from here —
+  // nobody should have to find it again in a desk. They also see it while
+  // it is still pending; everyone else only once it is approved.
+  const isAdmin = me?.role === 'admin';
+  const onTeam = me ? (await getMemberBusinesses(me.id)).some((b) => b.id === business.id) : false;
+  if (business.status !== 'approved' && !isAdmin && !onTeam) notFound();
   const viewer = !me ? 'anon' : me.isMember ? 'member' : 'nonmember';
   const location = [business.city, business.country].filter(Boolean).join(', ');
   const socials = Object.entries(business.socials ?? {}).filter(([k]) => SOCIAL_LABEL[k]);
@@ -41,9 +48,12 @@ export default async function MarketBusinessPage({ params }: { params: Promise<{
               </a>
             )}
           </div>
-          {socials.length > 0 && (
+          {(socials.length > 0 || isAdmin || onTeam) && (
             <div className="profileActions">
               {socials.map(([k, url]) => <a key={k} className="btnGhost" href={url} target="_blank" rel="noopener noreferrer">{SOCIAL_LABEL[k]}</a>)}
+              {isAdmin && <Link className="btnAccent" href={`/admin/market/${business.id}`}>Edit in admin</Link>}
+              {onTeam && <Link className="btnAccent" href={`/business/profile?b=${business.id}`}>Manage listing</Link>}
+              {business.status !== 'approved' && <span className="evChip amber">{business.status} — not public yet</span>}
             </div>
           )}
         </div>

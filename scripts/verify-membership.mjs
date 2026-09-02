@@ -346,6 +346,9 @@ try {
     check('logo link from the application is kept', (await q(`select logo_url from market_businesses where id = $1`, [bizId]))[0].logo_url === 'https://cdn.example/records-logo.png');
     check('nothing was fetched because a member applied', (await q(`select hero_image_url from market_businesses where id = $1`, [bizId]))[0].hero_image_url === null);
     check('applied business is NOT public', (await anon.fetch('/market/example-records')).status === 404);
+    check('…but its owner and admin can open it, with edit links', (await jules.html('/market/example-records')).includes('Manage listing')
+      && (await oshi.html('/market/example-records')).includes('Edit in admin') && (await oshi.html('/market/example-records')).includes('not public yet'));
+    check('a stranger still cannot', (await marcus.fetch('/market/example-records')).status === 404);
     check('portal open to the applicant, redeem locked', (await jules.html('/business')).includes('Your application is with Guestlist') && (await jules.html('/business/redeem')).includes('switches on once'));
     const offer = await jules.json(`/api/business/${bizId}/offers`, 'POST', { title: '15% off everything', offerType: 'percentage', discountPercent: 15, redemptionInstructions: 'Show your code at the counter.' });
     check('owner proposes an offer (pending)', offer.status === 200 && (await q(`select approval_status from market_offers where id = $1`, [offer.data.id]))[0].approval_status === 'pending');
@@ -365,6 +368,7 @@ try {
     check('admin list flags the missing photo', (await oshi.html('/admin/market')).includes('no photo'));
     const page = await anon.html('/market/example-records');
     check('business page renders the offer and asks visitors to sign in', page.includes('15% OFF FOR GUESTLIST MEMBERS') && page.includes('Sign in to claim'));
+    check('no edit links for the public', !page.includes('Edit in admin') && !page.includes('Manage listing'));
     check('non-member sees membership prompt, not the code', (await jules.html('/market/example-records')).includes('coming soon'));
 
     check('non-member cannot claim (403)', (await jules.json(`/api/market/offers/${offer.data.id}/claim`, 'POST')).status === 403);
