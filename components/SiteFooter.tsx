@@ -16,6 +16,13 @@ import { useState } from 'react';
 // to do with 1996, so it stays out of the way there.
 const NO_FOOTER = [/^\/archive(\/|$)/];
 
+// The admin desk keeps the footer but loses the ask. "Know something we're
+// missing? Paste the link" is an invitation to the public; showing it to the
+// person who runs the place, underneath the queue of events they are already
+// reviewing, is the site talking to itself. The links below it still earn
+// their place — add an article, terms, the contact address.
+const NO_ADD_BOX = [/^\/admin(\/|$)/];
+
 export function SiteFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdmin: boolean }) {
   const router = useRouter();
   const pathname = usePathname() ?? '';
@@ -75,7 +82,9 @@ export function SiteFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdm
     <footer className="siteFooter">
       <div className="wrap">
       {/* The ask runs the full width of the page: it is the most useful thing
-          on the footer, and it was sitting in half a column beside the links. */}
+          on the footer, and it was sitting in half a column beside the links.
+          Not on the admin desk, though — see NO_ADD_BOX. */}
+      {!NO_ADD_BOX.some((re) => re.test(pathname)) && (
       <section className="siteFooterAdd">
         <div className="homeKicker">ADD AN EVENT</div>
         <h3 style={{ margin: '6px 0' }}>Know something we’re missing?</h3>
@@ -97,6 +106,7 @@ export function SiteFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdm
         </form>
         {message && <p style={{ margin: '12px 0 0', color: 'var(--text-muted)' }}>{message}</p>}
       </section>
+      )}
 
       <nav className="siteFooterNav" aria-label="Guestlist footer">
         <Link href={articleHref}>Add article</Link>
