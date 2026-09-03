@@ -4,6 +4,7 @@
 // the relationship stands), the timeline, and the actions.
 
 import Link from 'next/link';
+import { FAIR_USE_WATCH } from '@/lib/accessRequests';
 import { notFound } from 'next/navigation';
 import { adminRequestDetail, STATUS_LABEL, outcomeReasonLabel, requestTypeLabel, type RequestStatus } from '@/lib/accessRequests';
 import { formatPence } from '@/lib/membership';
@@ -109,6 +110,7 @@ export default async function AdminRequestPage({ params }: { params: Promise<{ i
           <div className="adminCard">
             <div className="sectionLabel" style={{ marginTop: 0 }}>The member</div>
             <div style={{ fontSize: 15, fontWeight: 700 }}>{r.member_slug ? <Link href={`/members/${r.member_slug}`} style={{ textDecoration: 'underline' }}>{r.member_name}</Link> : r.member_name}</div>
+            {r.member_requests_week >= FAIR_USE_WATCH.asksPerWeek && <div style={{ marginTop: 4 }}><span className="evChip amber" title="Information only — nothing is restricted automatically">Heavy week · {r.member_requests_week} asks in 7 days</span></div>}
             <div className="adminSub" style={{ marginBottom: 6 }}>{r.member_email}</div>
             <div className="adminSub" style={{ marginBottom: 10 }}>
               Membership: <span className={`evChip ${r.member_status === 'active' || r.member_status === 'trialing' ? 'green' : r.member_status === 'past_due' ? 'amber' : 'red'}`}>{r.member_status ?? 'none'}</span>

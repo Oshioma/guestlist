@@ -598,6 +598,57 @@ try {
   }
 
   // -------------------------------------------------------------------------
+  console.log('\n— Promoter side: Guestlist members asking —');
+  {
+    await q(`update promoters set claim_status = 'verified' where id = $1`, [promoter.id]);
+    await q(`insert into promoter_members (promoter_id, member_id, role) values ($1, $2, 'editor') on conflict do nothing`, [promoter.id, ids.jules]);
+    const [evPanel] = await q(
+      `insert into events (title, slug, status, listing_status, event_type, start_at, end_at, timezone, city, country, price_from, currency, promoter_id)
+       values ('GMI Test: Promoter Panel', 'gmi-test-promoter-panel', 'live', 'confirmed', 'club_night', now() + interval '2 days', now() + interval '2 days 6 hours', 'Europe/London', 'London', 'United Kingdom', 12, 'GBP', $1)
+       returning id, slug`, [promoter.id]);
+    const ask = await marcus.json(`/api/events/${evPanel.id}/get-me-in`, 'POST', { places: 2, note: 'Coming from Leeds' });
+    check('member asks for a closed-list event → open request', ask.status === 200 && ask.data.outcome === 'requested');
+    const reqId = ask.data.request.id;
+    const list = await jules.json(`/api/promoter/${promoter.id}/requests`);
+    check('promoter team sees the ask (API)', list.status === 200 && list.data.asks.some((a) => a.id === reqId && a.title === 'GMI Test: Promoter Panel' && a.places === 2));
+    // Jules may sit on more than one promoter team by now, so ask for this one.
+    const dash = (await jules.html(`/promoter?p=${promoter.id}`)).replace(/<!-- -->/g, '').split('Your next events')[0];
+    check('promoter dashboard shows the panel with the member and event', /Guestlist members asking \(\d+\)/.test(dash) && dash.includes('GMI Test: Promoter Panel') && dash.includes('Put them on the list'));
+    check('someone outside the team cannot act', (await nadia.json(`/api/promoter/${promoter.id}/requests`, 'POST', { action: 'guestlist', requestId: reqId })).status >= 400);
+    const cant = await jules.json(`/api/promoter/${promoter.id}/requests`, 'POST', { action: 'cant', requestId: reqId });
+    const [afterCant] = await q(`select status, outcome_reason, admin_notes from member_access_requests where id = $1`, [reqId]);
+    check('CAN’T THIS TIME hands it back to the desk, member not told', cant.status === 200 && afterCant.status === 'reviewing' && afterCant.outcome_reason === 'promoter_declined' && /can’t this time/.test(afterCant.admin_notes ?? '')
+      && (await marcus.html('/you/membership')).includes('GMI Test: Promoter Panel'));
+    check('still listed for the promoter while the desk works on it', (await jules.json(`/api/promoter/${promoter.id}/requests`)).data.asks.some((a) => a.id === reqId));
+    const put = await jules.json(`/api/promoter/${promoter.id}/requests`, 'POST', { action: 'guestlist', requestId: reqId });
+    const [afterPut] = await q(`select r.status, r.fulfilment_method, r.outcome_reason, g.status as entry_status, g.source, g.plus_ones from member_access_requests r left join event_guestlist_entries g on g.id = r.guestlist_entry_id where r.id = $1`, [reqId]);
+    check('PUT ON THE LIST → confirmed free with a real door entry (+1 honoured)', put.status === 200 && put.data.status === 'confirmed_free' && afterPut.status === 'confirmed_free' && afterPut.fulfilment_method === 'promoter_guestlist'
+      && afterPut.entry_status === 'confirmed' && afterPut.source === 'guestlist' && afterPut.plus_ones === 1 && afterPut.outcome_reason === null);
+    check('timeline says who put them on', (await q(`select count(*)::int as n from member_access_request_events where request_id = $1 and note like 'Put on the list by %'`, [reqId]))[0].n === 1);
+    check('tracked as guestlisted by the promoter', (await q(`select count(*)::int as n from analytics_events where event_type = 'get_me_in_guestlisted' and metadata->>'by' = 'promoter' and member_id = $1`, [ids.marcus]))[0].n === 1);
+    check('member reads YOU’RE ON THE GUESTLIST', (await marcus.html(`/events/${evPanel.slug}`)).includes('ON THE GUESTLIST'));
+    check('cannot be decided twice (409)', (await jules.json(`/api/promoter/${promoter.id}/requests`, 'POST', { action: 'guestlist', requestId: reqId })).status === 409);
+    check('decided ask leaves the panel', !(await jules.json(`/api/promoter/${promoter.id}/requests`)).data.asks.some((a) => a.id === reqId)
+      && !(await jules.html(`/promoter?p=${promoter.id}`)).split('Your next events')[0].includes('GMI Test: Promoter Panel'));
+    check('desk shows it under Decided, off the open queue', (await oshi.html('/admin/getmein?view=done')).includes('GMI Test: Promoter Panel') && !(await oshi.html('/admin/getmein')).split('What members want')[0].includes('GMI Test: Promoter Panel'));
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— Fair use in view: information, never automation —');
+  {
+    const before = (await oshi.html('/admin/getmein?view=all')).includes('Heavy week ·');
+    const extra = await q(
+      `insert into member_access_requests (member_id, status, places, request_type, origin, requested_at)
+       select $1, 'requested', 1, 'event_access', 'get_me_in', now() - (n || ' hours')::interval from generate_series(1, 6) n returning id`, [ids.marcus]);
+    check('six asks in a week grows a quiet chip on the desk', (await oshi.html('/admin/getmein')).includes('Heavy week ·'));
+    check('the chip explains itself as information only', (await oshi.html('/admin/getmein')).includes('nothing is restricted automatically'));
+    check('members ledger flags the same thing', (await oshi.html('/admin/members')).includes('asks in the last 7 days'));
+    check('nothing about the membership changed', (await q(`select status from memberships where member_id = $1`, [ids.marcus]))[0].status === 'active');
+    await q(`delete from member_access_requests where id = any($1::uuid[])`, [extra.map((r) => r.id)]);
+    check('chip goes when the pattern goes', (await oshi.html('/admin/getmein?view=all')).includes('Heavy week ·') === before);
+  }
+
+  // -------------------------------------------------------------------------
   console.log('\n— Revoke + legacy spot checks —');
   {
     const rv = await oshi.json('/api/admin/memberships', 'POST', { action: 'revoke', email: 'dev-nadia@example.com' });

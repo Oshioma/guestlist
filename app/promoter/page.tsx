@@ -9,6 +9,9 @@ import { eventPerformance, eventsNeedingAttention, promoterStats } from '@/lib/p
 import { query, queryOne } from '@/lib/db';
 import { fmtEventDate } from '@/lib/util';
 import { PerfCard } from '@/components/promoter/PerfCard';
+import { MemberAsks } from '@/components/promoter/MemberAsks';
+import { promoterOpenAsks } from '@/lib/accessRequests';
+import { roleAtLeast } from '@/lib/promoterAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +27,7 @@ export default async function PromoterOverviewPage({
   }
   const promoter = ctx.active;
 
-  const [stats, followers, upcoming, attention, notifications, source, liveCount] = await Promise.all([
+  const [stats, followers, upcoming, attention, notifications, source, liveCount, asks] = await Promise.all([
     promoterStats(promoter.id, 30),
     followerStats(promoter.id),
     eventPerformance(promoter.id, { days: 30, upcomingOnly: true, limit: 5 }),
@@ -39,6 +42,7 @@ export default async function PromoterOverviewPage({
       `select count(*)::int as n from events where promoter_id = $1 and status = 'live'`,
       [promoter.id]
     ),
+    promoterOpenAsks(promoter.id),
   ]);
 
   const steps: [string, boolean, string][] = [
@@ -97,6 +101,14 @@ export default async function PromoterOverviewPage({
             </Link>
           ))}
         </div>
+      )}
+
+      {asks.length > 0 && (
+        <>
+          <div className="sectionLabel" style={{ marginTop: 26 }}>Guestlist members asking ({asks.length})</div>
+          <p className="adminSub">Members pay Guestlist to get into things. Put them on your list in one press — we send their pass and handle the rest. Can’t this time? Hand it back and we’ll find another way.</p>
+          <MemberAsks promoterId={promoter.id} asks={asks} canAct={roleAtLeast(ctx.active.role, 'editor')} querySuffix={ctx.promoterships.length > 1 ? `?p=${promoter.id}` : ''} />
+        </>
       )}
 
       <div className="sectionLabel" style={{ marginTop: 26 }}>Your next events</div>

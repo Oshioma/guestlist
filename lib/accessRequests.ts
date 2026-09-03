@@ -163,6 +163,10 @@ export function eventEligible(e: EligibleEvent): boolean {
 
 // --- Fair-use brakes (information for the desk; friendly limits for the member) ----
 
+// Fair use is information for the desk, never automation: this is only the
+// point at which a row grows a quiet chip so a pattern gets noticed early.
+export const FAIR_USE_WATCH = { asksPerWeek: 6 };
+
 export const ASK_LIMITS = {
   submissionsPerHour: 10,
   openRequests: 20,
@@ -671,6 +675,151 @@ const int = (v: unknown, fallback: number | null = null): number | null => {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Put the member on the real door list. Only possible when the request is
+// linked to an event with a promoter (entries require both); otherwise the
+// request itself is the record and the member message says how entry works.
+// Shared by the desk and the promoter's own "put them on the list" button.
+type DoorTarget = { event_id: string | null; member_id: string; guestlist_entry_id: string | null; places: number; display_name: string; email: string };
+export async function ensureDoorEntry(r: DoorTarget, promoterId: string | null, actorId: string): Promise<string | null> {
+  if (!promoterId || !r.event_id) return null;
+  if (r.guestlist_entry_id) {
+    await query(`update event_guestlist_entries set status = 'confirmed', updated_at = now() where id = $1`, [r.guestlist_entry_id]);
+    await markConfirmed(r.guestlist_entry_id, actorId);
+    return r.guestlist_entry_id;
+  }
+  const existing = await queryOne<{ id: string }>(
+    `select id from event_guestlist_entries where event_id = $1 and member_id = $2 and status in ('pending','confirmed')`,
+    [r.event_id, r.member_id]
+  );
+  if (existing) {
+    await query(`update event_guestlist_entries set status = 'confirmed', updated_at = now() where id = $1`, [existing.id]);
+    await markConfirmed(existing.id, actorId);
+    return existing.id;
+  }
+  const name = (r.display_name || r.email.split('@')[0]).trim().slice(0, 140);
+  const row = await queryOne<{ id: string }>(
+    `insert into event_guestlist_entries
+       (event_id, promoter_id, member_id, guest_name, plus_ones, source, status, notes,
+        created_by_member_id, confirmed_by_member_id, confirmed_at)
+     values ($1, $2, $3, $4, $5, 'guestlist', 'confirmed', 'Guestlist member — arranged by Guestlist', $6, $6, now())
+     returning id`,
+    [r.event_id, promoterId, r.member_id, name, Math.max(0, r.places - 1), actorId]
+  );
+  return row?.id ?? null;
+}
+
+// --- The promoter's side ---------------------------------------------------
+//
+// A promoter sees the Guestlist members asking for their own events and can
+// put them on the list in one press — the same door entry, the same pass
+// email, the same request record the desk would have produced. "Can't this
+// time" hands the request back to the desk rather than telling the member
+// no: Guestlist may still find another way in.
+
+export type PromoterAsk = {
+  id: string; status: RequestStatus; places: number; requested_at: string; member_note: string | null;
+  member_name: string; event_id: string; title: string; slug: string; start_at: string; end_at: string | null; timezone: string;
+  venue_name: string | null; entry_status: string | null;
+};
+
+export async function promoterOpenAsks(promoterId: string, limit = 40): Promise<PromoterAsk[]> {
+  return query<PromoterAsk>(
+    `select r.id, r.status, r.places, r.requested_at::text, r.member_note,
+            m.display_name as member_name,
+            e.id as event_id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
+            v.name as venue_name, g.status as entry_status
+       from member_access_requests r
+       join members m on m.id = r.member_id
+       join events e on e.id = r.event_id
+       left join venues v on v.id = e.venue_id
+       left join event_guestlist_entries g on g.id = r.guestlist_entry_id
+      where coalesce(r.promoter_id, e.promoter_id) = $1
+        and r.request_type = 'event_access'
+        and r.status in ('requested','reviewing','contacting_promoter','waitlisted')
+        and (g.id is null or g.status = 'declined')
+        and coalesce(e.end_at, e.start_at + interval '6 hours') > now()
+      order by e.start_at asc, r.requested_at asc
+      limit $2`,
+    [promoterId, limit]
+  );
+}
+
+export async function promoterOpenAskCount(promoterId: string): Promise<number> {
+  const row = await queryOne<{ n: number }>(
+    `select count(*)::int as n from member_access_requests r join events e on e.id = r.event_id
+      left join event_guestlist_entries g on g.id = r.guestlist_entry_id
+      where coalesce(r.promoter_id, e.promoter_id) = $1 and r.request_type = 'event_access'
+        and r.status in ('requested','reviewing','contacting_promoter','waitlisted')
+        and (g.id is null or g.status = 'declined')
+        and coalesce(e.end_at, e.start_at + interval '6 hours') > now()`,
+    [promoterId]
+  );
+  return row?.n ?? 0;
+}
+
+export async function promoterActOnRequest(
+  promoter: { id: string; name: string },
+  actor: { id: string; display_name: string },
+  requestId: string,
+  action: 'guestlist' | 'cant'
+): Promise<{ status: RequestStatus; entryId: string | null }> {
+  const r = await queryOne<{
+    id: string; status: RequestStatus; event_id: string | null; member_id: string; guestlist_entry_id: string | null;
+    places: number; display_name: string; email: string; owner_promoter_id: string | null;
+  }>(
+    `select r.id, r.status, r.event_id, r.member_id, r.guestlist_entry_id, r.places, m.display_name, m.email,
+            coalesce(r.promoter_id, e.promoter_id) as owner_promoter_id
+       from member_access_requests r
+       join members m on m.id = r.member_id
+       left join events e on e.id = r.event_id
+      where r.id = $1`,
+    [requestId]
+  );
+  if (!r || r.owner_promoter_id !== promoter.id || !r.event_id) throw new AuthError(404, 'Request not found');
+  if (!OPEN_STATUSES.includes(r.status)) throw new AuthError(409, 'This request has already been decided');
+
+  const timeline = async (to: RequestStatus, text: string) => {
+    await query(
+      `insert into member_access_request_events (request_id, actor_member_id, from_status, to_status, note) values ($1, $2, $3, $4, $5)`,
+      [requestId, actor.id, r.status, to, text]
+    );
+  };
+
+  if (action === 'guestlist') {
+    const entryId = await ensureDoorEntry(r, promoter.id, actor.id);
+    if (!entryId) throw new AuthError(400, 'Could not create a door entry for this event');
+    await query(
+      `update member_access_requests
+          set status = 'confirmed_free', fulfilment_method = 'promoter_guestlist', guestlist_entry_id = $2,
+              outcome_reason = null, member_message = null, handled_by_member_id = $3, decided_at = now(), updated_at = now()
+        where id = $1`,
+      [requestId, entryId, actor.id]
+    );
+    await timeline('confirmed_free', `Put on the list by ${promoter.name} (${actor.display_name})`);
+    await audit('access_request_updated', { actorId: actor.id, promoterId: promoter.id, eventId: r.event_id, detail: { requestId, action: 'promoter_guestlist' } });
+    await track('get_me_in_guestlisted', { memberId: r.member_id, eventId: r.event_id, promoterId: promoter.id, metadata: { by: 'promoter', places: r.places } });
+    const sentPass = await sendGuestlistConfirmed(entryId).catch((err) => { console.error('guestlist email failed', err); return false; });
+    await tellMember(requestId, { skipEmail: sentPass });
+    await refreshAdminReviewDigest();
+    return { status: 'confirmed_free', entryId };
+  }
+
+  // "Can't this time": back to the desk with the reason on record. The
+  // member hears nothing yet — Guestlist may still buy a ticket or find a
+  // member price.
+  await query(
+    `update member_access_requests
+        set status = 'reviewing', outcome_reason = 'promoter_declined',
+            admin_notes = coalesce(admin_notes || E'\n', '') || $2, updated_at = now()
+      where id = $1`,
+    [requestId, `[${new Date().toISOString().slice(0, 16).replace('T', ' ')} ${promoter.name}] Promoter can’t this time — find another way in, or decline.`]
+  );
+  await timeline('reviewing', `${promoter.name} can’t this time — back to the desk`);
+  await audit('access_request_updated', { actorId: actor.id, promoterId: promoter.id, eventId: r.event_id, detail: { requestId, action: 'promoter_cant' } });
+  await refreshAdminReviewDigest();
+  return { status: 'reviewing', entryId: null };
+}
+
 export async function adminActOnRequest(
   requestId: string,
   admin: Member,
@@ -730,33 +879,7 @@ export async function adminActOnRequest(
   // Put the member on the real door list. Only possible when the request is
   // linked to an event with a promoter (entries require both); otherwise the
   // request itself is the record and the member message says how entry works.
-  const ensureGuestlistEntry = async (): Promise<string | null> => {
-    if (!promoterId || !r.event_id) return null;
-    if (r.guestlist_entry_id) {
-      await query(`update event_guestlist_entries set status = 'confirmed', updated_at = now() where id = $1`, [r.guestlist_entry_id]);
-      await markConfirmed(r.guestlist_entry_id, admin.id);
-      return r.guestlist_entry_id;
-    }
-    const existing = await queryOne<{ id: string }>(
-      `select id from event_guestlist_entries where event_id = $1 and member_id = $2 and status in ('pending','confirmed')`,
-      [r.event_id, r.member_id]
-    );
-    if (existing) {
-      await query(`update event_guestlist_entries set status = 'confirmed', updated_at = now() where id = $1`, [existing.id]);
-      await markConfirmed(existing.id, admin.id);
-      return existing.id;
-    }
-    const name = (r.display_name || r.email.split('@')[0]).trim().slice(0, 140);
-    const row = await queryOne<{ id: string }>(
-      `insert into event_guestlist_entries
-         (event_id, promoter_id, member_id, guest_name, plus_ones, source, status, notes,
-          created_by_member_id, confirmed_by_member_id, confirmed_at)
-       values ($1, $2, $3, $4, $5, 'guestlist', 'confirmed', 'Guestlist member — arranged by Guestlist', $6, $6, now())
-       returning id`,
-      [r.event_id, promoterId, r.member_id, name, Math.max(0, r.places - 1), admin.id]
-    );
-    return row?.id ?? null;
-  };
+  const ensureGuestlistEntry = () => ensureDoorEntry(r, promoterId, admin.id);
 
   let next: RequestStatus = r.status;
   let result: { eventId?: string | null; submission?: { status: string; eventId: string | null } } = {};
@@ -1010,7 +1133,7 @@ export type QueueRow = {
   promoter_id: string | null; promoter_name: string | null; promoter_slug: string | null;
   relationship_status: string | null; promoter_contact_email: string | null; promoter_contact_phone: string | null;
   standard_allocation: string | null;
-  member_requests_month: number; member_lifetime_cost_pence: number;
+  member_requests_month: number; member_requests_week: number; member_lifetime_cost_pence: number;
   event_requests: number;
   suggested_event_id: string | null; suggested_title: string | null; match_confidence: string | null;
   external_url: string | null; external_host: string | null; external_name: string | null; external_venue: string | null;
@@ -1030,6 +1153,8 @@ const QUEUE_SQL = `
          p.contact_email as promoter_contact_email, p.contact_phone as promoter_contact_phone, p.standard_allocation,
          (select count(*)::int from member_access_requests x2
            where x2.member_id = r.member_id and x2.requested_at > date_trunc('month', now())) as member_requests_month,
+         (select count(*)::int from member_access_requests x2
+           where x2.member_id = r.member_id and x2.requested_at > now() - interval '7 days' and x2.status <> 'cancelled') as member_requests_week,
          (select coalesce(sum(x2.guestlist_cost_pence), 0)::int from member_access_requests x2
            where x2.member_id = r.member_id and x2.status in ('confirmed_free','discounted','purchased_by_guestlist','attended')) as member_lifetime_cost_pence,
          (select count(*)::int from member_access_requests x2 where r.event_id is not null and x2.event_id = r.event_id and x2.status <> 'cancelled') as event_requests,
