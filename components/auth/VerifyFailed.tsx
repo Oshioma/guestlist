@@ -9,8 +9,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
+// A bare /verify is not a broken link — it is somebody who came looking for
+// the button rather than pressing one, so it does not get told off.
+const HEADING: Record<string, string> = { missing: 'Confirm your email' };
+
 const WHY: Record<string, string> = {
-  missing: 'That link is missing its code — some mail apps cut it short.',
+  missing: 'Ask for a link and we will send one to the address on your account. '
+    + 'If you got here from an email, some mail apps cut the link short — a new one will work.',
   unknown: 'That link is not one of ours.',
   expired: 'That link has expired.',
   used: 'That link has already been used.',
@@ -35,10 +40,13 @@ export function VerifyFailed({ reason }: { reason: string }) {
 
   return (
     <div className="formCard">
-      <h1>That link did not work</h1>
-      <div className="sub">{WHY[reason] ?? WHY.unknown} Ask for a new one below.</div>
+      <h1>{HEADING[reason] ?? 'That link did not work'}</h1>
+      <div className="sub">
+        {WHY[reason] ?? WHY.unknown}
+        {reason !== 'missing' && ' Ask for a new one below.'}
+      </div>
       <button type="button" className="btnAccent" onClick={resend} disabled={busy}>
-        {busy ? 'Sending…' : 'Send me a new link'}
+        {busy ? 'Sending…' : reason === 'missing' ? 'Send me a link' : 'Send me a new link'}
       </button>
       {sent && <div className="sub" style={{ marginTop: 8 }}>{sent}</div>}
       <div className="sub" style={{ marginTop: 8 }}>

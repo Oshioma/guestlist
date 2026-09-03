@@ -7,8 +7,7 @@ import { query } from '@/lib/db';
 import { tasteProfile } from '@/lib/taste';
 import { myHistory } from '@/lib/scene';
 import { memberPlaces } from '@/lib/locations';
-import { getEmailPrefs, getPrivacy } from '@/lib/privacy';
-import { HistoryPanel, PlacesPanel, SettingsPanel, TastePanel } from '@/components/v2c/YouPanels';
+import { HistoryPanel, PlacesPanel, TastePanel } from '@/components/v2c/YouPanels';
 import Link from 'next/link';
 import { billingEnabled, getMembership, membershipIsActive, membershipLabel } from '@/lib/membership';
 import { MemberBadge } from '@/components/membership/MemberBadge';
@@ -21,7 +20,7 @@ export default async function YouPage() {
 
   const membership = await getMembership(member.id);
   const isMember = membershipIsActive(membership);
-  const [taste, allGenres, history, places, plans, privacy, emailPrefs] = await Promise.all([
+  const [taste, allGenres, history, places, plans] = await Promise.all([
     tasteProfile(member.id),
     query<{ id: string; name: string; slug: string; parent_genre_id: string | null }>(
       `select id, name, slug, parent_genre_id from genres where active
@@ -40,8 +39,6 @@ export default async function YouPage() {
         order by tp.start_date`,
       [member.id]
     ),
-    getPrivacy(member.id),
-    getEmailPrefs(member.id),
   ]);
 
   const parents = allGenres.filter((g) => !g.parent_genre_id);
@@ -61,7 +58,9 @@ export default async function YouPage() {
         <a href="#music" className="chip">Music</a>
         <a href="#history" className="chip">Rave history</a>
         <a href="#places" className="chip">Places & travel</a>
-        <a href="#settings" className="chip">Privacy & email</a>
+        {/* Privacy and email are about how you appear to other people, so
+            they live with the profile rather than in here with your taste. */}
+        <Link href="/you/profile#settings" className="chip">Privacy &amp; email</Link>
       </nav>
 
       {/* Membership first: it is the part of Guestlist that gets you in. */}
@@ -91,10 +90,6 @@ export default async function YouPage() {
           id: p.id, name: p.name, slug: p.slug, country_name: p.country_name, relation: p.relation,
         }))}
         initialPlans={plans}
-      />
-      <SettingsPanel
-        initialPrivacy={privacy as unknown as Record<string, boolean>}
-        initialEmailPrefs={emailPrefs as unknown as Record<string, boolean>}
       />
     </main>
   );

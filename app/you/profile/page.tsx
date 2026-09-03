@@ -7,14 +7,20 @@
 //
 // So it shows the profile as others see it, and the form to change it, on one
 // page — you edit the thing while looking at it.
+//
+// The privacy switches and the email settings belong here for the same
+// reason: every one of them is an answer to "who sees this, and when do they
+// hear from us". Deciding whether your rave history is public while looking at
+// your rave history, over on the taste page, was deciding it in the wrong
+// place — the question is about the profile, not about the music.
 
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { getPrivacy } from '@/lib/privacy';
-import { ProfilePanel } from '@/components/v2c/YouPanels';
+import { getEmailPrefs, getPrivacy } from '@/lib/privacy';
+import { ProfilePanel, SettingsPanel } from '@/components/v2c/YouPanels';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: 'Your profile · Guestlist', robots: { index: false } };
@@ -23,7 +29,7 @@ export default async function YourProfilePage() {
   const member = await getCurrentMember();
   if (!member) redirect('/login?next=/you/profile');
 
-  const [profile, privacy] = await Promise.all([
+  const [profile, privacy, emailPrefs] = await Promise.all([
     query<{
       display_name: string; slug: string | null; avatar_url: string | null;
       bio: string | null; raving_since: number | null; now_doing: string | null;
@@ -35,6 +41,7 @@ export default async function YourProfilePage() {
       [member.id]
     ).then((r) => r[0]),
     getPrivacy(member.id),
+    getEmailPrefs(member.id),
   ]);
 
   // Two different reasons a profile is not out there, and they need different
@@ -48,9 +55,9 @@ export default async function YourProfilePage() {
     <main className="wrap youWrap">
       <h1 className="pageTitle">Your profile</h1>
       <p className="pageStandfirst">
-        What every other member sees. Everything else about you —
-        your music, your history, your places, your privacy —
-        lives under <Link href="/you">You</Link>.
+        What every other member sees, who gets to see it, and when we email
+        you. Your music, your history and your places live under{' '}
+        <Link href="/you">You</Link>.
       </p>
 
       <section className="youPanel profileHeadCard">
@@ -69,7 +76,7 @@ export default async function YourProfilePage() {
             </div>
           ) : hidden ? (
             <div className="profileHeadNote">
-              Hidden from other members. Turn on <Link href="/you#settings">public profile</Link> to
+              Hidden from other members. Turn on <a href="#settings">public profile</a> below to
               be found.
             </div>
           ) : profile.slug ? (
@@ -81,6 +88,10 @@ export default async function YourProfilePage() {
       </section>
 
       <ProfilePanel initialProfile={profile} />
+      <SettingsPanel
+        initialPrivacy={privacy as unknown as Record<string, boolean>}
+        initialEmailPrefs={emailPrefs as unknown as Record<string, boolean>}
+      />
     </main>
   );
 }

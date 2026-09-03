@@ -1077,8 +1077,12 @@ console.log('\n— Confirming an email —');
   check('a made-up token confirms nothing', bad.status === 200);
   check('and says so, with a way to get a real one',
     badHtml.includes('That link did not work') && badHtml.includes('Send me a new link'));
-  check('a link with no token at all is handled too',
-    (await (await joiner.fetch('/verify')).text()).includes('That link did not work'));
+  // Arriving at /verify with nothing is not a broken link — it is somebody
+  // who came looking for the button — so it asks rather than tells off.
+  const bare = await (await joiner.fetch('/verify')).text();
+  check('arriving with no token asks instead of scolding',
+    bare.includes('Confirm your email') && !bare.includes('That link did not work'));
+  check('and still offers the button', bare.includes('Send me a link'));
   check('the API still refuses a made-up token',
     (await joiner.fetch('/api/auth/verify', {
       method: 'POST', body: JSON.stringify({ token: 'not-a-real-token' }),
@@ -1093,6 +1097,20 @@ console.log('\n— Confirming an email —');
 // Scrolling a long list used to take the controls for narrowing it off the
 // top of the screen, so changing your mind meant scrolling back up first.
 // Both pages that list events now keep them in a band under the header.
+console.log('\n— Privacy and email live with the profile —');
+{
+  const profile = await (await nadia.fetch('/you/profile')).text();
+  check('the profile page carries the privacy switches',
+    profile.includes('Public profile') && profile.includes('Show my rave history'));
+  check('and the email settings', profile.includes('Alert email frequency'));
+
+  const you = await (await nadia.fetch('/you')).text();
+  check('they are no longer on the taste page', !you.includes('Alert email frequency'));
+  check('but what is left there still works',
+    you.includes('Rave history') && you.includes('Places'));
+  check('and it points at where they went', you.includes('/you/profile#settings'));
+}
+
 console.log('\n— The filters stay on screen —');
 {
   const events = await (await anon.fetch('/events')).text();
@@ -2083,6 +2101,12 @@ console.log('\n— Scanning is a job, not a request —');
      returning id`
   );
 
+  // Warm the route before timing it. In dev the first request to a route
+  // pays for compiling it — ten seconds of webpack that has nothing to do
+  // with whether a scan blocks its request, and would fail the check below
+  // for the wrong reason.
+  await desk.fetch(`/api/admin/sources/${src.id}/scan?scanId=00000000-0000-0000-0000-000000000000`);
+
   const startedAt = Date.now();
   const started = await desk.fetch(`/api/admin/sources/${src.id}/scan`, { method: 'POST' });
   const body = await started.json();
@@ -2138,8 +2162,12 @@ console.log('\n— Your profile lives behind your name —');
 
   const you = await (await me.fetch('/you')).text();
   check('the profile form is gone from You', !you.includes('Save profile'));
-  check('but the switches it sat next to are still there',
-    you.includes('Public profile') && you.includes('Weekly personalised weekend picks'));
+  // And the switches followed it: who sees your profile, and when we email
+  // you, are both questions about the profile rather than about your taste.
+  check('the switches followed it out',
+    !you.includes('Public profile') && !you.includes('Weekly personalised weekend picks'));
+  check('and landed on the profile page',
+    page.includes('Public profile') && page.includes('Weekly personalised weekend picks'));
   check('and everything else is untouched',
     you.includes('Rave history') && you.includes('Places') && you.includes('Membership'));
   check('You links to the profile rather than hiding it', you.includes('/you/profile'));
