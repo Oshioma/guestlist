@@ -2485,8 +2485,11 @@ console.log('\n— An artist page —');
   check('a busy artist keeps the full width',
     busy.includes('artistBody') && !busy.includes('artistBody split'));
 
+  // Both videos, not just the artist: deleting the artist cascades through
+  // artist_video_artists but leaves artist_videos behind, and its youtube id
+  // is unique — so a second run without a reset died on the leftover.
   await q(`delete from artists where id = $1`, [sparse.id]);
-  await q(`delete from artist_videos where id = $1`, [video.id]);
+  await q(`delete from artist_videos where id = any($1)`, [[video.id, sparseVideo.id]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -2525,8 +2528,73 @@ console.log('\n— Artists on the people page —');
   check('the add-an-event box is gone from /people', !people.includes(addBox));
   check('and from the Market',
     !(await (await client().fetch('/market')).text()).includes(addBox));
+  check('and from everything under You',
+    !(await nadia.fetch('/you/profile').then((r) => r.text())).includes(addBox));
   check('but it is still where events are',
     (await (await client().fetch('/events')).text()).includes(addBox));
+}
+
+// ---------------------------------------------------------------------------
+// SHARING SAYS WHERE IT IS GOING BEFORE YOU PRESS IT.
+//
+// The old control was one grey "Share" button. On a phone it opened the share
+// sheet; on a laptop, where there is no sheet, the only thing it ever did was
+// copy the link silently and leave you guessing where it went.
+console.log('\n— Sending a night on —');
+{
+  const [ev] = await q(
+    `select id, slug, title from events where status = 'live' order by start_at limit 1`);
+  const page = await (await anon.fetch(`/events/${ev.slug}`)).text();
+  check('the event page has a share row', page.includes('shareRow'));
+  check('and names the destinations rather than hiding them',
+    page.includes('Share on WhatsApp') && page.includes('Share on X')
+      && page.includes('Share on Facebook') && page.includes('Copy link'));
+
+  // A link that only works on the machine that made it is not a share.
+  check('what it hands over is an absolute address',
+    page.includes(encodeURIComponent(`/events/${ev.slug}`))
+      || page.includes(`https%3A%2F%2F`) || page.includes('http%3A%2F%2F'),
+    'the wa.me link must carry a full URL');
+  // The date and the city travel with it: a bare link in a group chat is a
+  // link nobody opens.
+  check('and it carries the night with it, not just the title',
+    /wa\.me\/\?text=[^"]*%C2%B7/.test(page) || /wa\.me\/\?text=[^"]*%20%C2%B7%20/.test(page),
+    'the WhatsApp text should include the date/venue line');
+
+  const [art] = await q(
+    `select slug, title from articles where status = 'published' limit 1`);
+  const piece = await (await anon.fetch(`/balance/${art.slug}`)).text();
+  check('a piece can be shared too', piece.includes('shareRow') && piece.includes('Share on WhatsApp'));
+  check('and it is the last thing under the article',
+    piece.indexOf('shareRow') > piece.indexOf(art.title));
+}
+
+// ---------------------------------------------------------------------------
+// REJECT IS NOT DELETE.
+//
+// Rejecting sets a status and leaves the piece on the desk, which is right for
+// something a writer might revise — and wrong for the untitled drafts somebody
+// opened and abandoned, which piled up with nothing to do about them.
+console.log('\n— Deleting an article from the desk —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+  const [author] = await q(`select id from members where email = 'dev-nadia@example.com'`);
+  const [doomed] = await q(
+    `insert into articles (title, slug, body, status, author_id, article_type, section_id)
+     values ('Abandoned draft', 'abandoned-draft-fixture', 'Nothing here.', 'rejected', $1, 'story',
+             (select id from editorial_sections limit 1))
+     returning id`, [author.id]);
+
+  check('the desk offers a delete',
+    (await (await desk.fetch('/admin/articles')).text()).includes('Delete'));
+  check('a member cannot delete one',
+    (await nadia.fetch(`/api/admin/articles/${doomed.id}`, { method: 'DELETE' })).status === 403);
+  check('the admin can', (await desk.fetch(`/api/admin/articles/${doomed.id}`, { method: 'DELETE' })).status === 200);
+  check('and it is gone, not hidden',
+    (await q(`select 1 from articles where id = $1`, [doomed.id])).length === 0);
+  check('deleting it twice is a 404, not a crash',
+    (await desk.fetch(`/api/admin/articles/${doomed.id}`, { method: 'DELETE' })).status === 404);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
