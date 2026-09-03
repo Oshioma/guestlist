@@ -195,7 +195,21 @@ async function emailGroup(): Promise<Group> {
   } else {
     const addr = (from.match(/<([^>]+)>/)?.[1] ?? from).trim();
     const domain = addr.split('@')[1]?.toLowerCase() ?? '';
-    checks.push(domain ? { name: 'From address', verdict: 'ok', detail: from } : { name: 'From address', verdict: 'bad', detail: 'EMAIL_FROM is not an email address' });
+    if (!domain) {
+      checks.push({ name: 'From address', verdict: 'bad', detail: 'EMAIL_FROM is not an email address' });
+    } else {
+      // A From address on somebody else's domain is not a configuration
+      // detail — it is the brand on every email being wrong, and nothing
+      // else here would ever have said so. Only an inbox would.
+      const site = (env('SITE_URL') || 'https://www.guestlist.net')
+        .replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].toLowerCase();
+      const bare = domain.replace(/^mail\./, '');
+      const matches = site === bare || site.endsWith(`.${bare}`) || bare.endsWith(`.${site}`);
+      checks.push(matches
+        ? { name: 'From address', verdict: 'ok', detail: from }
+        : { name: 'From address', verdict: 'warn', detail: `${from} — that is ${domain}, and the site is ${site}`,
+            hint: `Members get mail from a domain that is not the one they visit, which reads as somebody else. Set EMAIL_FROM to an address on ${site}.` });
+    }
     try {
       const r = await ping('https://api.resend.com/domains', { headers: { Authorization: `Bearer ${key}` } });
       if (r.status === 401 || r.status === 403) checks.push({ name: 'Resend key', verdict: 'bad', detail: `Resend rejected the key (${r.status})` });

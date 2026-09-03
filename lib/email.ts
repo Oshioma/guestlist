@@ -20,6 +20,8 @@ import { getSafetySwitches } from './settings';
 import { getRecommendedEvents, reasonText, weekendWindow, type RecommendedEvent } from './recommend';
 import { fmtEventDate } from './util';
 
+import { BRAND, button, centreRow, emailShell, esc as escapeHtml, row } from './emailBrand';
+
 const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 
 export const EMAIL_LIMITS = {
@@ -294,17 +296,18 @@ export function renderEmailHtml(opts: {
   memberId?: string | null;
   emailType: string;
 }): string {
-  const esc = (s: string) =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // The shared one, which also escapes quotes — these strings go into inline
+  // attribute values, where an unescaped quote ends the attribute.
+  const esc = escapeHtml;
   const events = (opts.events ?? [])
     .map(
       (e) => `
-      <tr><td style="padding:0 0 18px 0;">
-        <a href="${e.url}" style="text-decoration:none;color:#141414;">
-          <div style="border:1px solid #e4dcc8;border-radius:12px;padding:16px 18px;background:#ffffff;">
-            <div style="font-size:17px;font-weight:700;letter-spacing:-0.3px;color:#141414;">${esc(e.title)}</div>
-            <div style="font-size:13px;color:#6f6a5c;margin-top:4px;">${esc(e.meta)}</div>
-            ${e.reason ? `<div style="font-size:11px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#9a7b1f;margin-top:9px;">${esc(e.reason)}</div>` : ''}
+      <tr><td style="padding:0 0 12px 0;">
+        <a href="${e.url}" style="text-decoration:none;color:${BRAND.ink};">
+          <div style="border:1px solid ${BRAND.line};border-radius:14px;padding:16px 18px;background:${BRAND.surface};">
+            <div style="font-size:17px;font-weight:750;letter-spacing:-0.3px;color:${BRAND.ink};">${esc(e.title)}</div>
+            <div style="font-size:13px;color:${BRAND.soft};margin-top:4px;">${esc(e.meta)}</div>
+            ${e.reason ? `<div style="font-size:11px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:${BRAND.accentInk};margin-top:9px;">${esc(e.reason)}</div>` : ''}
           </div>
         </a>
       </td></tr>`
@@ -312,41 +315,23 @@ export function renderEmailHtml(opts: {
     .join('');
   const unsub =
     opts.memberId && !isTransactional(opts.emailType)
-      ? `<a href="${unsubscribeUrl(opts.memberId, scopeFor(opts.emailType))}" style="color:#8a8574;">Stop these emails</a>
+      ? `<a href="${unsubscribeUrl(opts.memberId, scopeFor(opts.emailType))}" style="color:${BRAND.faint};">Stop these emails</a>
          &nbsp;·&nbsp;
-         <a href="${unsubscribeUrl(opts.memberId, 'recommendations')}" style="color:#8a8574;">Stop all recommendations</a>
+         <a href="${unsubscribeUrl(opts.memberId, 'recommendations')}" style="color:${BRAND.faint};">Stop all recommendations</a>
          &nbsp;·&nbsp;`
       : '';
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#f3eee1;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3eee1;">
-    <tr><td align="center" style="padding:0 14px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;">
-        <tr><td style="background:#0d0d0c;border-radius:0 0 14px 14px;padding:22px 26px;">
-          <span style="font-size:15px;font-weight:800;letter-spacing:4px;color:#f5f1e6;">GUEST<span style="color:#c9a2e8;">LIST</span></span>
-        </td></tr>
-        <tr><td style="padding:28px 6px 8px;">
-          <div style="font-size:24px;font-weight:800;letter-spacing:-0.6px;color:#141414;">${esc(opts.heading)}</div>
-          ${opts.intro ? `<div style="font-size:14px;color:#6f6a5c;margin-top:8px;line-height:1.5;">${esc(opts.intro)}</div>` : ''}
-        </td></tr>
-        <tr><td style="padding:14px 6px 0;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${events}</table>
-        </td></tr>
-        ${opts.cta ? `
-        <tr><td align="center" style="padding:8px 6px 26px;">
-          <a href="${opts.cta.url}" style="display:inline-block;background:#7c4a9e;color:#ffffff;font-weight:800;font-size:14px;letter-spacing:0.4px;text-decoration:none;border-radius:12px;padding:14px 34px;">${esc(opts.cta.label)}</a>
-        </td></tr>` : ''}
-        <tr><td style="padding:10px 6px 34px;border-top:1px solid #e4dcc8;">
-          <div style="font-size:11px;color:#8a8574;line-height:1.7;">
-            ${(opts.footerLines ?? []).map(esc).join('<br/>')}
-            ${opts.footerLines?.length ? '<br/>' : ''}
-            ${unsub}<a href="${SITE}/you" style="color:#8a8574;">Email settings</a><br/>
-            Guestlist — the best events for our community, not every event.
-          </div>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>`;
+  return emailShell({
+    preheader: opts.intro ?? opts.heading,
+    rows: [
+      row(`<div style="font-size:25px;font-weight:800;letter-spacing:-0.7px;color:${BRAND.ink};line-height:1.2;">${esc(opts.heading)}</div>`
+        + (opts.intro ? `<div style="font-size:14px;color:${BRAND.soft};margin-top:9px;line-height:1.6;">${esc(opts.intro)}</div>` : ''),
+        '22px 26px 0'),
+      events ? row(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${events}</table>`, '18px 26px 0') : '',
+      opts.cta ? centreRow(button(opts.cta.url, opts.cta.label), '10px 26px 2px') : '',
+    ].join(''),
+    footerHtml: `${(opts.footerLines ?? []).map(esc).join('<br/>')}${opts.footerLines?.length ? '<br/>' : ''}`
+      + `${unsub}<a href="${SITE}/you/profile#settings" style="color:${BRAND.faint};">Email settings</a>`,
+  });
 }
 
 export function eventBlocks(recs: RecommendedEvent[], src: string): EmailEventBlock[] {

@@ -3,6 +3,7 @@
 // member's stored preferences so the UI reflects reality.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { BRAND } from '@/lib/emailBrand';
 import { query, queryOne } from '@/lib/db';
 import { suppress, verifyUnsubscribeToken } from '@/lib/email';
 import { updateEmailPrefs } from '@/lib/privacy';
@@ -25,16 +26,23 @@ const SCOPE_PREF_PATCH: Record<string, Record<string, boolean>> = {
   reminders: { event_reminders: false },
 };
 
+// Somebody arriving here has come straight from an inbox, so it looks like
+// the email did and like the site does. It cannot be a normal page: an
+// unsubscribe link has to work with no session and no JavaScript.
 function page(title: string, body: string, ok: boolean): NextResponse {
   return new NextResponse(
-    `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-     <title>${title}</title></head>
-     <body style="margin:0;background:#0d0d0c;color:#f5f1e6;font-family:-apple-system,Segoe UI,sans-serif;">
-       <div style="max-width:480px;margin:0 auto;padding:60px 24px;">
-         <div style="font-weight:800;letter-spacing:4px;font-size:15px;">GUEST<span style="color:#7c4a9e;">LIST</span></div>
-         <h1 style="font-size:26px;letter-spacing:-0.5px;margin:26px 0 10px;">${title}</h1>
-         <p style="color:#b9b3a2;line-height:1.6;">${body}</p>
-         <p style="margin-top:26px;"><a href="/you" style="color:#7c4a9e;">Manage all email settings →</a></p>
+    `<!doctype html><html><head><meta charset="utf-8">
+     <meta name="viewport" content="width=device-width,initial-scale=1">
+     <title>${title} — Guestlist</title></head>
+     <body style="margin:0;background:${BRAND.page};color:${BRAND.ink};font-family:${BRAND.font};">
+       <div style="max-width:520px;margin:0 auto;padding:44px 18px;">
+         <div style="background:${BRAND.card};border:1px solid ${BRAND.line};border-radius:18px;padding:30px 28px 34px;">
+           <a href="/" style="text-decoration:none;"><img src="/brand/Guestlist_purple_300dpi.png" width="176" height="18" alt="GUESTLIST"
+                style="display:block;border:0;height:18px;width:176px;font-size:15px;font-weight:800;letter-spacing:4px;color:${BRAND.accent};" /></a>
+           <h1 style="font-size:26px;font-weight:800;letter-spacing:-0.6px;margin:24px 0 10px;">${title}</h1>
+           <p style="color:${BRAND.soft};line-height:1.65;margin:0;">${body}</p>
+           <p style="margin:24px 0 0;"><a href="/you/profile#settings" style="color:${BRAND.accentInk};font-weight:650;">Manage all email settings →</a></p>
+         </div>
        </div>
      </body></html>`,
     { status: ok ? 200 : 400, headers: { 'Content-Type': 'text/html; charset=utf-8' } }

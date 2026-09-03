@@ -17,6 +17,7 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { query, queryOne } from './db';
+import { BRAND, button, centreRow, emailShell, esc, heroPanel, row } from './emailBrand';
 
 export const VERIFY_TTL_HOURS = 72;
 // ONE REMINDER, AND ONLY ONE.
@@ -110,8 +111,6 @@ export async function useVerificationToken(rawToken: string): Promise<VerifyOutc
 // is the only email a new member gets.
 export function verificationEmail(displayName: string, link: string) {
   const site = process.env.SITE_URL ?? 'https://www.guestlist.net';
-  const esc = (v: string) =>
-    v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const first = displayName.trim().split(/\s+/)[0] || displayName;
 
   const steps: [string, string, string][] = [
@@ -137,63 +136,36 @@ export function verificationEmail(displayName: string, link: string) {
     'If you did not sign up, ignore this and nothing happens.',
   ].join('\n');
 
-  const bodyHtml = `<!doctype html><html><body style="margin:0;padding:0;background:#f3eee1;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3eee1;">
-    <tr><td align="center" style="padding:0 14px 40px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;">
+  const bodyHtml = emailShell({
+    preheader: `Confirm this address and your profile goes live — the link works for ${VERIFY_TTL_HOURS} hours.`,
+    rows: [
+      row(heroPanel(
+        `Welcome, ${first}`,
+        `ONE THING<br/>AND YOU'RE <span style="color:${BRAND.onNightAccent};">IN</span>`,
+        `Confirm this address and your profile goes live. It takes one press and the link works for ${VERIFY_TTL_HOURS} hours.`
+      ), '20px 26px 0'),
 
-        <tr><td style="background:#0d0d0c;border-radius:0 0 14px 14px;padding:20px 26px;">
-          <span style="font-size:15px;font-weight:800;letter-spacing:4px;color:#f5f1e6;">GUEST<span style="color:#c9a2e8;">LIST</span></span>
-        </td></tr>
+      centreRow(button(link, 'Confirm your email')),
+      centreRow(`<div style="font-size:11.5px;color:${BRAND.soft};line-height:1.65;max-width:400px;">
+        You can already sign in and look around without it — confirming is what puts
+        your profile on the map and lets other members find you.
+      </div>`, '2px 26px 0'),
 
-        <tr><td style="padding:30px 0 0;">
-          <div style="background:#0d0d0c;border-radius:16px;padding:32px 28px;">
-            <div style="font-size:11px;font-weight:800;letter-spacing:3px;color:#c9a2e8;text-transform:uppercase;">Welcome, ${esc(first)}</div>
-            <div style="font-size:36px;line-height:1.05;font-weight:800;letter-spacing:-1.2px;color:#f5f1e6;margin-top:12px;">
-              ONE THING<br/>AND YOU'RE <span style="color:#c9a2e8;">IN</span>
-            </div>
-            <div style="font-size:14px;color:#a9a294;margin-top:16px;line-height:1.6;">
-              Confirm this address and your profile goes live. It takes one press
-              and the link works for ${VERIFY_TTL_HOURS} hours.
-            </div>
-          </div>
-        </td></tr>
-
-        <tr><td align="center" style="padding:26px 6px 6px;">
-          <a href="${link}" style="display:inline-block;background:#7c4a9e;color:#ffffff;font-weight:800;font-size:14px;letter-spacing:0.6px;text-decoration:none;border-radius:12px;padding:16px 38px;">CONFIRM YOUR EMAIL</a>
-        </td></tr>
-        <tr><td align="center" style="padding:0 6px 8px;">
-          <div style="font-size:11.5px;color:#8a8574;line-height:1.6;">
-            You can already sign in and look around without it — confirming is what puts
-            your profile on the map and lets other members find you.
-          </div>
-        </td></tr>
-
-        <tr><td style="padding:24px 6px 0;">
-          <div style="font-size:10.5px;font-weight:800;letter-spacing:2.4px;color:#9a7b1f;text-transform:uppercase;">Then, three minutes well spent</div>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;">
-            ${steps.map(([title, why, href]) => `
-            <tr><td style="padding:0 0 10px 0;">
-              <a href="${href}" style="text-decoration:none;color:#141414;">
-                <div style="border:1px solid #e4dcc8;border-radius:12px;padding:14px 16px;background:#ffffff;">
-                  <div style="font-size:15px;font-weight:700;letter-spacing:-0.2px;color:#141414;">${esc(title)}</div>
-                  <div style="font-size:12.5px;color:#6f6a5c;margin-top:3px;line-height:1.5;">${esc(why)}</div>
-                </div>
-              </a>
-            </td></tr>`).join('')}
-          </table>
-        </td></tr>
-
-        <tr><td style="padding:16px 6px 0;border-top:1px solid #e4dcc8;">
-          <div style="font-size:11px;color:#8a8574;line-height:1.7;padding-top:14px;">
-            If you did not sign up, ignore this and nothing happens.<br/>
-            Guestlist — the best events for our community, not every event.
-          </div>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>`;
+      row(`<div style="font-size:10.5px;font-weight:800;letter-spacing:2.2px;color:${BRAND.gold};text-transform:uppercase;">Then, three minutes well spent</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:12px;">
+          ${steps.map(([title, why, href]) => `
+          <tr><td style="padding:0 0 10px 0;">
+            <a href="${href}" style="text-decoration:none;color:${BRAND.ink};">
+              <div style="border:1px solid ${BRAND.line};border-radius:14px;padding:14px 16px;background:${BRAND.surface};">
+                <div style="font-size:15px;font-weight:750;letter-spacing:-0.2px;color:${BRAND.ink};">${esc(title)}</div>
+                <div style="font-size:12.5px;color:${BRAND.soft};margin-top:3px;line-height:1.5;">${esc(why)}</div>
+              </div>
+            </a>
+          </td></tr>`).join('')}
+        </table>`, '26px 26px 0'),
+    ].join(''),
+    footerHtml: 'If you did not sign up, ignore this and nothing happens.',
+  });
 
   return { subject: `${first}, one press and you're in — Guestlist`, bodyText, bodyHtml };
 }
@@ -201,8 +173,6 @@ export function verificationEmail(displayName: string, link: string) {
 // The reminder. Deliberately shorter than the welcome and in a different
 // voice: this one exists to say what they are missing, not to say hello again.
 export function verificationNudgeEmail(displayName: string, link: string) {
-  const esc = (v: string) =>
-    v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const first = displayName.trim().split(/\s+/)[0] || displayName;
 
   const bodyText = [
@@ -217,35 +187,21 @@ export function verificationNudgeEmail(displayName: string, link: string) {
     'This is the only reminder we will send.',
   ].join('\n');
 
-  const bodyHtml = `<!doctype html><html><body style="margin:0;padding:0;background:#f3eee1;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3eee1;">
-    <tr><td align="center" style="padding:0 14px 40px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;">
-        <tr><td style="background:#0d0d0c;border-radius:0 0 14px 14px;padding:20px 26px;">
-          <span style="font-size:15px;font-weight:800;letter-spacing:4px;color:#f5f1e6;">GUEST<span style="color:#c9a2e8;">LIST</span></span>
-        </td></tr>
-        <tr><td style="padding:30px 6px 0;">
-          <div style="font-size:28px;line-height:1.1;font-weight:800;letter-spacing:-0.9px;color:#141414;">
-            ${esc(first)}, you're still hidden
-          </div>
-          <div style="font-size:14.5px;color:#6f6a5c;margin-top:14px;line-height:1.6;">
-            You joined Guestlist, but this address was never confirmed — so other
-            members can't find you and you're not in the directory. One press fixes it.
-          </div>
-        </td></tr>
-        <tr><td align="center" style="padding:26px 6px 8px;">
-          <a href="${link}" style="display:inline-block;background:#7c4a9e;color:#ffffff;font-weight:800;font-size:14px;letter-spacing:0.6px;text-decoration:none;border-radius:12px;padding:16px 38px;">CONFIRM YOUR EMAIL</a>
-        </td></tr>
-        <tr><td style="padding:14px 6px 0;border-top:1px solid #e4dcc8;">
-          <div style="font-size:11px;color:#8a8574;line-height:1.7;padding-top:14px;">
-            The link works for ${VERIFY_TTL_HOURS} hours. This is the only reminder we'll send.<br/>
-            If you did not sign up, ignore this and nothing happens.
-          </div>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>`;
+  const bodyHtml = emailShell({
+    preheader: 'Your profile is still hidden — one press fixes it.',
+    rows: [
+      row(`<div style="font-size:27px;line-height:1.12;font-weight:800;letter-spacing:-0.9px;color:${BRAND.ink};">
+          ${esc(first)}, you're still hidden
+        </div>
+        <div style="font-size:14.5px;color:${BRAND.soft};margin-top:14px;line-height:1.65;">
+          You joined Guestlist, but this address was never confirmed — so other
+          members can't find you and you're not in the directory. One press fixes it.
+        </div>`, '24px 26px 0'),
+      centreRow(button(link, 'Confirm your email')),
+    ].join(''),
+    footerHtml: `The link works for ${VERIFY_TTL_HOURS} hours. This is the only reminder we'll send.<br/>`
+      + 'If you did not sign up, ignore this and nothing happens.',
+  });
 
   return { subject: `${first}, your Guestlist profile is still hidden`, bodyText, bodyHtml };
 }
