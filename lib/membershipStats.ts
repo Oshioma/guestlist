@@ -5,7 +5,7 @@
 
 import { FAIR_USE_WATCH } from './accessRequests';
 import { query, queryOne } from './db';
-import { membershipIsActive, membershipLabel, type BillingSource, type Membership, type MembershipStatus } from './membership';
+import { formatPence, membershipIsActive, membershipLabel, type BillingSource, type Membership, type MembershipStatus } from './membership';
 
 export type MembershipOverview = {
   paying: number; complimentary: number; trialing: number; past_due: number;
@@ -141,6 +141,7 @@ export type LedgerRow = {
   membership: Membership; active: boolean; label: string;
   requests_month: number; requests_lifetime: number; free_entries: number; discounts: number; purchased: number;
   declined: number; plus_ones: number; cost_month_pence: number; cost_lifetime_pence: number; paid_pence: number;
+  last_paid_pence: number; refunded_pence: number;
   months_member: number; flags: string[];
 };
 
@@ -153,6 +154,7 @@ export async function memberLedger(): Promise<LedgerRow[]> {
     cancel_at_period_end: boolean; cancelled_at: string | null; member_since: string | null;
     requests_month: number; requests_week: number; requests_lifetime: number; free_entries: number; discounts: number; purchased: number;
     declined: number; plus_ones: number; cost_month_pence: number; cost_lifetime_pence: number; paid_pence: number;
+    last_paid_pence: number; refunded_pence: number;
   }>(
     `select m.id as member_id, m.display_name, m.email, m.slug,
             s.id, s.plan_id, s.status, s.billing_source, s.granted_by_member_id, s.grant_note, s.stripe_customer_id,
@@ -170,7 +172,11 @@ export async function memberLedger(): Promise<LedgerRow[]> {
               and r.status in ('confirmed_free','discounted','purchased_by_guestlist','attended')), 0)::int as cost_month_pence,
             coalesce(sum(r.guestlist_cost_pence) filter (where r.status in ('confirmed_free','discounted','purchased_by_guestlist','attended')), 0)::int as cost_lifetime_pence,
             (select coalesce(sum(b.amount_pence), 0)::int from membership_billing_events b
-              where b.member_id = m.id and b.event_type = 'invoice.paid') as paid_pence
+              where b.member_id = m.id and b.event_type = 'invoice.paid') as paid_pence,
+            (select coalesce(b.amount_pence, 0) from membership_billing_events b
+              where b.member_id = m.id and b.event_type = 'invoice.paid' order by b.processed_at desc limit 1) as last_paid_pence,
+            (select coalesce(sum(b.amount_pence), 0)::int from membership_billing_events b
+              where b.member_id = m.id and b.event_type = 'admin.refund') as refunded_pence
        from memberships s
        join members m on m.id = s.member_id
        left join member_access_requests r on r.member_id = m.id
@@ -194,7 +200,8 @@ export async function memberLedger(): Promise<LedgerRow[]> {
     if (r.requests_week >= FAIR_USE_WATCH.asksPerWeek) flags.push(`${r.requests_week} asks in the last 7 days`);
     if (r.requests_month >= 6) flags.push(`${r.requests_month} requests this month`);
     else if (avgMonth >= 1 && r.requests_month >= Math.max(4, avgMonth * 3)) flags.push('well above the average this month');
-    if (r.billing_source === 'stripe' && r.paid_pence > 0 && r.cost_lifetime_pence > r.paid_pence) flags.push('cost above what they’ve paid');
+    if (r.billing_source === 'stripe' && r.paid_pence > 0 && r.cost_lifetime_pence > r.paid_pence - (r.refunded_pence ?? 0)) flags.push('cost above what they’ve paid');
+    if ((r.refunded_pence ?? 0) > 0) flags.push(`refunded ${formatPence(r.refunded_pence)}`);
     if (r.requests_lifetime >= 4 && r.plus_ones === r.requests_lifetime) flags.push('always a +1');
     if (r.status === 'past_due') flags.push('payment failed');
     return {
@@ -203,6 +210,7 @@ export async function memberLedger(): Promise<LedgerRow[]> {
       requests_month: r.requests_month, requests_lifetime: r.requests_lifetime, free_entries: r.free_entries,
       discounts: r.discounts, purchased: r.purchased, declined: r.declined, plus_ones: r.plus_ones,
       cost_month_pence: r.cost_month_pence, cost_lifetime_pence: r.cost_lifetime_pence, paid_pence: r.paid_pence,
+      last_paid_pence: r.last_paid_pence ?? 0, refunded_pence: r.refunded_pence ?? 0,
       months_member: months, flags,
     };
   });

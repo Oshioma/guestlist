@@ -10,6 +10,7 @@ import { listApprovedBusinesses, memberClaims, offerHeadline } from '@/lib/marke
 import { liveDrops, liveGoodCauses, memberDropClaims } from '@/lib/drops';
 import { fmtEventDate } from '@/lib/util';
 import { ManageMembership } from '@/components/membership/ManageMembership';
+import { memberRefunds } from '@/lib/membershipAdmin';
 import { DropClaim } from '@/components/membership/DropClaim';
 import { MemberBadge } from '@/components/membership/MemberBadge';
 
@@ -63,6 +64,7 @@ export default async function YourMembershipPage() {
   const { live, past } = splitRequests(requests);
   const since = m?.member_since ? fmtMonth(m.member_since) : null;
   const periodEnd = m?.current_period_end ? fmtDay(m.current_period_end) : null;
+  const refunds = m?.billing_source === 'stripe' ? await memberRefunds(me.id) : [];
   const membershipMeta = [
     me.isMember && m?.billing_source === 'stripe' ? `${price}/month` : null,
     me.isMember && m?.billing_source === 'stripe' && periodEnd ? `${m.cancel_at_period_end ? 'ends' : 'renews'} ${periodEnd}` : null,
@@ -86,6 +88,11 @@ export default async function YourMembershipPage() {
           <p className="youPanelSub">{me.isMember ? 'Part of Guestlist.' : 'Not a member yet.'}</p>
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: -0.4 }}>{membershipLabel(m)}</div>
           {membershipMeta && <div className="youHistoryMeta" style={{ marginTop: 4 }}>{membershipMeta}</div>}
+          {refunds.length > 0 && (
+            <div className="youHistoryMeta" style={{ marginTop: 6 }}>
+              {refunds.map((r) => <div key={r.id}>Refunded {formatPence(r.amount_pence, r.currency)} on {new Date(r.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — back on your card within 5–10 days.</div>)}
+            </div>
+          )}
           {m?.status === 'past_due' && (
             <p className="youHistoryMeta" style={{ color: 'var(--danger)', marginTop: 8 }}>Your last payment didn’t go through. Update your card and everything carries on.</p>
           )}

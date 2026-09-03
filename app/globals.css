@@ -3876,3 +3876,8 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 /* Promoter dashboard: Guestlist members asking for your events. */
 .memberAsk { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
 .memberAskActions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ADMIN → Members: cancel / refund a paying member, inside the table cell. */
+.stripeControl { min-width: 280px; max-width: 360px; text-align: left; font-weight: 400; }
+.stripeControl label { display: block; margin-top: 8px; }
+.stripeControl .adminSub { margin: 4px 0 0; font-size: 11.5px; }
