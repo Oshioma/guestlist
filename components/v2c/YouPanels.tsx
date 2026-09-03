@@ -354,7 +354,10 @@ export function PlacesPanel({ initialPlaces, initialPlans }: { initialPlaces: Pl
   const [plans, setPlans] = useState(initialPlans);
   const [cityQ, setCityQ] = useState('');
   const [cityResults, setCityResults] = useState<Place[] | null>(null);
-  const [mode, setMode] = useState<'follow' | 'set_home'>('follow');
+  // Someone with no home yet has been sent here to set one ("Where are
+  // you?"), so that is what the search does until they have; following
+  // cities is the second thing, not the first.
+  const [mode, setMode] = useState<'follow' | 'set_home'>(initialPlaces.some((p) => p.relation === 'home') ? 'follow' : 'set_home');
   const [trip, setTrip] = useState({ destination: '', country: '', startDate: '', endDate: '', visibility: 'private' });
   const [error, setError] = useState<string | null>(null);
 
@@ -379,6 +382,8 @@ export function PlacesPanel({ initialPlaces, initialPlans }: { initialPlaces: Pl
       setPlaces(data.places);
       setCityQ('');
       setCityResults(null);
+      // Home set: the search now follows cities, which is what it is for next.
+      if (body.action === 'set_home') setMode('follow');
       router.refresh();
     } else setError(data.error ?? 'Something went wrong');
   }
@@ -419,7 +424,7 @@ export function PlacesPanel({ initialPlaces, initialPlans }: { initialPlaces: Pl
       <div className="youPlaceRow">
         <span className="sectionLabel" style={{ margin: 0 }}>Home</span>
         {home ? <span className="chip active">{home.name}{home.country_name ? `, ${home.country_name}` : ''}</span>
-              : <span className="youPanelSub" style={{ margin: 0 }}>Not set</span>}
+              : <span className="youPanelSub" style={{ margin: 0 }}>Not set — type your city below and press <strong>Set as home</strong></span>}
       </div>
       <div className="youPlaceRow">
         <span className="sectionLabel" style={{ margin: 0 }}>Following</span>
@@ -436,8 +441,8 @@ export function PlacesPanel({ initialPlaces, initialPlans }: { initialPlaces: Pl
           <option value="follow">Follow a city</option>
           <option value="set_home">Set home city</option>
         </select>
-        <input className="youSearch" style={{ margin: 0 }} placeholder="Zanzibar, London, Berlin, New York…"
-               value={cityQ} onChange={(e) => setCityQ(e.target.value)} />
+        <input className="youSearch" style={{ margin: 0 }} placeholder={mode === 'set_home' ? 'Where do you live? London, Berlin, Lagos…' : 'Zanzibar, London, Berlin, New York…'}
+               value={cityQ} onChange={(e) => setCityQ(e.target.value)} aria-label={mode === 'set_home' ? 'Your home city' : 'Follow a city'} />
       </div>
       {cityResults && (
         <div className="youResults">
