@@ -4,6 +4,7 @@
 
 import Link from 'next/link';
 import { MembershipBenefits } from '@/components/membership/MembershipBenefits';
+import { MembershipGallery, MembershipHeroImage } from '@/components/membership/MembershipGallery';
 import { formatPence, membershipLabel, type MemberWithMembership } from '@/lib/membership';
 import { memberRequests, type MemberRequest } from '@/lib/accessRequests';
 import { listApprovedBusinesses, memberClaims } from '@/lib/market';
@@ -92,6 +93,7 @@ export async function MemberHome({ me }: { me: MemberWithMembership }) {
     <main className="wrap">
       <ClubTrack type="membership_page_viewed" />
       <section className={`mbHero member${hasNow ? ' withNow' : ''}`}>
+        <MembershipHeroImage />
         <div className="mbHeroCopy">
           <div className="mbKicker">Guestlist Membership · {status}</div>
           <h1 className="mbTitle">You’re in.</h1>
@@ -150,6 +152,8 @@ export async function MemberHome({ me }: { me: MemberWithMembership }) {
           <div className="small"><Link href="/market" style={{ textDecoration: 'underline' }}>Browse the Market →</Link></div>
         </div>
       </div>
+
+      <MembershipGallery />
 
       <MembershipBenefits variant="member" drops={drops.length} causes={causes} />
 

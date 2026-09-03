@@ -1,7 +1,7 @@
 // THE PICTURES ON THE SITE, AS SLOTS RATHER THAN FILES.
 //
 // A handful of places show a fixed photograph — the home page's three, the
-// membership benefits. Changing one used to mean editing code and deploying,
+// membership hero and its photo strip. Changing one used to mean editing code and deploying,
 // which puts a designer's job behind an engineer.
 //
 // The unit here is a SLOT, not a file: `membership.hero` is "the photograph
@@ -51,42 +51,42 @@ export const SITE_IMAGE_SLOTS: SiteImageSlot[] = [
   {
     key: 'membership.hero',
     label: 'Membership — Get in free',
-    where: 'Behind the big GET IN FREE headline, on /membership and /you/membership',
+    where: 'Behind the big GET IN. / YOU’RE IN. headline at the top of /membership',
     guidance: 'Wide and dark. White type sits on the left third, so keep that side calm.',
     fallback: '/images/hero.jpg',
   },
   {
     key: 'membership.queueJump',
     label: 'Membership — Queue jump',
-    where: 'Beside the Queue jump benefit',
+    where: 'The photo strip under the /membership hero — the “Queue jump” picture',
     guidance: 'Arriving, or a door. Cropped to a wide band, so the subject wants to be central.',
     fallback: '/images/secret-party.jpg',
   },
   {
     key: 'membership.drops',
     label: 'Membership — Member drops',
-    where: 'Beside the Member drops benefit',
+    where: 'The photo strip under the /membership hero — the “Member drops” picture',
     guidance: 'Something you would be pleased to be surprised with.',
     fallback: '/images/travel-ocean.jpg',
   },
   {
     key: 'membership.prices',
     label: 'Membership — Member prices',
-    where: 'Beside the Member prices benefit',
+    where: 'The photo strip under the /membership hero — the “Member prices” picture',
     guidance: 'Somewhere you would pay to get into, shot so the left side stays calm.',
     fallback: '/images/travel-safari.jpg',
   },
   {
     key: 'membership.market',
     label: 'Membership — Guestlist Market',
-    where: 'Beside the Guestlist Market benefit',
+    where: 'The photo strip under the /membership hero — the “Guestlist Market” picture',
     guidance: 'A table, a bar, a shop — an independent place worth knowing.',
     fallback: '/images/supper-club.jpg',
   },
   {
     key: 'membership.doGood',
     label: 'Membership — Do good for others',
-    where: 'Beside the Do good for others benefit',
+    where: 'The photo strip under the /membership hero — the “Do good for others” picture',
     guidance: 'People, together, doing something that is not about a dance floor.',
     fallback: '/images/sound-healing.jpg',
   },

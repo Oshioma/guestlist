@@ -16,6 +16,7 @@ import { JoinCta } from '@/components/membership/JoinCta';
 import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
 import { MarketArt } from '@/components/market/MarketArt';
 import { MemberHome } from '@/components/membership/MemberHome';
+import { MembershipGallery, MembershipHeroImage } from '@/components/membership/MembershipGallery';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Guestlist Membership — GET IN.' };
@@ -35,6 +36,7 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
     <main className="wrap">
       <ClubTrack type="membership_page_viewed" />
       <section className="mbHero">
+        <MembershipHeroImage />
         <div className="mbKicker">{live ? 'Guestlist Membership' : 'Guestlist Membership · Coming soon'}</div>
         <h1 className="mbTitle">Get in.</h1>
         <p className="mbPrice">Guestlist Membership — {price}/month</p>
@@ -45,6 +47,8 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
         {sp.cancelled && <p className="mbErr" style={{ marginBottom: 14 }}>No charge was made. Whenever you’re ready.</p>}
         <JoinCta mode={live ? 'checkout' : 'waitlist'} isSignedIn={!!me} isMember={!!me?.isMember} onWaitlist={onWaitlist} price={price} />
       </section>
+
+      <MembershipGallery />
 
       <MembershipBenefits variant="prospect" causes={causes} />
 
