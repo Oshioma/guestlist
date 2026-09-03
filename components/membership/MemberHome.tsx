@@ -153,8 +153,6 @@ export async function MemberHome({ me }: { me: MemberWithMembership }) {
         </div>
       </div>
 
-      <MembershipGallery />
-
       <MembershipBenefits variant="member" drops={drops.length} causes={causes} />
 
       {businesses.length > 0 && (
@@ -194,6 +192,10 @@ export async function MemberHome({ me }: { me: MemberWithMembership }) {
           </div>
         </div>
       </div>
+
+      {/* Same as the sales page: the photographs close it rather than
+          interrupt it. */}
+      <MembershipGallery />
 
       <div className="mbFoot">
         <span className="adminSub" style={{ margin: 0 }}>

@@ -126,6 +126,14 @@ try {
     check('waitlist CTA shown, no join-now checkout', html.includes('Join the waitlist'));
     check('the six benefits are on the page', ['Get in free', 'Queue jump', 'Member prices', 'Guestlist Market', 'Member drops', 'Do good for others'].every((s) => html.includes(s)));
     check('hero photograph and the five-picture strip render from the image slots', html.includes('class="mbHeroBg"') && (html.match(/<figcaption>/g) ?? []).length === 5 && html.includes('/images/'));
+    // The strip closes the page rather than interrupting it: somebody
+    // scrolling this far has read the argument, and the photographs are what
+    // they leave with. Asserted by position, because "at the foot" is the
+    // whole point and a component can be moved without anyone noticing.
+    check('the picture strip is at the foot, under the join box',
+      html.indexOf('mbGallery') > html.indexOf('Be first in')
+        && html.indexOf('mbGallery') < html.indexOf('Membership terms'),
+      `gallery ${html.indexOf('mbGallery')}, join ${html.indexOf('Be first in')}, terms ${html.indexOf('Membership terms')}`);
     check('no invented donation claims', !/\d+%\s+of\s+(every|your|membership)/i.test(html));
     const w1 = await anon.json('/api/membership/waitlist', 'POST', { email: 'someone@example.com' });
     check('visitor joins the waitlist', w1.status === 200 && w1.data.outcome === 'joined');

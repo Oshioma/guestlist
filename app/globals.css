@@ -3884,15 +3884,30 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 /* Membership pictures: one behind the hero, five in a strip beneath it. */
 .mbHero > .mbHeroBg { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
 .mbHero::before { z-index: 1; }
-.mbGallery { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 14px; }
+/* Closing the page rather than sitting inside it, so it gets room above
+   instead of being tucked under whatever came before. */
+.mbGallery { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 34px; }
 .mbGallery figure { margin: 0; position: relative; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: var(--bg-raised); }
 .mbGallery img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
 .mbGallery figure:hover img { transform: scale(1.03); }
-.mbGallery figure::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 50%; background: linear-gradient(transparent, rgba(0,0,0,0.6)); pointer-events: none; }
-.mbGallery figcaption { z-index: 1; }
+/* The captions name the benefit each photograph is about, so they are the
+   point of the strip rather than a label on it. At 10.5px they read as a
+   watermark; at this size they are a title. The scrim grows with them —
+   bigger type over a photograph needs more to sit on, not less. */
+.mbGallery figure::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 68%;
+  background: linear-gradient(transparent, rgba(0,0,0,0.28) 42%, rgba(0,0,0,0.78));
+  pointer-events: none;
+}
 .mbGallery figcaption {
-  position: absolute; left: 10px; bottom: 8px; font-size: 10.5px; letter-spacing: 1.6px; text-transform: uppercase; font-weight: 800;
-  color: #f2f1ec; text-shadow: 0 1px 8px rgba(0,0,0,0.6);
+  position: absolute; left: 14px; right: 12px; bottom: 12px; z-index: 1;
+  font-size: clamp(13px, 1.35vw, 17px);
+  line-height: 1.15;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 800;
+  color: #f6f5f1;
+  text-shadow: 0 1px 10px rgba(0,0,0,0.55);
 }
 @media (max-width: 760px) {
   .mbGallery { grid-template-columns: repeat(3, 1fr); gap: 8px; }
