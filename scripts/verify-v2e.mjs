@@ -173,6 +173,16 @@ try {
     check('/archive lists published events', html.includes('Metalheadz at Blue Note') && html.includes('Baile do Espaço'));
     check('decades come from real years', html.includes('1990s'));
     check('memories surface on the front door', html.includes('Inner City Life'));
+    // A MEMORY IS ABOUT A NIGHT, SO THE NIGHT IS THE HEADLINE. These were
+    // quotes stacked in one box with the club's name small and grey at the
+    // bottom, which read as a comments section. Each is its own card now, led
+    // by the event and the date — the part somebody recognises.
+    check('each memory is its own card', html.includes('memoryCard'));
+    const at = html.indexOf('memoryCard');
+    check('led by the night it is about, not the quote',
+      at > 0 && html.indexOf('memoryCardTitle', at) < html.indexOf('memoryCardBody', at));
+    check('and the card carries the date',
+      /memoryCardWhen[^>]*>\s*[^<]*\d{4}/.test(html), 'a year should appear in the card meta');
 
     const s = await anon.json('/api/archive/search?q=metalheadz');
     check('search groups results (entity + event)',

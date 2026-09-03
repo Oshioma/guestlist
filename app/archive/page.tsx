@@ -23,7 +23,8 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
     decades: { decade: number; n: number }[];
     attendedEvents: { id: string; title: string; slug: string; display_date: string; venue_name: string | null; city: string | null; members: number }[];
     entities: { id: string; name: string; slug: string; entity_type: string; city: string | null; country_name: string | null; active_from_year: number | null; active_to_year: number | null; members: number; archive_events: number }[];
-    memories: { body: string; display_name: string; title: string; slug: string }[];
+    memories: { body: string; display_name: string; member_slug: string | null; title: string; slug: string;
+                display_date: string | null; city: string | null; venue_name: string | null }[];
     mixes: MixRow[];
   };
   const searchTyped = search as unknown as {
@@ -210,17 +211,32 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
         </section>
       )}
 
+      {/* A MEMORY IS ABOUT A NIGHT, SO THE NIGHT IS THE HEADLINE.
+          These were quotes stacked in one box with the event's name in small
+          grey type at the bottom, which read as a comments section. The thing
+          somebody recognises is the club and the year — put that at the top,
+          big, and the story underneath is what they stay for. */}
       {h.memories.length > 0 && (
-        <section className="dancedWith" style={{ marginTop: 24 }}>
-          <div className="dancedTitle">People are remembering</div>
-          {h.memories.map((m, i) => (
-            <div className="memoryRow" key={i}>
-              <div className="memoryBody">“{m.body}”</div>
-              <div className="memoryMeta">
-                {m.display_name} · <Link href={`/archive/events/${m.slug}`} style={{ textDecoration: 'underline' }}>{m.title}</Link>
-              </div>
-            </div>
-          ))}
+        <section style={{ marginTop: 30 }}>
+          <div className="sectionLabel">People are remembering</div>
+          <div className="memoryGrid">
+            {h.memories.map((m, i) => (
+              <article className="memoryCard" key={i}>
+                <Link href={`/archive/events/${m.slug}`} className="memoryCardTitle">{m.title}</Link>
+                {(m.display_date || m.venue_name || m.city) && (
+                  <div className="memoryCardWhen">
+                    {[m.display_date, m.venue_name, m.city].filter(Boolean).join(' · ')}
+                  </div>
+                )}
+                <blockquote className="memoryCardBody">{`“${m.body}”`}</blockquote>
+                <div className="memoryCardWho">
+                  {m.member_slug
+                    ? <Link href={`/members/${m.member_slug}`}>{m.display_name}</Link>
+                    : m.display_name}
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
       )}
     </main>

@@ -3999,3 +3999,69 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
   box-shadow: -10px 0 12px -10px rgba(0, 0, 0, 0.25);
 }
 .adminTable td:last-child .stripeControl { position: relative; }
+
+/* ===========================================================================
+   PEOPLE ARE REMEMBERING — one card per memory, the night as the headline.
+
+   These were quotes stacked inside one box with the club's name in small grey
+   type underneath, which read as a comments section. But a memory is ABOUT a
+   night, and the thing somebody recognises is the club and the year — so that
+   goes at the top, big, and the story is what they stay for.
+
+   .memoryRow and friends still exist: on an individual archive event's page
+   the night is already the page, and repeating its name over every quote
+   would be shouting.
+   =========================================================================== */
+
+.memoryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+.memoryCard {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  padding: 22px 24px 20px;
+}
+.memoryCardTitle {
+  font-size: clamp(21px, 2.4vw, 27px);
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  line-height: 1.14;
+  color: var(--text);
+  text-decoration: none;
+}
+.memoryCardTitle:hover { color: var(--accent-ink); }
+.memoryCardWhen {
+  margin-top: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+.memoryCardBody {
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+  font-size: 16px;
+  font-style: italic;
+  line-height: 1.6;
+  color: var(--text-soft);
+  /* The quote fills the card, so cards of different lengths still line their
+     attributions up along the bottom. */
+  flex: 1;
+}
+.memoryCardWho {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.memoryCardWho a { color: var(--text-muted); text-decoration: underline; }
+.memoryCardWho a:hover { color: var(--text); }

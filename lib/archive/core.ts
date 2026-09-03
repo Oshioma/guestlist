@@ -492,8 +492,11 @@ export async function archiveHighlights() {
         limit 12`
     ),
     query(
-      `select mem.body, mem.created_at::text, m.display_name,
-              e.title, e.slug
+      // The night itself travels with the memory: a remembered story with no
+      // date on it is a story about nothing in particular, and the date is the
+      // part that makes somebody say "I was there too".
+      `select mem.body, mem.created_at::text, m.display_name, m.slug as member_slug,
+              e.title, e.slug, e.display_date, e.city, e.venue_name
          from archive_memories mem
          join members m on m.id = mem.member_id
          join archive_events e on e.id = mem.archive_event_id and e.status = 'published'
