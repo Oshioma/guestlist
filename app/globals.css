@@ -3915,3 +3915,11 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
   .mbGallery figure:nth-child(4) { grid-column: span 1; }
 }
 @media (max-width: 480px) { .mbGallery { grid-template-columns: repeat(2, 1fr); } .mbGallery figure:nth-child(5) { grid-column: span 2; aspect-ratio: 21 / 9; } }
+
+/* ADMIN → Members: sixteen columns scroll sideways, so the actions column
+   (Revoke / Cancel / Refund) pins to the right edge and stays in view. */
+.adminTable th:last-child, .adminTable td:last-child {
+  position: sticky; right: 0; background: var(--bg); z-index: 1;
+  box-shadow: -10px 0 12px -10px rgba(0, 0, 0, 0.25);
+}
+.adminTable td:last-child .stripeControl { position: relative; }
