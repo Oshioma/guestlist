@@ -18,6 +18,8 @@
   --on-accent: #ffffff; /* type on purple fills */
   --danger: #b3423a;
   --ok: #45704c;
+  --ok-tint: rgba(69, 112, 76, 0.13);
+  --ok-line: rgba(69, 112, 76, 0.36);
   --gold-ink: #9a7b1f; /* the brand gold as TEXT on the light ground */
   --header-bg: rgba(255, 255, 255, 0.86);
   --media-ph: #eae8e1;
@@ -46,6 +48,8 @@
   --accent-soft: rgba(124, 74, 158, 0.3);
   --danger: #e57373;
   --ok: #7a9e7e;
+  --ok-tint: rgba(122, 158, 126, 0.16);
+  --ok-line: rgba(122, 158, 126, 0.38);
   --gold-ink: #e8c46a; /* in the dark it goes back to the bright brand yellow */
   --header-bg: rgba(7, 7, 7, 0.82);
   --media-ph: #141414;
@@ -3658,3 +3662,98 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 .artistFollowName { display: block; font-size: 14.5px; font-weight: 700; letter-spacing: -0.2px; }
 .artistFollowMeta { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .artistFollowYou { display: block; font-size: 11px; font-weight: 700; color: var(--accent-ink); margin-top: 3px; }
+
+/* ===========================================================================
+   THE FILTERS STOP AT THE NAVIGATION AND STAY THERE.
+
+   The controls for narrowing a long list used to scroll away with the list,
+   so changing your mind about a genre meant scrolling back up to the top
+   first. They park under the header instead.
+
+   The header is not a fixed height — it grows an account strip when you sign
+   in and wraps on a narrow window — so --headerH is published by the header's
+   own ResizeObserver (components/StickyFilters.tsx). The literal here is only
+   what stands before the first measurement lands.
+   =========================================================================== */
+
+.stickyFilters { --headerFallback: 64px; }
+
+/* Sticking is for windows with room to spare. On a short one — a laptop in
+   split screen, a phone in landscape — a band this tall would leave nothing
+   underneath it to filter, which is worse than scrolling. */
+@media (min-width: 760px) and (min-height: 640px) {
+  .stickyFilters {
+    position: sticky;
+    top: var(--headerH, var(--headerFallback));
+    /* Under the header (50) and under an open filter sheet, over the cards. */
+    z-index: 30;
+    padding-top: 10px;
+  }
+  /* The band's own ground. It has to be opaque or the cards read through it,
+     and it has to reach the window's edges even though the band itself is
+     inside the 1180px column — hence a full-bleed layer rather than a
+     background on the element. */
+  .stickyFilters::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 100vw;
+    transform: translateX(-50%);
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    z-index: -1;
+  }
+  /* The rows inside lose the space they were using to separate themselves
+     from the page — in a band, that space is just height taken from the
+     events. */
+  .stickyFilters .chipRow { padding-bottom: 10px; }
+  .stickyFilters .tabRow { margin-bottom: 12px; }
+  .stickyFilters .filterRow { padding-bottom: 12px; }
+}
+
+/* ===========================================================================
+   EMAIL CONFIRMED.
+   A line across the top of the front page, not a page of its own.
+   =========================================================================== */
+
+.confirmedBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 1180px;
+  margin: 14px auto 0;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--ok-line);
+  background: var(--ok-tint);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+@media (max-width: 1220px) { .confirmedBanner { margin: 14px 20px 0; } }
+
+.confirmedTick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border-radius: 999px;
+  background: var(--ok);
+  color: #fff;
+}
+.confirmedTick svg { width: 15px; height: 15px; }
+.confirmedText { flex: 1 1 auto; }
+.confirmedClose {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  color: var(--text-muted);
+}
+.confirmedClose:hover { color: var(--text); }
