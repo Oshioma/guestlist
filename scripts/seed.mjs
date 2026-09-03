@@ -189,8 +189,17 @@ const pw = hashPassword('guestlist');
 for (let i = 0; i < membersData.length; i++) {
   const [email, name, role, city, country] = membersData[i];
   const [row] = await q(
-    `insert into members (email, password_hash, display_name, avatar_url, role, home_city, home_country)
-     values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+    // CONFIRMED, because a seeded member is somebody who already joined.
+    //
+    // Being discoverable requires a confirmed address (see discoverableSql),
+    // so leaving these null made every seeded member invisible to every other
+    // one: no People From Your Scene, no "You were both at", no Who's Going.
+    // A whole half of the site was dark on a fresh database, and the archive
+    // suite had been failing on it. Tests that need an UNCONFIRMED member
+    // make their own — that is the honest way round.
+    `insert into members (email, password_hash, display_name, avatar_url, role,
+                          home_city, home_country, email_verified_at)
+     values ($1, $2, $3, $4, $5, $6, $7, now()) returning id`,
     [email, pw, name, makeAvatar(name, i), role, city, country]
   );
   memberId[email] = row.id;

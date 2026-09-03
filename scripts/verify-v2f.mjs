@@ -675,8 +675,12 @@ try {
   {
     check('events browse healthy', (await anon.fetch('/events')).status === 200);
     check('archive untouched', (await anon.fetch('/archive')).status === 200);
-    check('you settings render the new controls',
-      (await nadia.html('/you')).includes('Close friend event activity'));
+    // The email + privacy controls moved to Your profile (#130): every one of
+    // them answers "who sees this, and when do you hear from us", which is a
+    // question about the profile rather than about your taste. This check kept
+    // asking /you and had been failing on main ever since.
+    check('the settings render the new controls',
+      (await nadia.html('/you/profile')).includes('Close friend event activity'));
   }
 } catch (err) {
   failed++;
