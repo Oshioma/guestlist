@@ -3493,47 +3493,7 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 .mbPerks { display: grid; gap: 14px; margin-top: 34px; }
 
 /* --- The hero claim ------------------------------------------------------ */
-/* SIX BENEFITS, SIX CARDS THE SAME SIZE.
-   The photograph takes one half, the words the other, and the sides alternate
-   down the run so six identical cards still have a rhythm. */
-.mbPerkHero {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-raised);
-  overflow: hidden;
-  min-height: 340px;
-  --mbFade: clamp(36px, 5vw, 80px);
-}
-.mbPerkHeroText { padding: clamp(26px, 3.4vw, 46px); align-self: center; }
-.mbPerkHeroImg {
-  /* The picture fills whatever height the words need — it must never be the
-     thing that sets it, or a tall photograph drags the card with it. */
-  position: absolute; top: 0; bottom: 0; right: 0;
-  width: 50%; height: 100%;
-  object-fit: cover; display: block;
-  background: var(--media-ph);
-}
-/* A short fade INSIDE the picture's inner edge, so it joins the card rather
-   than butting against it. It has to sit over the photograph, never over the
-   words — a gradient across the first letter of every line is worse than a
-   hard edge. */
-.mbPerkHero::after {
-  content: "";
-  position: absolute; top: 0; bottom: 0;
-  left: 50%; width: var(--mbFade);
-  background: linear-gradient(90deg, var(--bg-raised), transparent);
-  pointer-events: none;
-}
-.mbPerkHero.flip .mbPerkHeroText { grid-column: 2; }
-.mbPerkHero.flip .mbPerkHeroImg { right: auto; left: 0; }
-.mbPerkHero.flip::after {
-  left: calc(50% - var(--mbFade));
-  background: linear-gradient(270deg, var(--bg-raised), transparent);
-}
-
+/* SIX BENEFITS, SIX CARDS THE SAME SIZE, in a grid. */
 .mbPerkKicker {
   font-size: 11px; font-weight: 800; letter-spacing: 0.22em;
   text-transform: uppercase; color: var(--accent-ink);
@@ -3561,7 +3521,37 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
   font-size: 12.5px; color: var(--accent-ink); margin-top: 18px;
 }
 .mbPerkFine svg { width: 16px; height: 16px; flex: 0 0 auto; }
-.mbPerkLink { display: inline-block; font-size: 13px; font-weight: 700; color: var(--accent-ink); margin-top: 18px; }
+.mbPerkLink { display: inline-block; font-size: 15px; font-weight: 650; color: var(--accent-ink); text-decoration: none; }
+.mbPerkLink:hover { text-decoration: underline; }
+/* The card grid: icon tile, name, accent line, rule, substance, link. */
+.mbPerkGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+.mbPerkCard {
+  background: var(--bg-raised); border: 1px solid var(--border); border-radius: 20px;
+  padding: 34px 32px 30px; display: flex; flex-direction: column;
+}
+.mbPerkCardHead { display: flex; align-items: center; gap: 22px; }
+.mbPerkTile {
+  flex: 0 0 auto; width: 96px; height: 96px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent-ink);
+  display: grid; place-items: center;
+}
+.mbPerkTile svg { width: 44px; height: 44px; }
+.mbPerkCard .mbPerkBig { font-size: 22px; margin: 0 0 6px; }
+.mbPerkCard .mbPerkSub { font-size: 16.5px; max-width: 16ch; margin: 0; }
+.mbPerkRule { width: 60px; height: 2px; background: var(--accent); opacity: 0.85; border-radius: 2px; margin: 26px 0; }
+.mbPerkCard .mbPerkBody { margin: 0; font-size: 16px; line-height: 1.65; color: var(--text-soft); max-width: 36ch; }
+.mbPerkCard .mbPerkFine { margin-top: 14px; }
+.mbPerkCard .mbPerkNote { margin-top: 12px; }
+.mbPerkCardFoot { margin-top: auto; padding-top: 30px; display: flex; flex-direction: column; gap: 6px; }
+.mbPerkCard .mbPerkDropState { margin: 0; font-size: 13.5px; color: var(--text-muted); font-weight: 600; }
+@media (max-width: 640px) {
+  .mbPerkCard { padding: 24px 22px; }
+  .mbPerkTile { width: 72px; height: 72px; }
+  .mbPerkTile svg { width: 34px; height: 34px; }
+  .mbPerkCard .mbPerkBig { font-size: 19px; }
+  .mbPerkRule { margin: 20px 0; }
+  .mbPerkCardFoot { padding-top: 22px; }
+}
 .mbPerkNote { font-size: 12px; color: var(--text-faint); line-height: 1.55; margin-top: 18px; max-width: 44ch; }
 
 .mbPerkIcon {
@@ -3823,6 +3813,10 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 }
 .confirmedTick svg { width: 15px; height: 15px; }
 .confirmedText { flex: 1 1 auto; }
+/* The two things worth doing next are links, so they have to look like links
+   on a coloured ground that is already doing some of that work. */
+.confirmedText a { color: inherit; text-decoration: underline; text-underline-offset: 2px; font-weight: 650; }
+.confirmedText a:hover { text-decoration-thickness: 2px; }
 .confirmedClose {
   background: none;
   border: none;
