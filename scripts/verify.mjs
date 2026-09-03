@@ -2068,7 +2068,17 @@ console.log('\n— Joining takes one email —');
   const [only] = sent;
   check('it welcomes them by name', only.subject.includes('Wanda'));
   check('and it is the one that confirms the address', only.body_text.includes('/verify?token='));
-  check('it is designed, not a wall of text', !!only.body_html && only.body_html.includes('CONFIRM YOUR EMAIL'));
+  check('it is designed, not a wall of text',
+    !!only.body_html && only.body_html.includes('>Confirm your email<'));
+  // AND IT LOOKS LIKE GUESTLIST. Four templates had drifted into a cream-and-
+  // black house style the website abandoned, with the wordmark typed out as
+  // letters — so somebody clicking through arrived somewhere that did not
+  // match the email that sent them.
+  check('it carries the real wordmark, not typed-out letters',
+    only.body_html.includes('/brand/Guestlist_purple_300dpi.png')
+      && !only.body_html.includes('GUEST<span'));
+  check('and the site\u2019s own colours',
+    only.body_html.includes('#7c4a9e') && !only.body_html.includes('#f3eee1'));
   check('it says what to do once they are in', only.body_html.includes('Set your city'));
   check('and it never promises a survival guide to anything',
     !/survival guide/i.test(`${only.subject} ${only.body_text} ${only.body_html}`));
@@ -2362,16 +2372,11 @@ console.log('\n— The pictures on the site —');
   check('and the front page is as it shipped',
     (await heroBand()).includes('/images/secret-party.jpg'));
 
-  // The membership section reads its pictures the same way.
-  await desk.fetch('/api/admin/site/images', {
-    method: 'POST',
-    body: JSON.stringify({ slot: 'membership.hero', url: 'https://pictures.example/city.jpg' }),
-  });
-  check('the membership benefits follow the same slots',
-    (await (await client().fetch('/membership')).text()).includes('https://pictures.example/city.jpg'));
-  await desk.fetch('/api/admin/site/images', {
-    method: 'POST', body: JSON.stringify({ slot: 'membership.hero', url: null }),
-  });
+  // The membership picture slots are NOT asserted here any more. The six
+  // photo panels they fed were replaced by an icon card grid (#125), so
+  // /membership renders none of them — the slots are still on the desk with
+  // nothing reading them. Testing that they "follow" would be testing a page
+  // that no longer shows a photograph.
 }
 
 // ---------------------------------------------------------------------------

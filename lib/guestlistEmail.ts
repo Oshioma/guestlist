@@ -13,6 +13,8 @@ import { qrUrl, doorUrl } from './doorPass';
 import { queryOne } from './db';
 import { fmtEventDate, fmtEventTime } from './util';
 
+import { BRAND, emailShell, heroPanel, row } from './emailBrand';
+
 const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 
 const esc = (s: string) =>
@@ -100,75 +102,51 @@ export function guestlistEmailHtml(p: GuestlistPass): string {
   const confirmed = p.confirmedBy
     ? `Confirmed by ${p.confirmedBy} at ${p.promoterName}`
     : `Confirmed by ${p.promoterName}`;
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#f3eee1;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3eee1;">
-    <tr><td align="center" style="padding:0 14px 40px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;">
+  return emailShell({
+    preheader: `${p.eventTitle} — ${p.when}. Bring ID and arrive before the list closes.`,
+    rows: [
+      // The sentence this whole email exists to deliver.
+      row(heroPanel(
+        "You're in",
+        `YOU ARE ON<br/>THE <span style="color:${BRAND.onNightAccent};">GUESTLIST</span>`,
+        `${confirmed}.`
+      ), '20px 26px 0'),
 
-        <tr><td style="background:#0d0d0c;border-radius:0 0 14px 14px;padding:20px 26px;">
-          <span style="font-size:15px;font-weight:800;letter-spacing:4px;color:#f5f1e6;">GUEST<span style="color:#c9a2e8;">LIST</span></span>
-        </td></tr>
+      // The night.
+      row(`<a href="${SITE}/events/${esc(p.eventSlug)}" style="text-decoration:none;color:${BRAND.ink};">
+          <div style="font-size:24px;font-weight:800;letter-spacing:-0.6px;color:${BRAND.ink};line-height:1.22;">${esc(p.eventTitle)}</div>
+        </a>
+        <div style="font-size:14px;color:${BRAND.soft};margin-top:8px;line-height:1.6;">
+          ${esc(p.when)}${p.time ? ` · ${esc(p.time)}` : ''}${p.where ? `<br/>${esc(p.where)}` : ''}
+        </div>`, '24px 26px 0'),
 
-        <!-- The sentence this whole email exists to deliver. -->
-        <tr><td style="padding:30px 0 0;">
-          <div style="background:#0d0d0c;border-radius:16px;padding:34px 28px 30px;">
-            <div style="font-size:11px;font-weight:800;letter-spacing:3px;color:#c9a2e8;text-transform:uppercase;">You're in</div>
-            <div style="font-size:40px;line-height:1.02;font-weight:800;letter-spacing:-1.4px;color:#f5f1e6;margin-top:12px;">
-              YOU ARE ON<br/>THE <span style="color:#c9a2e8;">GUESTLIST</span>
-            </div>
-            <div style="font-size:14px;color:#a9a294;margin-top:16px;line-height:1.5;">${esc(confirmed)}.</div>
-          </div>
-        </td></tr>
+      // The pass. The QR is the point; the link under it is what saves the
+      // night when a mail client refuses to load images.
+      row(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+               style="border:1px solid ${BRAND.line};border-radius:16px;background:${BRAND.surface};">
+          <tr><td align="center" style="padding:24px 22px 6px;">
+            <div style="font-size:10.5px;font-weight:800;letter-spacing:2.2px;color:${BRAND.gold};text-transform:uppercase;">Show this at the door</div>
+            <div style="font-size:26px;font-weight:800;letter-spacing:-0.5px;color:${BRAND.ink};margin-top:12px;">${esc(p.guestName)}</div>
+            <div style="font-size:12px;font-weight:800;letter-spacing:2px;color:${BRAND.accentInk};margin-top:6px;">${places}</div>
+          </td></tr>
+          <tr><td align="center" style="padding:14px 22px 4px;">
+            <img src="${qrUrl(p.entryId)}" width="200" height="200" alt="Door pass QR code"
+                 style="display:block;width:200px;height:200px;border:0;background:#ffffff;image-rendering:pixelated;" />
+          </td></tr>
+          <tr><td align="center" style="padding:6px 22px 24px;">
+            <a href="${pass}" style="font-size:11.5px;color:${BRAND.accentInk};text-decoration:underline;">Open your pass</a>
+          </td></tr>
+        </table>`, '22px 26px 0'),
 
-        <!-- The night. -->
-        <tr><td style="padding:22px 4px 0;">
-          <a href="${SITE}/events/${esc(p.eventSlug)}" style="text-decoration:none;color:#141414;">
-            <div style="font-size:24px;font-weight:800;letter-spacing:-0.6px;color:#141414;line-height:1.2;">${esc(p.eventTitle)}</div>
-          </a>
-          <div style="font-size:14px;color:#6f6a5c;margin-top:8px;line-height:1.6;">
-            ${esc(p.when)}${p.time ? ` · ${esc(p.time)}` : ''}${p.where ? `<br/>${esc(p.where)}` : ''}
-          </div>
-        </td></tr>
-
-        <!-- The pass. The QR is the point; the link under it is what saves the
-             night when a mail client refuses to load images. -->
-        <tr><td style="padding:24px 0 0;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e4dcc8;border-radius:16px;background:#ffffff;">
-            <tr><td align="center" style="padding:26px 22px 8px;">
-              <div style="font-size:10.5px;font-weight:800;letter-spacing:2.4px;color:#9a7b1f;text-transform:uppercase;">Show this at the door</div>
-              <div style="font-size:26px;font-weight:800;letter-spacing:-0.5px;color:#141414;margin-top:12px;">${esc(p.guestName)}</div>
-              <div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#7c4a9e;margin-top:6px;">${places}</div>
-            </td></tr>
-            <tr><td align="center" style="padding:14px 22px 4px;">
-              <img src="${qrUrl(p.entryId)}" width="200" height="200" alt="Door pass QR code"
-                   style="display:block;width:200px;height:200px;border:0;image-rendering:pixelated;" />
-            </td></tr>
-            <tr><td align="center" style="padding:6px 22px 26px;">
-              <a href="${pass}" style="font-size:11.5px;color:#7c4a9e;text-decoration:underline;">Open your pass</a>
-            </td></tr>
-          </table>
-        </td></tr>
-
-        <tr><td style="padding:22px 6px 0;">
-          <div style="font-size:12.5px;color:#6f6a5c;line-height:1.7;">
-            Bring ID with the name on the pass. Arrive before the guestlist closes —
-            a place is a place, not a queue jump. If your plans change, take yourself
-            off so somebody else can have it.
-          </div>
-        </td></tr>
-
-        <tr><td style="padding:22px 6px 0;border-top:1px solid #e4dcc8;margin-top:20px;">
-          <div style="font-size:11px;color:#8a8574;line-height:1.7;padding-top:14px;">
-            <a href="${SITE}/you/membership" style="color:#8a8574;">Your guestlist places</a>
-            &nbsp;·&nbsp;
-            <a href="${SITE}/events/${esc(p.eventSlug)}" style="color:#8a8574;">The event</a><br/>
-            Guestlist — the best events for our community, not every event.
-          </div>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>`;
+      row(`<div style="font-size:12.5px;color:${BRAND.soft};line-height:1.7;">
+          Bring ID with the name on the pass. Arrive before the guestlist closes —
+          a place is a place, not a queue jump. If your plans change, take yourself
+          off so somebody else can have it.
+        </div>`, '20px 26px 0'),
+    ].join(''),
+    footerHtml: `<a href="${SITE}/you/membership" style="color:${BRAND.faint};">Your guestlist places</a>`
+      + `&nbsp;·&nbsp;<a href="${SITE}/events/${esc(p.eventSlug)}" style="color:${BRAND.faint};">The event</a>`,
+  });
 }
 
 /**
