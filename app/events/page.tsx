@@ -8,6 +8,7 @@ import {
 import { query } from '@/lib/db';
 import { EventCard } from '@/components/EventCard';
 import { FilterControls } from '@/components/FilterControls';
+import { StickyFilters } from '@/components/StickyFilters';
 import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
 import { memberPlaceAnchors } from '@/lib/proximity';
 import { toRecCards } from '@/lib/recCards';
@@ -161,46 +162,51 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
         />
       )}
 
-      <nav className="tabRow" aria-label="Discovery">
-        {TABS.map((t) => (
-          <Link
-            key={t.key}
-            href={buildQS({ tab: t.key === 'for-you' ? null : t.key })}
-            className={`tab${tab === t.key ? ' active' : ''}`}
-          >
-            {t.label}
-          </Link>
-        ))}
-      </nav>
+      {/* Everything that narrows the list, kept together and kept on screen.
+          Scrolling past the controls and then having to scroll back to change
+          your mind is the whole problem this solves. */}
+      <StickyFilters>
+        <nav className="tabRow" aria-label="Discovery">
+          {TABS.map((t) => (
+            <Link
+              key={t.key}
+              href={buildQS({ tab: t.key === 'for-you' ? null : t.key })}
+              className={`tab${tab === t.key ? ' active' : ''}`}
+            >
+              {t.label}
+            </Link>
+          ))}
+        </nav>
 
-      <div className="chipRow" aria-label="Genres">
-        <Link href={buildQS({ genre: null })} className={`chip${!genre ? ' active' : ''}`}>
-          All
-        </Link>
-        {visibleGenres.map((g) => (
-          <Link
-            key={g.slug}
-            href={buildQS({ genre: g.slug === genre ? null : g.slug })}
-            className={`chip${genre === g.slug ? ' active' : ''}`}
-          >
-            {g.name}
+        <div className="chipRow" aria-label="Genres">
+          <Link href={buildQS({ genre: null })} className={`chip${!genre ? ' active' : ''}`}>
+            All
           </Link>
-        ))}
-        {!showAllGenres && moreGenres.length > 0 && (
-          <Link href={buildQS({ more: '1' })} className="chip">
-            More +
-          </Link>
-        )}
-      </div>
+          {visibleGenres.map((g) => (
+            <Link
+              key={g.slug}
+              href={buildQS({ genre: g.slug === genre ? null : g.slug })}
+              className={`chip${genre === g.slug ? ' active' : ''}`}
+            >
+              {g.name}
+            </Link>
+          ))}
+          {!showAllGenres && moreGenres.length > 0 && (
+            <Link href={buildQS({ more: '1' })} className="chip">
+              More +
+            </Link>
+          )}
+        </div>
 
-      <FilterControls
-        cities={cities.map((c) => c.city)}
-        genres={allGenres}
-        current={{
-          genre, type: eventType, city, date: datePreset ?? null, price, sort,
-          nearMe: lat != null && lng != null,
-        }}
-      />
+        <FilterControls
+          cities={cities.map((c) => c.city)}
+          genres={allGenres}
+          current={{
+            genre, type: eventType, city, date: datePreset ?? null, price, sort,
+            nearMe: lat != null && lng != null,
+          }}
+        />
+      </StickyFilters>
 
       <div className="resultMeta">
         {events.length === 0

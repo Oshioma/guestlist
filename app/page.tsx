@@ -22,6 +22,8 @@ import { AskPanel } from '@/components/ask/AskPanel';
 import { BalanceHomeSection } from '@/components/balance/BalanceHomeSection';
 import { optional } from '@/lib/resilient';
 import { siteImages } from '@/lib/siteImages';
+import { EmailConfirmed } from '@/components/auth/EmailConfirmed';
+import { StickyFilters } from '@/components/StickyFilters';
 
 export const dynamic = 'force-dynamic';
 
@@ -160,8 +162,13 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
   );
 }
 
-export default async function HomePage() {
+export default async function HomePage(
+  { searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }
+) {
   const member = await getCurrentMember();
+  // Somebody who has just pressed the button in their welcome email arrives
+  // here, not on a page that only says so. See app/verify/page.tsx.
+  const confirmed = (await searchParams).confirmed;
   // The band behind the headline is three settings, not three hardcoded files.
   const images = await siteImages();
   // browseEvents is the page's reason to exist, so it is deliberately NOT
@@ -190,6 +197,9 @@ export default async function HomePage() {
 
   return (
     <main>
+      {(confirmed === 'new' || confirmed === 'already') && (
+        <EmailConfirmed kind={confirmed === 'already' ? 'already' : 'new'} />
+      )}
       {member && <MemberHome member={member} />}
       {!member && (
       <section className="homeHero">
@@ -224,13 +234,17 @@ export default async function HomePage() {
 
       <div className="wrap">
         {!member && <GuestlistNow isAdmin={false} />}
-        <div className="chipRow" style={{ padding: '26px 0 10px' }}>
-          {genres.map((g) => (
-            <Link key={g.slug} href={`/events?genre=${g.slug}`} className="chip">
-              {g.name}
-            </Link>
-          ))}
-        </div>
+        {/* The genres are how somebody narrows the page; they should not
+            scroll away the moment the page starts being worth scrolling. */}
+        <StickyFilters>
+          <div className="chipRow" aria-label="Genres">
+            {genres.map((g) => (
+              <Link key={g.slug} href={`/events?genre=${g.slug}`} className="chip">
+                {g.name}
+              </Link>
+            ))}
+          </div>
+        </StickyFilters>
 
         {!member && <HomeTonight />}
 

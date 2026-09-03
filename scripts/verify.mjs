@@ -1028,24 +1028,105 @@ console.log('\n— Confirming an email —');
   check('nobody else is offered them until they prove it',
     !dir.includes('Unproved Person'), 'unverified member should not be in the directory');
 
-  // The link works, and works exactly once as a state change.
   const [row] = await q(
     `select token_hash from email_verifications where member_id = $1`, [joined.id]);
-  check('a made-up token is refused',
+  check('only a hash of the token is stored',
+    !!row.token_hash && row.token_hash.length === 64);
+
+  // CONFIRMING IS NOT A DESTINATION.
+  //
+  // The plain token exists in exactly one place — the email that was sent —
+  // which is also the only place a person would ever get it from. Taking it
+  // from there is what makes this the real journey and not an impression of
+  // one: the link that was posted is the link that gets pressed.
+  const [mail] = await q(
+    `select body_text from email_outbox
+      where member_id = $1 and email_type = 'transactional:verify_email'
+      order by created_at desc limit 1`, [joined.id]);
+  const link = (mail?.body_text ?? '').match(/\/verify\?token=(\S+)/);
+  check('the email carries a link with a token in it', !!link);
+  const token = link[1];
+
+  const landed = await joiner.fetch(`/verify?token=${encodeURIComponent(token)}`);
+  check('pressing it does not leave them on a page saying it worked',
+    landed.status === 307 || landed.status === 302, `status ${landed.status}`);
+  check('it puts them on the front page, with the news',
+    landed.headers.get('location')?.endsWith('/?confirmed=new'),
+    landed.headers.get('location'));
+
+  const [proved] = await q(`select email_verified_at from members where id = $1`, [joined.id]);
+  check('and the address is proved', proved.email_verified_at !== null);
+  check('once proved, they can be found',
+    (await (await nadia.fetch('/people')).text()).includes('Unproved Person'));
+
+  // Somebody double-tapping the button in their email is not an error.
+  const again = await joiner.fetch(`/verify?token=${encodeURIComponent(token)}`);
+  check('pressing the same link twice says so, rather than breaking',
+    again.headers.get('location')?.endsWith('/?confirmed=already'),
+    again.headers.get('location'));
+
+  // The front page is where the news gets said.
+  const banner = await (await joiner.fetch('/?confirmed=new')).text();
+  check('the front page carries the confirmation', banner.includes('Email confirmed'));
+  check('and does not carry it unasked',
+    !(await (await joiner.fetch('/')).text()).includes('Email confirmed'));
+
+  // A link that is not one of ours still lands somewhere useful.
+  const bad = await joiner.fetch('/verify?token=not-a-real-token');
+  const badHtml = await bad.text();
+  check('a made-up token confirms nothing', bad.status === 200);
+  check('and says so, with a way to get a real one',
+    badHtml.includes('That link did not work') && badHtml.includes('Send me a new link'));
+  // Arriving at /verify with nothing is not a broken link — it is somebody
+  // who came looking for the button — so it asks rather than tells off.
+  const bare = await (await joiner.fetch('/verify')).text();
+  check('arriving with no token asks instead of scolding',
+    bare.includes('Confirm your email') && !bare.includes('That link did not work'));
+  check('and still offers the button', bare.includes('Send me a link'));
+  check('the API still refuses a made-up token',
     (await joiner.fetch('/api/auth/verify', {
       method: 'POST', body: JSON.stringify({ token: 'not-a-real-token' }),
     })).status === 400);
 
-  // The plain token only ever existed in the email, so verify the state
-  // change directly the way the endpoint would.
-  await q(`update members set email_verified_at = now() where id = $1`, [joined.id]);
-  await q(`update email_verifications set used_at = now() where token_hash = $1`, [row.token_hash]);
-  const after = await (await nadia.fetch('/people')).text();
-  check('once proved, they can be found', after.length > 0);
-  check('only a hash of the token is stored',
-    !!row.token_hash && row.token_hash.length === 64);
-
   await q(`delete from members where id = $1`, [joined.id]);
+}
+
+// ---------------------------------------------------------------------------
+// THE FILTERS STOP WHEN THEY REACH THE NAVIGATION.
+//
+// Scrolling a long list used to take the controls for narrowing it off the
+// top of the screen, so changing your mind meant scrolling back up first.
+// Both pages that list events now keep them in a band under the header.
+console.log('\n— Privacy and email live with the profile —');
+{
+  const profile = await (await nadia.fetch('/you/profile')).text();
+  check('the profile page carries the privacy switches',
+    profile.includes('Public profile') && profile.includes('Show my rave history'));
+  check('and the email settings', profile.includes('Alert email frequency'));
+
+  const you = await (await nadia.fetch('/you')).text();
+  check('they are no longer on the taste page', !you.includes('Alert email frequency'));
+  check('but what is left there still works',
+    you.includes('Rave history') && you.includes('Places'));
+  check('and it points at where they went', you.includes('/you/profile#settings'));
+}
+
+console.log('\n— The filters stay on screen —');
+{
+  const events = await (await anon.fetch('/events')).text();
+  check('the events page has a sticky band', events.includes('stickyFilters'));
+  // Order matters more than presence: the band has to be the thing WRAPPING
+  // the controls, not another row sitting near them.
+  const band = events.indexOf('stickyFilters');
+  check('with the genres inside it',
+    band > 0 && events.indexOf('aria-label="Genres"') > band);
+  check('and the date picker inside it too',
+    events.indexOf('aria-label="Date"') > band);
+
+  const home = await (await anon.fetch('/')).text();
+  const homeBand = home.indexOf('stickyFilters');
+  check('the front page keeps its genres too',
+    homeBand > 0 && home.indexOf('aria-label="Genres"') > homeBand);
 }
 
 // A profile nobody has written anything on is not offered to search engines.
@@ -2020,6 +2101,12 @@ console.log('\n— Scanning is a job, not a request —');
      returning id`
   );
 
+  // Warm the route before timing it. In dev the first request to a route
+  // pays for compiling it — ten seconds of webpack that has nothing to do
+  // with whether a scan blocks its request, and would fail the check below
+  // for the wrong reason.
+  await desk.fetch(`/api/admin/sources/${src.id}/scan?scanId=00000000-0000-0000-0000-000000000000`);
+
   const startedAt = Date.now();
   const started = await desk.fetch(`/api/admin/sources/${src.id}/scan`, { method: 'POST' });
   const body = await started.json();
@@ -2075,8 +2162,12 @@ console.log('\n— Your profile lives behind your name —');
 
   const you = await (await me.fetch('/you')).text();
   check('the profile form is gone from You', !you.includes('Save profile'));
-  check('but the switches it sat next to are still there',
-    you.includes('Public profile') && you.includes('Weekly personalised weekend picks'));
+  // And the switches followed it: who sees your profile, and when we email
+  // you, are both questions about the profile rather than about your taste.
+  check('the switches followed it out',
+    !you.includes('Public profile') && !you.includes('Weekly personalised weekend picks'));
+  check('and landed on the profile page',
+    page.includes('Public profile') && page.includes('Weekly personalised weekend picks'));
   check('and everything else is untouched',
     you.includes('Rave history') && you.includes('Places') && you.includes('Membership'));
   check('You links to the profile rather than hiding it', you.includes('/you/profile'));

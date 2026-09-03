@@ -44,60 +44,90 @@ export async function MemberHome({ me }: { me: MemberWithMembership }) {
     : m?.current_period_end ? `Until ${dayMonth(m.current_period_end)}` : null;
   const hasNow = open.length > 0 || liveClaims.length > 0 || drops.length > 0;
 
+  // WHAT IS LIVE FOR THEM, IN THE HERO RATHER THAN UNDER IT.
+  //
+  // "Right now" used to be a band of its own below the welcome, which meant
+  // the one thing on this page that changes — a guestlist place that came
+  // through, a code, a drop — was the thing you had to scroll to reach, under
+  // a headline that says the same words every day. It sits beside the
+  // headline now, on the dark, where the hero already had empty space on the
+  // right and nothing to put in it.
+  //
+  // Three at most. This is a glance at what is live, not the list — the list
+  // is on the membership page, and every card goes there.
+  const nowCards = [
+    ...open.map((r) => ({
+      key: `r-${r.id}`,
+      kind: `${r.request_type === 'event_access' ? 'Get me in' : 'Ask Guestlist'}${r.places > 1 ? ' · +1' : ''}`,
+      title: r.title,
+      meta: `${r.start_at ? fmtEventDate(r.start_at, r.end_at, r.timezone ?? 'Europe/London') : 'Date to come'}`
+        + `${r.venue_name ? ` · ${r.venue_name}` : r.city ? ` · ${r.city}` : ''}`,
+      tag: (
+        <span className={`reqChip ${r.friendly.key}`}>
+          {r.friendly.key === 'working' ? 'Working on it' : r.friendly.key === 'discount' && r.member_price_pence != null ? `${formatPence(r.member_price_pence, r.currency)} for you` : r.friendly.title}
+        </span>
+      ),
+      drop: false,
+    })),
+    ...liveClaims.map((c) => ({
+      key: `c-${c.id}`,
+      kind: 'Market · your code',
+      title: c.business_name,
+      meta: `${c.offer_title}${c.expires_at ? ` · until ${dayMonth(c.expires_at)}` : ''}`,
+      tag: <span className="mbCode">{c.code}</span>,
+      drop: false,
+    })),
+    ...drops.map((d) => ({
+      key: `d-${d.id}`,
+      kind: 'Member drop',
+      title: d.title,
+      meta: `${d.event_title ?? (d.places ? `${d.places} places` : 'Members first')}${d.ends_at ? ` · until ${dayMonth(d.ends_at)}` : ''}`,
+      tag: <span className="reqChip guestlisted">Live now</span>,
+      drop: true,
+    })),
+  ];
+  const shown = nowCards.slice(0, 3);
+
   return (
     <main className="wrap">
       <ClubTrack type="membership_page_viewed" />
-      <section className="mbHero member">
-        <div className="mbKicker">Guestlist Membership · {status}</div>
-        <h1 className="mbTitle">You’re in.</h1>
-        <p className="mbPrice">{first}, you’re a Guestlist member{since ? ` · since ${since}` : ''}.</p>
-        <p className="mbLead">
-          See something you want to go to? Ask, and we’ll try to get you in. Claim offers from independent businesses we like.
-          Hear about drops first. This is how to use it.
-        </p>
-        <div className="mbCtaRow">
-          <Link href="/events" className="mbCta">Find something to go to</Link>
-          <Link href="/you/ask" className="btnGhost">Ask Guestlist</Link>
-          <Link href="/you/membership" className="btnGhost">Your membership</Link>
-        </div>
-      </section>
-
-      {hasNow && (
-        <section style={{ marginTop: 26 }}>
-          <div className="sectionLabel">Right now</div>
-          <div className="mbNowGrid">
-            {open.map((r) => (
-              <Link key={r.id} href="/you/membership" className="mbNowCard">
-                <div className="mbNowKind">{r.request_type === 'event_access' ? 'Get me in' : 'Ask Guestlist'}{r.places > 1 ? ' · +1' : ''}</div>
-                <div className="mbNowTitle">{r.title}</div>
-                <div className="mbNowMeta">
-                  {r.start_at ? fmtEventDate(r.start_at, r.end_at, r.timezone ?? 'Europe/London') : 'Date to come'}
-                  {r.venue_name ? ` · ${r.venue_name}` : r.city ? ` · ${r.city}` : ''}
-                </div>
-                <span className={`reqChip ${r.friendly.key}`}>
-                  {r.friendly.key === 'working' ? 'Working on it' : r.friendly.key === 'discount' && r.member_price_pence != null ? `${formatPence(r.member_price_pence, r.currency)} for you` : r.friendly.title}
-                </span>
-              </Link>
-            ))}
-            {liveClaims.map((c) => (
-              <Link key={c.id} href="/you/membership" className="mbNowCard">
-                <div className="mbNowKind">Market · your code</div>
-                <div className="mbNowTitle">{c.business_name}</div>
-                <div className="mbNowMeta">{c.offer_title}{c.expires_at ? ` · until ${dayMonth(c.expires_at)}` : ''}</div>
-                <span className="mbCode">{c.code}</span>
-              </Link>
-            ))}
-            {drops.map((d) => (
-              <Link key={d.id} href="/you/membership" className="mbNowCard drop">
-                <div className="mbNowKind">Member drop</div>
-                <div className="mbNowTitle">{d.title}</div>
-                <div className="mbNowMeta">{d.event_title ?? (d.places ? `${d.places} places` : 'Members first')}{d.ends_at ? ` · until ${dayMonth(d.ends_at)}` : ''}</div>
-                <span className="reqChip guestlisted">Live now</span>
-              </Link>
-            ))}
+      <section className={`mbHero member${hasNow ? ' withNow' : ''}`}>
+        <div className="mbHeroCopy">
+          <div className="mbKicker">Guestlist Membership · {status}</div>
+          <h1 className="mbTitle">You’re in.</h1>
+          <p className="mbPrice">{first}, you’re a Guestlist member{since ? ` · since ${since}` : ''}.</p>
+          <p className="mbLead">
+            See something you want to go to? Ask, and we’ll try to get you in. Claim offers from independent businesses we like.
+            Hear about drops first. This is how to use it.
+          </p>
+          <div className="mbCtaRow">
+            <Link href="/events" className="mbCta">Find something to go to</Link>
+            <Link href="/you/ask" className="btnGhost">Ask Guestlist</Link>
+            <Link href="/you/membership" className="btnGhost">Your membership</Link>
           </div>
-        </section>
-      )}
+        </div>
+
+        {hasNow && (
+          <aside className="mbHeroNow" aria-label="Right now">
+            <div className="mbHeroNowHead">
+              <span className="mbHeroNowLabel">Right now</span>
+              {nowCards.length > shown.length && (
+                <Link href="/you/membership" className="mbHeroNowAll">
+                  {`All ${nowCards.length} →`}
+                </Link>
+              )}
+            </div>
+            {shown.map((c) => (
+              <Link key={c.key} href="/you/membership" className={`mbNowCard${c.drop ? ' drop' : ''}`}>
+                <div className="mbNowKind">{c.kind}</div>
+                <div className="mbNowTitle">{c.title}</div>
+                <div className="mbNowMeta">{c.meta}</div>
+                {c.tag}
+              </Link>
+            ))}
+          </aside>
+        )}
+      </section>
 
       <div className="sectionLabel" style={{ marginTop: 34 }}>How to use it</div>
       <div className="mbBenefits mbHow" style={{ marginTop: 10 }}>

@@ -18,6 +18,8 @@
   --on-accent: #ffffff; /* type on purple fills */
   --danger: #b3423a;
   --ok: #45704c;
+  --ok-tint: rgba(69, 112, 76, 0.13);
+  --ok-line: rgba(69, 112, 76, 0.36);
   --gold-ink: #9a7b1f; /* the brand gold as TEXT on the light ground */
   --header-bg: rgba(255, 255, 255, 0.86);
   --media-ph: #eae8e1;
@@ -46,6 +48,8 @@
   --accent-soft: rgba(124, 74, 158, 0.3);
   --danger: #e57373;
   --ok: #7a9e7e;
+  --ok-tint: rgba(122, 158, 126, 0.16);
+  --ok-line: rgba(122, 158, 126, 0.38);
   --gold-ink: #e8c46a; /* in the dark it goes back to the bright brand yellow */
   --header-bg: rgba(7, 7, 7, 0.82);
   --media-ph: #141414;
@@ -3196,6 +3200,79 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 .mbNowMeta { font-size: 12.5px; color: var(--text-muted); }
 .mbNowCard .reqChip, .mbNowCard .mbCode { margin-top: 4px; }
 .mbCode { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; letter-spacing: 1.5px; font-size: 14px; border: 1px dashed var(--accent); border-radius: 8px; padding: 4px 10px; color: var(--accent-ink); }
+/* WHAT IS LIVE FOR THEM, BESIDE THE WELCOME RATHER THAN UNDER IT.
+
+   The member hero is a huge headline with a lot of empty ground to the right
+   of it, and "Right now" was a band underneath — so the one thing on the page
+   that changes was the thing you had to scroll to. Two columns puts it in the
+   space that was already there and costs no height at all.
+
+   The cards keep their shape and lose their light ground: on the purple they
+   are a tint of the hero rather than a panel sitting on top of it. */
+.mbHero.member.withNow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: clamp(28px, 4vw, 56px);
+  align-items: center;
+  /* The right column supplies the height now, so the hero does not need to
+     be padded to a size of its own. */
+  padding-top: clamp(38px, 5vw, 64px);
+  padding-bottom: clamp(38px, 5vw, 64px);
+}
+/* The headline is sized against the window, and the window is no longer what
+   it has to fit in. Two words breaking across two lines is not a bigger
+   headline, it is a wrapped one. */
+.mbHero.member.withNow .mbTitle { font-size: clamp(48px, 7.6vw, 104px); }
+.mbHero.member.withNow .mbLead { max-width: 46ch; }
+.mbHeroNow { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.mbHeroNowHead {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+}
+.mbHeroNowLabel {
+  font-size: 11px; letter-spacing: 2.4px; text-transform: uppercase;
+  font-weight: 800; color: #c9a2e8;
+}
+.mbHeroNowAll {
+  font-size: 11.5px; letter-spacing: 1.2px; text-transform: uppercase;
+  font-weight: 700; color: rgba(242,241,236,0.7); text-decoration: none;
+}
+.mbHeroNowAll:hover { color: #fff; }
+
+.mbHeroNow .mbNowCard {
+  background: rgba(255,255,255,0.09);
+  border-color: rgba(255,255,255,0.16);
+  color: #f2f1ec;
+  padding: 13px 15px;
+  gap: 4px;
+}
+.mbHeroNow .mbNowCard:hover {
+  border-color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.14);
+}
+.mbHeroNow .mbNowCard.drop {
+  background: rgba(201,162,232,0.22);
+  border-color: rgba(201,162,232,0.42);
+}
+.mbHeroNow .mbNowKind { color: #c9a2e8; }
+.mbHeroNow .mbNowTitle { font-size: 15px; color: #fbfaf7; }
+.mbHeroNow .mbNowMeta { color: rgba(242,241,236,0.66); font-size: 12px; }
+/* The status chips carry their meaning in colour, and those colours were
+   picked for a white page. On the dark they get their own ground. */
+.mbHeroNow .reqChip {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.28);
+  color: #fbfaf7;
+}
+.mbHeroNow .reqChip.guestlisted { color: #b7e0c1; border-color: rgba(183,224,193,0.5); }
+.mbHeroNow .mbCode { color: #e2c9f6; border-color: rgba(201,162,232,0.7); }
+
+/* Under this there is not room for two columns of anything. Back to a stack,
+   with the live things still first — they are the reason to look. */
+@media (max-width: 900px) {
+  .mbHero.member.withNow { display: block; }
+  .mbHeroNow { margin-top: 30px; }
+}
+
 .mbHow .mbBenefit { position: relative; padding-top: 30px; }
 .mbStep {
   position: absolute; top: 16px; right: 18px; width: 30px; height: 30px; border-radius: 50%;
@@ -3658,3 +3735,98 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 .artistFollowName { display: block; font-size: 14.5px; font-weight: 700; letter-spacing: -0.2px; }
 .artistFollowMeta { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .artistFollowYou { display: block; font-size: 11px; font-weight: 700; color: var(--accent-ink); margin-top: 3px; }
+
+/* ===========================================================================
+   THE FILTERS STOP AT THE NAVIGATION AND STAY THERE.
+
+   The controls for narrowing a long list used to scroll away with the list,
+   so changing your mind about a genre meant scrolling back up to the top
+   first. They park under the header instead.
+
+   The header is not a fixed height — it grows an account strip when you sign
+   in and wraps on a narrow window — so --headerH is published by the header's
+   own ResizeObserver (components/StickyFilters.tsx). The literal here is only
+   what stands before the first measurement lands.
+   =========================================================================== */
+
+.stickyFilters { --headerFallback: 64px; }
+
+/* Sticking is for windows with room to spare. On a short one — a laptop in
+   split screen, a phone in landscape — a band this tall would leave nothing
+   underneath it to filter, which is worse than scrolling. */
+@media (min-width: 760px) and (min-height: 640px) {
+  .stickyFilters {
+    position: sticky;
+    top: var(--headerH, var(--headerFallback));
+    /* Under the header (50) and under an open filter sheet, over the cards. */
+    z-index: 30;
+    padding-top: 10px;
+  }
+  /* The band's own ground. It has to be opaque or the cards read through it,
+     and it has to reach the window's edges even though the band itself is
+     inside the 1180px column — hence a full-bleed layer rather than a
+     background on the element. */
+  .stickyFilters::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 100vw;
+    transform: translateX(-50%);
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    z-index: -1;
+  }
+  /* The rows inside lose the space they were using to separate themselves
+     from the page — in a band, that space is just height taken from the
+     events. */
+  .stickyFilters .chipRow { padding-bottom: 10px; }
+  .stickyFilters .tabRow { margin-bottom: 12px; }
+  .stickyFilters .filterRow { padding-bottom: 12px; }
+}
+
+/* ===========================================================================
+   EMAIL CONFIRMED.
+   A line across the top of the front page, not a page of its own.
+   =========================================================================== */
+
+.confirmedBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 1180px;
+  margin: 14px auto 0;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--ok-line);
+  background: var(--ok-tint);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+@media (max-width: 1220px) { .confirmedBanner { margin: 14px 20px 0; } }
+
+.confirmedTick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border-radius: 999px;
+  background: var(--ok);
+  color: #fff;
+}
+.confirmedTick svg { width: 15px; height: 15px; }
+.confirmedText { flex: 1 1 auto; }
+.confirmedClose {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  color: var(--text-muted);
+}
+.confirmedClose:hover { color: var(--text); }
