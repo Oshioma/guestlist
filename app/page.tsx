@@ -197,9 +197,7 @@ export default async function HomePage(
 
   return (
     <main>
-      {(confirmed === 'new' || confirmed === 'already') && (
-        <EmailConfirmed kind={confirmed === 'already' ? 'already' : 'new'} />
-      )}
+      {(confirmed === 'new' || confirmed === 'already') && <EmailConfirmed />}
       {member && <MemberHome member={member} />}
       {!member && (
       <section className="homeHero">

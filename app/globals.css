@@ -3823,6 +3823,10 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 }
 .confirmedTick svg { width: 15px; height: 15px; }
 .confirmedText { flex: 1 1 auto; }
+/* The two things worth doing next are links, so they have to look like links
+   on a coloured ground that is already doing some of that work. */
+.confirmedText a { color: inherit; text-decoration: underline; text-underline-offset: 2px; font-weight: 650; }
+.confirmedText a:hover { text-decoration-thickness: 2px; }
 .confirmedClose {
   background: none;
   border: none;
