@@ -144,3 +144,39 @@ export function StripeControls({ memberId, cancelAtPeriodEnd, periodEnd, active,
     </div>
   );
 }
+
+// One press, one email each, never twice. Only meaningful once billing is on.
+export function InviteWaitlist({ pending, billingLive }: { pending: number; billingLive: boolean }) {
+  const router = useRouter();
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  if (pending === 0) return msg ? <span className="formOk">{msg}</span> : null;
+  async function go() {
+    setBusy(true); setErr('');
+    const r = await fetch('/api/admin/memberships', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'invite_waitlist' }) });
+    const j = await r.json().catch(() => ({}));
+    setBusy(false);
+    if (!r.ok) { setErr(j.error ?? 'Failed'); setConfirm(false); return; }
+    setMsg(`Told ${j.sent} ${j.sent === 1 ? 'person' : 'people'}. Each gets one email, and nobody who has already joined.`);
+    setConfirm(false);
+    router.refresh();
+  }
+  return (
+    <div style={{ margin: '6px 0 12px' }}>
+      {!confirm
+        ? <button className="btnAccent" disabled={!billingLive} title={billingLive ? '' : 'Switch on Stripe first'} onClick={() => setConfirm(true)}>Tell the waitlist ({pending})</button>
+        : (
+          <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="adminSub" style={{ margin: 0 }}>Email {pending} {pending === 1 ? 'person' : 'people'} that membership is open, once each?</span>
+            <button className="btnAccent" disabled={busy} onClick={go}>{busy ? 'Sending…' : 'Yes, send'}</button>
+            <button className="btnGhost" onClick={() => setConfirm(false)}>Not yet</button>
+          </span>
+        )}
+      {!billingLive && <span className="adminSub" style={{ marginLeft: 8 }}>Switch on Stripe first — the email says they can join now.</span>}
+      {err && <div className="formError">{err}</div>}
+      {msg && <div className="formOk">{msg}</div>}
+    </div>
+  );
+}

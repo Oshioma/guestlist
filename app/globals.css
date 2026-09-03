@@ -3991,3 +3991,11 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
    in the row and reads as danger before it is pressed, not after. */
 .btnGhost.adminDanger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
 .btnGhost.adminDanger:hover { background: var(--danger); border-color: transparent; color: #fff; }
+
+/* ADMIN → Members: sixteen columns scroll sideways, so the actions column
+   (Revoke / Cancel / Refund) pins to the right edge and stays in view. */
+.adminTable th:last-child, .adminTable td:last-child {
+  position: sticky; right: 0; background: var(--bg); z-index: 1;
+  box-shadow: -10px 0 12px -10px rgba(0, 0, 0, 0.25);
+}
+.adminTable td:last-child .stripeControl { position: relative; }

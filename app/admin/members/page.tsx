@@ -5,7 +5,7 @@
 import Link from 'next/link';
 import { memberLedger, membershipOverview, requestOverview, waitlistRows } from '@/lib/membershipStats';
 import { billingEnabled, formatPence } from '@/lib/membership';
-import { GrantMembership, RevokeMembership, StripeControls } from '@/components/admin/MembershipControls';
+import { GrantMembership, InviteWaitlist, RevokeMembership, StripeControls } from '@/components/admin/MembershipControls';
 import { VerificationControls } from '@/components/admin/VerificationControls';
 import { unverifiedMembers, VERIFY_NUDGE_AFTER_HOURS } from '@/lib/emailVerification';
 
@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminMembersPage() {
   const [m, r, ledger, waitlist, unverified] = await Promise.all([membershipOverview(), requestOverview(), memberLedger(), waitlistRows(), unverifiedMembers()]);
+  const waiting = waitlist.filter((w) => !w.joined);
   const flagged = ledger.filter((x) => x.flags.length > 0);
 
   return (
@@ -120,12 +121,17 @@ export default async function AdminMembersPage() {
         </table>
       </div>
 
-      <div className="sectionLabel" style={{ marginTop: 30 }}>Waitlist ({waitlist.length})</div>
-      {waitlist.length === 0 && <p className="adminSub">Nobody yet.</p>}
-      {waitlist.slice(0, 100).map((w) => (
+      <div className="sectionLabel" style={{ marginTop: 30 }}>Waitlist ({waiting.length})</div>
+      <p className="adminSub">People who asked to be told when membership opens. Anyone who has since joined drops off the list.</p>
+      <InviteWaitlist pending={waiting.filter((w) => !w.invited_at).length} billingLive={billingEnabled()} />
+      {waiting.length === 0 && <p className="adminSub">Nobody waiting.</p>}
+      {waiting.slice(0, 100).map((w) => (
         <div className="attentionRow" key={w.email}>
           <span>{w.email}{w.display_name && <span style={{ color: 'var(--text-faint)', fontSize: 12 }}> · {w.display_name}</span>}</span>
-          <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>{new Date(w.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+          <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>
+            joined list {new Date(w.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+            {w.invited_at ? ` · told ${new Date(w.invited_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ' · not told yet'}
+          </span>
         </div>
       ))}
     </main>
