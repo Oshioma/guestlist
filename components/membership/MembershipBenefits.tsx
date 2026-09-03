@@ -5,8 +5,9 @@
 // Market, or for what the membership funds, is joining for a real reason too —
 // and a small grey box underneath a big card says otherwise.
 //
-// The rhythm comes from alternating which side the photograph sits on, not
-// from making some cards bigger than others.
+// Six equal cards in a grid: a round icon tile, the name, a line in the
+// accent, a short rule, the substance, and a link. No card is bigger than
+// another.
 //
 // It is one component used by both the page that sells membership and the page
 // a member already has, because the promise and the thing delivered have to be
@@ -18,7 +19,6 @@
 // rather than at the bottom of the page.
 
 import Link from 'next/link';
-import { siteImages } from '@/lib/siteImages';
 
 type Props = {
   // A member is being shown what they have; everybody else, what they'd get.
@@ -80,11 +80,8 @@ type Benefit = {
   note?: string;
 };
 
-export async function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
+export function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
   const isMember = variant === 'member';
-  // The photographs are settings, not code: an admin changes them on
-  // /admin/site and every page showing them follows.
-  const images = await siteImages();
 
   const benefits: Benefit[] = [
     {
@@ -98,6 +95,7 @@ export async function MembershipBenefits({ variant, drops = 0, causes = [] }: Pr
       body: 'Through the promoter, the venue, our own allocations, or by buying access '
         + 'where that’s reasonable. When we can’t, we’ll say so — and often find a member price instead.',
       fine: 'Subject to availability and fair use.',
+      link: isMember ? { href: '/events', label: 'Browse events →' } : { href: '/membership/terms', label: 'How it works →' },
     },
     {
       key: 'membership.queueJump',
@@ -106,6 +104,7 @@ export async function MembershipBenefits({ variant, drops = 0, causes = [] }: Pr
       sub: 'Less queue. More party.',
       lead: 'Priority and fast-track entrance where available.',
       body: 'Through participating events and venues — less time on the pavement, more time inside.',
+      link: { href: '/membership/terms', label: 'Learn more →' },
     },
     {
       key: 'membership.drops',
@@ -123,6 +122,7 @@ export async function MembershipBenefits({ variant, drops = 0, causes = [] }: Pr
           : isMember ? 'Nothing live — you’ll know first' : 'Members hear first',
         href: drops > 0 ? '/you/membership#drops' : null,
       },
+      link: isMember ? { href: '/you/membership#drops', label: 'Your drops →' } : { href: '/membership/terms', label: 'Learn more →' },
     },
     {
       key: 'membership.prices',
@@ -133,6 +133,7 @@ export async function MembershipBenefits({ variant, drops = 0, causes = [] }: Pr
       body: isMember
         ? 'It shows on your membership page the moment we have it.'
         : 'Arranged for members when free entrance isn’t on the table.',
+      link: isMember ? { href: '/you/membership', label: 'Your membership →' } : { href: '/membership/terms', label: 'Learn more →' },
     },
     {
       key: 'membership.market',
@@ -154,6 +155,7 @@ export async function MembershipBenefits({ variant, drops = 0, causes = [] }: Pr
       note: causes.length > 0
         ? causes.map((c) => c.title).join(' · ')
         : 'The first projects will be announced to members. Nothing is claimed here until it’s real.',
+      link: isMember ? { href: '/you/membership', label: 'See current projects →' } : { href: '/membership/terms', label: 'How it works →' },
     },
   ];
 
@@ -163,21 +165,20 @@ export async function MembershipBenefits({ variant, drops = 0, causes = [] }: Pr
         {isMember ? 'What you’ve got' : 'Membership benefits'}
       </div>
 
-      {benefits.map((b, i) => (
-        // The photograph swaps sides down the run. Six identical cards need
-        // rhythm from somewhere, and this is better than making some bigger.
-        <div className={`mbPerkHero${i % 2 ? ' flip' : ''}`} key={b.key}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="mbPerkHeroImg" src={images[b.key]} alt="" aria-hidden />
-          <div className="mbPerkHeroText">
-            <span className="mbPerkIcon">{b.icon}</span>
-            {/* Natural case in the markup, uppercased in CSS: what gets read
-                aloud and what gets copied should be words, not shouting. */}
-            <h2 className="mbPerkBig">{b.title}</h2>
-            <div className="mbPerkSub">{b.sub}</div>
-            <p className="mbPerkLead">{b.lead}</p>
-            <p className="mbPerkBody">{b.body}</p>
-
+      <div className="mbPerkGrid">
+        {benefits.map((b) => (
+          <div className="mbPerkCard" key={b.key}>
+            <div className="mbPerkCardHead">
+              <span className="mbPerkTile">{b.icon}</span>
+              <div>
+                {/* Natural case in the markup, uppercased in CSS: what gets read
+                    aloud and what gets copied should be words, not shouting. */}
+                <h2 className="mbPerkBig">{b.title}</h2>
+                <div className="mbPerkSub">{b.sub}</div>
+              </div>
+            </div>
+            <div className="mbPerkRule" />
+            <p className="mbPerkBody">{b.lead} {b.body}</p>
             {b.fine && (
               <div className="mbPerkFine">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -186,19 +187,18 @@ export async function MembershipBenefits({ variant, drops = 0, causes = [] }: Pr
                 {b.fine}
               </div>
             )}
-            {b.state && (
-              <div className="mbPerkDrop">
-                <span className="mbPerkDropLabel">{b.state.label}</span>
-                {b.state.href
-                  ? <Link href={b.state.href} className="mbPerkDropState live">{b.state.text}</Link>
-                  : <span className="mbPerkDropState">{b.state.text}</span>}
-              </div>
-            )}
-            {b.link && <Link href={b.link.href} className="mbPerkLink">{b.link.label}</Link>}
             {b.note && <div className="mbPerkNote">{b.note}</div>}
+            <div className="mbPerkCardFoot">
+              {b.state && (
+                b.state.href
+                  ? <Link href={b.state.href} className="mbPerkLink">{b.state.text}</Link>
+                  : <span className="mbPerkDropState">{b.state.label}: {b.state.text}</span>
+              )}
+              {b.link && !b.state?.href && <Link href={b.link.href} className="mbPerkLink">{b.link.label}</Link>}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
 
       <div className="mbPerkFoot">
         <span className="mbPerkIcon">{Icon.crown}</span>
