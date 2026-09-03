@@ -28,9 +28,15 @@ const NO_FOOTER = [/^\/archive(\/|$)/];
 // to do, and asking somebody to add an event while they are deciding whether
 // to join reads as though we would rather have the event.
 //
+// And the Market, which is not about events at all. It is restaurants, bars,
+// record shops and places to stay, chosen by us — asking for an event link
+// underneath a listing is asking for the wrong thing in the wrong room.
+//
 // The links below it still earn their place everywhere — add an article,
 // terms, the contact address.
-const NO_ADD_BOX = [/^\/admin(\/|$)/, /^\/membership(\/|$)/, /^\/people(\/|$)/];
+const NO_ADD_BOX = [
+  /^\/admin(\/|$)/, /^\/membership(\/|$)/, /^\/people(\/|$)/, /^\/market(\/|$)/,
+];
 
 export function SiteFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdmin: boolean }) {
   const router = useRouter();

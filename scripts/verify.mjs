@@ -2496,9 +2496,15 @@ console.log('\n— Artists on the people page —');
   check('an artist nobody follows is left off', !!lonely && !people.includes(`>${lonely.name}<`),
     lonely && lonely.name);
 
-  check('the add-an-event box is gone from /people', !people.includes('Know something we’re missing?'));
-  check('but it is still where events are', 
-    (await (await client().fetch('/events')).text()).includes('Know something we’re missing?'));
+  // The paste-a-link box belongs where somebody is looking at events. Not in
+  // a directory of people, and not in the Market — which is restaurants, bars
+  // and record shops, so an event link is the wrong thing in the wrong room.
+  const addBox = 'Know something we’re missing?';
+  check('the add-an-event box is gone from /people', !people.includes(addBox));
+  check('and from the Market',
+    !(await (await client().fetch('/market')).text()).includes(addBox));
+  check('but it is still where events are',
+    (await (await client().fetch('/events')).text()).includes(addBox));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
