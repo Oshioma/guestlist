@@ -48,8 +48,6 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
         <JoinCta mode={live ? 'checkout' : 'waitlist'} isSignedIn={!!me} isMember={!!me?.isMember} onWaitlist={onWaitlist} price={price} />
       </section>
 
-      <MembershipGallery />
-
       <MembershipBenefits variant="prospect" causes={causes} />
 
       {businesses.length > 0 && (
@@ -87,6 +85,12 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
           <JoinCta mode={live ? 'checkout' : 'waitlist'} isSignedIn={!!me} isMember={!!me?.isMember} onWaitlist={onWaitlist} price={price} />
         </div>
       </div>
+
+      {/* The photographs close the page rather than interrupt it. Somebody
+          scrolling this far has read the argument; the pictures are what they
+          leave with, and a strip of rooms and faces is a better last thing
+          than the small print. */}
+      <MembershipGallery />
 
       <div className="mbFoot">
         <span className="adminSub" style={{ margin: 0 }}>
