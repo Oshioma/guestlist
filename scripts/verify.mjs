@@ -1067,9 +1067,13 @@ console.log('\n— Confirming an email —');
 
   // The front page is where the news gets said.
   const banner = await (await joiner.fetch('/?confirmed=new')).text();
-  check('the front page carries the confirmation', banner.includes('Email confirmed'));
+  check('the front page carries the confirmation', banner.includes('Account confirmed'));
+  // Somebody who has just finished joining is the most willing they will ever
+  // be to do the next thing, so the line does not stop at "well done".
+  check('and asks them what they are doing with it',
+    banner.includes('where are you going tonight?') && banner.includes('/archive/add'));
   check('and does not carry it unasked',
-    !(await (await joiner.fetch('/')).text()).includes('Email confirmed'));
+    !(await (await joiner.fetch('/')).text()).includes('Account confirmed'));
 
   // A link that is not one of ours still lands somewhere useful.
   const bad = await joiner.fetch('/verify?token=not-a-real-token');

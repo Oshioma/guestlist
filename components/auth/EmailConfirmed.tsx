@@ -9,10 +9,15 @@
 // It takes the query string out of the address bar on arrival, so a refresh or
 // a shared link does not congratulate somebody a second time — or congratulate
 // a stranger who was sent the URL.
+//
+// And it does not stop at "well done". Somebody who has just finished joining
+// is the most willing they will ever be to do the next thing, so the line
+// carries the two: where are you going, and what have you already been to.
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
-export function EmailConfirmed({ kind }: { kind: 'new' | 'already' }) {
+export function EmailConfirmed() {
   const [show, setShow] = useState(true);
 
   useEffect(() => {
@@ -33,9 +38,14 @@ export function EmailConfirmed({ kind }: { kind: 'new' | 'already' }) {
           <path d="M4.5 12.5l5 5 10-11" />
         </svg>
       </span>
+      {/* Same words either way. Somebody double-tapping the link in their
+          email has not done anything that needs a different sentence. */}
       <span className="confirmedText">
-        <strong>{kind === 'already' ? 'Already confirmed' : 'Email confirmed'}</strong>
-        {' — your profile is live and other members can find you.'}
+        <strong>Account confirmed</strong>
+        {', now '}
+        <Link href="/clubmessenger">where are you going tonight?</Link>
+        {' Add a memory to the archive '}
+        <Link href="/archive/add">here</Link>.
       </span>
       <button type="button" className="confirmedClose" onClick={() => setShow(false)} aria-label="Dismiss">
         ×
