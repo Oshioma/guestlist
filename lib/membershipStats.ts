@@ -3,6 +3,7 @@
 // no separate analytics system. Everything here is information for a
 // person; nothing here restricts anybody automatically.
 
+import { FAIR_USE_WATCH } from './accessRequests';
 import { query, queryOne } from './db';
 import { membershipIsActive, membershipLabel, type BillingSource, type Membership, type MembershipStatus } from './membership';
 
@@ -150,7 +151,7 @@ export async function memberLedger(): Promise<LedgerRow[]> {
     granted_by_member_id: string | null; grant_note: string | null; stripe_customer_id: string | null;
     stripe_subscription_id: string | null; current_period_start: string | null; current_period_end: string | null;
     cancel_at_period_end: boolean; cancelled_at: string | null; member_since: string | null;
-    requests_month: number; requests_lifetime: number; free_entries: number; discounts: number; purchased: number;
+    requests_month: number; requests_week: number; requests_lifetime: number; free_entries: number; discounts: number; purchased: number;
     declined: number; plus_ones: number; cost_month_pence: number; cost_lifetime_pence: number; paid_pence: number;
   }>(
     `select m.id as member_id, m.display_name, m.email, m.slug,
@@ -158,6 +159,7 @@ export async function memberLedger(): Promise<LedgerRow[]> {
             s.stripe_subscription_id, s.current_period_start::text, s.current_period_end::text, s.cancel_at_period_end,
             s.cancelled_at::text, s.member_since::text,
             count(r.id) filter (where r.requested_at > date_trunc('month', now()) and r.status <> 'cancelled')::int as requests_month,
+            count(r.id) filter (where r.requested_at > now() - interval '7 days' and r.status <> 'cancelled')::int as requests_week,
             count(r.id) filter (where r.status <> 'cancelled')::int as requests_lifetime,
             count(r.id) filter (where r.status in ('confirmed_free','attended'))::int as free_entries,
             count(r.id) filter (where r.status = 'discounted')::int as discounts,
@@ -189,6 +191,7 @@ export async function memberLedger(): Promise<LedgerRow[]> {
     };
     const months = r.member_since ? Math.max(1, Math.round((Date.now() - new Date(r.member_since).getTime()) / (30.44 * 86400_000))) : 0;
     const flags: string[] = [];
+    if (r.requests_week >= FAIR_USE_WATCH.asksPerWeek) flags.push(`${r.requests_week} asks in the last 7 days`);
     if (r.requests_month >= 6) flags.push(`${r.requests_month} requests this month`);
     else if (avgMonth >= 1 && r.requests_month >= Math.max(4, avgMonth * 3)) flags.push('well above the average this month');
     if (r.billing_source === 'stripe' && r.paid_pence > 0 && r.cost_lifetime_pence > r.paid_pence) flags.push('cost above what they’ve paid');

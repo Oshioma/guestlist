@@ -3,6 +3,7 @@
 // what members want that Guestlist does not have yet.
 
 import Link from 'next/link';
+import { FAIR_USE_WATCH } from '@/lib/accessRequests';
 import { adminQueue, STATUS_LABEL, outcomeReasonLabel, requestTypeLabel, type QueueKind, type RequestStatus } from '@/lib/accessRequests';
 import { externalDemand, requestOverview } from '@/lib/membershipStats';
 import { formatPence } from '@/lib/membership';
@@ -67,6 +68,7 @@ export default async function AdminGetMeInPage({ searchParams }: { searchParams:
                 </span>
                 {r.request_type !== 'event_access' && <span className="evChip" style={{ marginLeft: 6 }}>{requestTypeLabel(r.request_type)}</span>}
                 {r.places > 1 && <span className="evChip amber" style={{ marginLeft: 6 }}>ME +1</span>}
+                {r.member_requests_week >= FAIR_USE_WATCH.asksPerWeek && <span className="evChip amber" style={{ marginLeft: 6 }} title="Information only — nothing is restricted automatically">Heavy week · {r.member_requests_week} asks in 7 days</span>}
                 {!r.event_id && r.external_url && <span className="evChip amber" style={{ marginLeft: 6 }}>{r.suggested_title ? 'possible match' : 'not on Guestlist'}</span>}
               </h3>
               <div className="facts">
