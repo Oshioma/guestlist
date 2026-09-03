@@ -3881,3 +3881,22 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 .stripeControl { min-width: 280px; max-width: 360px; text-align: left; font-weight: 400; }
 .stripeControl label { display: block; margin-top: 8px; }
 .stripeControl .adminSub { margin: 4px 0 0; font-size: 11.5px; }
+/* Membership pictures: one behind the hero, five in a strip beneath it. */
+.mbHero > .mbHeroBg { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
+.mbHero::before { z-index: 1; }
+.mbGallery { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 14px; }
+.mbGallery figure { margin: 0; position: relative; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: var(--bg-raised); }
+.mbGallery img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
+.mbGallery figure:hover img { transform: scale(1.03); }
+.mbGallery figure::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 50%; background: linear-gradient(transparent, rgba(0,0,0,0.6)); pointer-events: none; }
+.mbGallery figcaption { z-index: 1; }
+.mbGallery figcaption {
+  position: absolute; left: 10px; bottom: 8px; font-size: 10.5px; letter-spacing: 1.6px; text-transform: uppercase; font-weight: 800;
+  color: #f2f1ec; text-shadow: 0 1px 8px rgba(0,0,0,0.6);
+}
+@media (max-width: 760px) {
+  .mbGallery { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .mbGallery figure:nth-child(4), .mbGallery figure:nth-child(5) { aspect-ratio: 16 / 10; }
+  .mbGallery figure:nth-child(4) { grid-column: span 1; }
+}
+@media (max-width: 480px) { .mbGallery { grid-template-columns: repeat(2, 1fr); } .mbGallery figure:nth-child(5) { grid-column: span 2; aspect-ratio: 21 / 9; } }
