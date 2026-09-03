@@ -5,7 +5,7 @@
 import Link from 'next/link';
 import { memberLedger, membershipOverview, requestOverview, waitlistRows } from '@/lib/membershipStats';
 import { billingEnabled, formatPence } from '@/lib/membership';
-import { GrantMembership, RevokeMembership } from '@/components/admin/MembershipControls';
+import { GrantMembership, RevokeMembership, StripeControls } from '@/components/admin/MembershipControls';
 import { VerificationControls } from '@/components/admin/VerificationControls';
 import { unverifiedMembers, VERIFY_NUDGE_AFTER_HOURS } from '@/lib/emailVerification';
 
@@ -107,7 +107,12 @@ export default async function AdminMembersPage() {
                 <td>{x.membership.current_period_end ? new Date(x.membership.current_period_end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) : x.membership.billing_source === 'lifetime' ? 'never' : '—'}</td>
                 <td>{x.requests_month}</td><td>{x.requests_lifetime}</td><td>{x.free_entries}</td><td>{x.discounts}</td><td>{x.purchased}</td><td>{x.declined}</td><td>{x.plus_ones}</td>
                 <td>{formatPence(x.cost_month_pence)}</td><td>{formatPence(x.cost_lifetime_pence)}</td><td>{formatPence(x.paid_pence)}</td>
-                <td>{x.membership.billing_source !== 'stripe' && x.active && <RevokeMembership memberId={x.member_id} />}</td>
+                <td>
+                  {x.membership.billing_source !== 'stripe' && x.active && <RevokeMembership memberId={x.member_id} />}
+                  {x.membership.billing_source === 'stripe' && x.membership.stripe_subscription_id && (
+                    <StripeControls memberId={x.member_id} active={x.active} cancelAtPeriodEnd={x.membership.cancel_at_period_end} periodEnd={x.membership.current_period_end} lastPaidPence={x.last_paid_pence || 3000} />
+                  )}
+                </td>
               </tr>
             ))}
             {ledger.length === 0 && <tr><td colSpan={16} className="adminSub">No memberships yet.</td></tr>}

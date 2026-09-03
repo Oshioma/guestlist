@@ -599,6 +599,18 @@ try {
   }
 
   // -------------------------------------------------------------------------
+  console.log('\n— Admin cancel / refund through Stripe (API surface; the money path is verify:refund) —');
+  {
+    check('cancel_stripe refuses a complimentary membership', (await oshi.json('/api/admin/memberships', 'POST', { action: 'cancel_stripe', memberId: ids.marcus, when: 'now' })).status === 400);
+    check('refund refuses a complimentary membership', (await oshi.json('/api/admin/memberships', 'POST', { action: 'refund', memberId: ids.marcus })).status === 400);
+    const r = await oshi.json('/api/admin/memberships', 'POST', { action: 'refund', memberId: ids.jules });
+    check('refund on a Stripe member without a key is refused cleanly (503), nothing recorded', r.status === 503 && (await q(`select count(*)::int as n from membership_billing_events where event_type = 'admin.refund'`))[0].n === 0);
+    check('a non-admin cannot cancel or refund anyone', (await jules.json('/api/admin/memberships', 'POST', { action: 'refund', memberId: ids.jules })).status === 403);
+    const desk = await oshi.html('/admin/members');
+    check('members desk shows Refund on Stripe rows and Revoke on gifted ones', desk.includes('>Refund<') && desk.includes('>Revoke<'));
+  }
+
+  // -------------------------------------------------------------------------
   console.log('\n— Promoter side: Guestlist members asking —');
   {
     await q(`update promoters set claim_status = 'verified' where id = $1`, [promoter.id]);

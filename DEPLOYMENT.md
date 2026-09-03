@@ -97,6 +97,13 @@ paid, and activates the membership through the same code the webhook uses.
 are arriving; fix the endpoint anyway, because renewals, cancellations and
 failed payments only reach the site through it.
 
+**Cancelling or refunding a paying member** is done from ADMIN → Members,
+on the member's row: *Cancel* (at the end of the paid month, or now) and
+*Refund* (blank for the whole last payment, or an amount). Both go through
+Stripe, both are written to the billing ledger with who and why, and the
+member is emailed. Refunds never exceed what is left of the last payment.
+`npm run verify:refund` exercises the whole path against a stand-in Stripe.
+
 **Managed Payments.** Newer Stripe accounts have *Managed Payments* (Stripe
 as merchant of record, collecting tax for you) switched on by default, and
 it refuses any product without a tax code — JOIN then fails with *"the

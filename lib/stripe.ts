@@ -50,7 +50,7 @@ function encode(params: Record<string, unknown>, prefix = ''): string[] {
 }
 
 export async function stripeRequest<T = Record<string, unknown>>(
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'DELETE',
   path: string,
   params: Record<string, unknown> = {},
   opts: { idempotencyKey?: string } = {}
@@ -124,6 +124,36 @@ export async function createCheckoutSession(opts: {
     subscription_data: { metadata: { member_id: opts.memberId } },
     ...(managedPaymentsEnabled() ? {} : { managed_payments: { enabled: false } }),
   });
+}
+
+// --- Admin actions on a subscription ---------------------------------------
+
+// Stripe's own two ways to stop a subscription: flag it to end when the paid
+// period runs out, or end it this second.
+export async function cancelSubscription(id: string, when: 'period_end' | 'now'): Promise<StripeSubscription> {
+  return when === 'now'
+    ? stripeRequest<StripeSubscription>('DELETE', `/subscriptions/${encodeURIComponent(id)}`)
+    : stripeRequest<StripeSubscription>('POST', `/subscriptions/${encodeURIComponent(id)}`, { cancel_at_period_end: true });
+}
+
+export type StripeInvoice = {
+  id: string; amount_paid: number; currency: string; created: number;
+  payment_intent: string | null; charge: string | null; status: string;
+};
+
+export async function latestPaidInvoice(subscriptionId: string): Promise<StripeInvoice | null> {
+  const res = await stripeRequest<{ data: StripeInvoice[] }>('GET', '/invoices', { subscription: subscriptionId, status: 'paid', limit: 1 });
+  return res.data?.[0] ?? null;
+}
+
+export type StripeRefund = { id: string; amount: number; currency: string; status: string; payment_intent: string | null; charge: string | null };
+
+export async function createRefund(opts: { paymentIntent?: string | null; charge?: string | null; amountPence: number; idempotencyKey: string; reason?: string }): Promise<StripeRefund> {
+  return stripeRequest<StripeRefund>('POST', '/refunds', {
+    ...(opts.paymentIntent ? { payment_intent: opts.paymentIntent } : { charge: opts.charge }),
+    amount: opts.amountPence,
+    ...(opts.reason ? { reason: opts.reason } : {}),
+  }, { idempotencyKey: opts.idempotencyKey });
 }
 
 export async function createPortalSession(opts: { customerId: string; returnUrl: string }): Promise<{ url: string }> {

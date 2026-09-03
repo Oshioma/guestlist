@@ -15,6 +15,7 @@
     "verify:v2b": "node scripts/verify-v2b.mjs",
     "verify:membership": "node scripts/verify-membership.mjs",
     "verify:reconcile": "tsx scripts/verify-reconcile.mts",
+    "verify:refund": "tsx scripts/verify-refund.mts",
     "schema:snapshot": "node scripts/schema-snapshot.mjs"
   },
   "dependencies": {
