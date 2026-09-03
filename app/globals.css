@@ -1371,6 +1371,9 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
   background: linear-gradient(180deg, rgba(7,7,7,0.15) 0%, rgba(7,7,7,0.6) 60%, rgba(7,7,7,0.95) 100%);
 }
 .profileHeroInner { position: relative; z-index: 2; padding: 50px 34px 30px; width: 100%; }
+/* The 50px above the name is room for a photograph's gradient to fade under
+   it. An artist with no photograph has no gradient, so it is just 50px. */
+.profileHero.noArt .profileHeroInner { padding-top: 30px; }
 
 .profileLogo {
   width: 84px; height: 84px;
@@ -3830,3 +3833,43 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
   color: var(--text-muted);
 }
 .confirmedClose:hover { color: var(--text); }
+
+/* ===========================================================================
+   AN ARTIST PAGE WITH ONE DATE AND ONE CLIP ON IT.
+
+   Most artists here have exactly that. Stacked in full-width rows it is a
+   card, a screen of nothing beside it, a scroll, and then another card — the
+   page reads as emptier than it is, and you have to scroll to find out there
+   was anything else on it at all.
+
+   Side by side, the same content is one screen. Only while both sides are
+   short: three dates in a half-width column is a tall thin stack, which is a
+   different kind of bad, so the page decides and adds .split.
+   =========================================================================== */
+
+.artistBody { margin-top: 34px; }
+.artistBody > section + section { margin-top: 42px; }
+/* The 80px under a card grid is there to end a page. Inside this one it is
+   just a gap between two things that belong together. */
+.artistBody .cardGrid { padding-bottom: 0; }
+
+@media (min-width: 900px) {
+  .artistBody.split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 34px;
+    /* Two columns of different lengths, each starting at the top, so the two
+       section labels sit on the same line. */
+    align-items: start;
+    /* A card is a card. Half of a 1180px page is a 570px column, and an
+       event card that wide has a 430px-tall photograph in it — filling the
+       row by inflating one card is not the same as filling it with content.
+       Capped, the pair sits left at the size cards are everywhere else. */
+    max-width: 900px;
+  }
+  .artistBody.split > section + section { margin-top: 0; }
+  /* One per row inside a half-width column: auto-fill would put two 260px
+     cards side by side and squash both. */
+  .artistBody.split .cardGrid,
+  .artistBody.split .clipGrid { grid-template-columns: 1fr; }
+}

@@ -28,9 +28,26 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
     videosForArtist(artist.id),
   ]);
 
+  // A SPARSE ARTIST PAGE SHOULD NOT LOOK LIKE AN EMPTY ONE.
+  //
+  // Most artists here have one date and a clip or two. Stacked in full-width
+  // rows that is a card, a screen of nothing beside it, a scroll, and another
+  // card — the page reads as emptier than it is, and you have to scroll to
+  // find out there was anything else. Side by side, the same content is one
+  // screen and the page looks like it has something on it.
+  //
+  // Only while both sides are short. Three dates in a half-width column is a
+  // tall thin stack, which is a different kind of bad.
+  const clipCount = videos.reduce((n, v) => n + v.moments.length, 0);
+  const sideBySide = clipCount > 0 && clipCount <= 2 && upcoming.length <= 2;
+
   return (
     <main className="wrap">
-      <section className="profileHero" style={{ minHeight: 220 }}>
+      {/* Without a photograph the hero is a black box, and its height was
+          all clearance for a photograph's gradient. Nothing to clear, so
+          nothing to clear it by. */}
+      <section className={`profileHero${artist.image_url ? '' : ' noArt'}`}
+               style={{ minHeight: artist.image_url ? 220 : 0 }}>
         {artist.image_url && <EventImage className="bg" src={artist.image_url} />}
         <div className="profileHeroInner">
           <h1 className="profileName">{artist.name}</h1>
@@ -40,14 +57,19 @@ export default async function ArtistPage({ params }: { params: Promise<{ slug: s
         </div>
       </section>
 
-      {/* WHERE THEY ARE PLAYING COMES FIRST. Somebody on an artist's page
-          most often wants a date, not an archive — the clips are why you stay,
-          not why you arrived. */}
-      <div className="sectionLabel" style={{ marginTop: 34 }}>Playing next</div>
-      {upcoming.length ? <div className="cardGrid">{upcoming.map((e) => <EventCard key={e.id} event={e} saved={savedIds.has(e.id)} isSignedIn={!!member} />)}</div>
-        : <p className="adminSub">No upcoming Guestlist events — follow to hear when they play.</p>}
+      <div className={`artistBody${sideBySide ? ' split' : ''}`}>
+        {/* WHERE THEY ARE PLAYING COMES FIRST. Somebody on an artist's page
+            most often wants a date, not an archive — the clips are why you
+            stay, not why you arrived. First in the markup either way, so it
+            is also first on a phone, where the columns become rows. */}
+        <section className="artistDates">
+          <div className="sectionLabel">Playing next</div>
+          {upcoming.length ? <div className="cardGrid">{upcoming.map((e) => <EventCard key={e.id} event={e} saved={savedIds.has(e.id)} isSignedIn={!!member} />)}</div>
+            : <p className="adminSub">No upcoming Guestlist events — follow to hear when they play.</p>}
+        </section>
 
-      <VideoArchive videos={videos} />
+        <VideoArchive videos={videos} />
+      </div>
     </main>
   );
 }

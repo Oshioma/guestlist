@@ -2411,6 +2411,41 @@ console.log('\n— An artist page —');
   check('nor is there a way into the fifty minutes',
     !visible.includes('Watch the full interview'));
 
+  // ONE DATE AND ONE CLIP GO ON ONE LINE.
+  //
+  // That is most artists here. Stacked full-width it is a card, a screen of
+  // nothing beside it, a scroll, and another card — the page reads as emptier
+  // than it is and you have to scroll to find out there was anything else.
+  const [sparse] = await q(
+    `insert into artists (name, slug) values ('Sparse Fixture', 'sparse-fixture') returning id`);
+  const [sparseVideo] = await q(
+    `insert into artist_videos (youtube_video_id, title, thumbnail_url, published_at,
+                                duration_seconds, source_url, status, is_interview, transcript_status)
+     values ('sparseClip01', 'The sparse interview', '/images/secret-party.jpg', now() - interval '3 days',
+             1800, 'https://www.youtube.com/watch?v=sparseClip01', 'published', true, 'ready')
+     returning id`);
+  await q(`insert into artist_video_artists (video_id, artist_id, role, source)
+           values ($1, $2, 'interviewee', 'admin')`, [sparseVideo.id, sparse.id]);
+  await q(
+    `insert into artist_video_moments (video_id, start_seconds, title, summary, status, source)
+     values ($1, 300, 'The only clip there is', 'One clip, one date, one screen.', 'published', 'admin')`,
+    [sparseVideo.id]);
+  const [anyEvent] = await q(
+    `select id from events where status = 'live' and start_at > now() order by start_at limit 1`);
+  await q(`insert into event_artists (event_id, artist_id, position, billing)
+           values ($1, $2, 0, 'headliner')`, [anyEvent.id, sparse.id]);
+
+  const thin = await (await client().fetch('/artists/sparse-fixture')).text();
+  check('one date and one clip are laid out side by side', thin.includes('artistBody split'));
+  check('with both of them actually on the page',
+    thin.includes('The only clip there is') && thin.includes('Playing next'));
+
+  // An artist with a diary does not get a tall thin stack.
+  const busy = await (await client().fetch(`/artists/${artist.slug}`)).text();
+  check('a busy artist keeps the full width',
+    busy.includes('artistBody') && !busy.includes('artistBody split'));
+
+  await q(`delete from artists where id = $1`, [sparse.id]);
   await q(`delete from artist_videos where id = $1`, [video.id]);
 }
 
