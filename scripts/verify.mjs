@@ -1117,6 +1117,20 @@ console.log('\n— Privacy and email live with the profile —');
 
 console.log('\n— The filters stay on screen —');
 {
+  // THE NAVIGATION IS NOT A WINDOW. It was a translucent pane with a blur
+  // behind it, so event artwork slid through the wordmark and the links as
+  // you scrolled — and a sticky filter band under it makes that constant
+  // rather than occasional. Asked of the stylesheet, because "is this pixel
+  // white" is not a thing a fetch can answer.
+  const css = readFileSync(path.join(root, 'app', 'globals.css'), 'utf8');
+  const headerGrounds = [...css.matchAll(/--header-bg:\s*([^;]+);/g)].map((m) => m[1].trim());
+  check('both themes give the navigation a ground', headerGrounds.length === 2, String(headerGrounds));
+  check('and neither of them is see-through',
+    headerGrounds.every((v) => !v.includes('rgba') && !v.includes('transparent')),
+    headerGrounds.join(' | '));
+  check('so nothing needs blurring behind it',
+    !/\.siteHeader\s*\{[^}]*backdrop-filter/.test(css));
+
   const events = await (await anon.fetch('/events')).text();
   check('the events page has a sticky band', events.includes('stickyFilters'));
   // Order matters more than presence: the band has to be the thing WRAPPING

@@ -21,7 +21,7 @@
   --ok-tint: rgba(69, 112, 76, 0.13);
   --ok-line: rgba(69, 112, 76, 0.36);
   --gold-ink: #9a7b1f; /* the brand gold as TEXT on the light ground */
-  --header-bg: rgba(255, 255, 255, 0.86);
+  --header-bg: #ffffff; /* opaque: nothing scrolls through the navigation */
   --media-ph: #eae8e1;
   color-scheme: light;
   --radius: 18px;
@@ -51,7 +51,7 @@
   --ok-tint: rgba(122, 158, 126, 0.16);
   --ok-line: rgba(122, 158, 126, 0.38);
   --gold-ink: #e8c46a; /* in the dark it goes back to the bright brand yellow */
-  --header-bg: rgba(7, 7, 7, 0.82);
+  --header-bg: #070707; /* opaque: nothing scrolls through the navigation */
   --media-ph: #141414;
   color-scheme: dark;
 }
@@ -80,12 +80,17 @@ button { font-family: inherit; }
 
 /* ---------- header ---------- */
 
+/* THE NAVIGATION IS NOT A WINDOW.
+   It used to be a translucent pane with a blur behind it, which meant event
+   artwork and photographs slid through it as you scrolled — the wordmark and
+   the links sat on whatever picture happened to be under them, and every page
+   had a different, moving nav. An opaque ground costs nothing and the type is
+   legible over the same thing every time. */
 .siteHeader {
   position: sticky;
   top: 0;
   z-index: 50;
   background: var(--header-bg);
-  backdrop-filter: blur(14px);
 }
 /* The grey line belongs to the navigation row; the account strip sits
    under it, which is what buys the nav its size. */
