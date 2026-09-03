@@ -10,6 +10,7 @@ import { AuthError, requireAdmin } from '@/lib/auth';
 import { queryOne } from '@/lib/db';
 import { grantMembership, revokeMembership, type BillingSource } from '@/lib/membership';
 import { adminCancelStripeMembership, adminRefundLastPayment } from '@/lib/membershipAdmin';
+import { inviteWaitlist } from '@/lib/waitlistInvite';
 import { StripeError } from '@/lib/stripe';
 
 export async function POST(req: NextRequest) {
@@ -17,6 +18,11 @@ export async function POST(req: NextRequest) {
     const admin = await requireAdmin();
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const action = String(body.action ?? '');
+    // The one action that is about everyone on the list, not one member.
+    if (action === 'invite_waitlist') {
+      const result = await inviteWaitlist(admin.id);
+      return NextResponse.json({ ok: true, ...result });
+    }
     const target = typeof body.memberId === 'string'
       ? await queryOne<{ id: string }>(`select id from members where id = $1`, [body.memberId])
       : typeof body.email === 'string'

@@ -74,6 +74,7 @@ export type AnalyticsEventType =
   // Membership
   | 'membership_page_viewed'
   | 'membership_waitlist_joined'
+  | 'membership_waitlist_invited'
   | 'membership_checkout_started'
   | 'membership_started'
   | 'membership_renewed'

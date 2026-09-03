@@ -136,6 +136,10 @@ try {
     const w4 = await jules.json('/api/membership/waitlist', 'POST', {});
     check('signed-in member joins with one press', w4.status === 200 && w4.data.outcome === 'joined');
     check('waitlist rows stored', (await q(`select count(*)::int as n from membership_waitlist`))[0].n === 2);
+    check('TELL THE WAITLIST refuses until Stripe is on (400), nobody marked', (await oshi.json('/api/admin/memberships', 'POST', { action: 'invite_waitlist' })).status === 400
+      && (await q(`select count(*)::int as n from membership_waitlist where invited_at is not null`))[0].n === 0);
+    check('a non-admin cannot tell the waitlist', (await jules.json('/api/admin/memberships', 'POST', { action: 'invite_waitlist' })).status === 403);
+    check('members desk lists the waiting, with the button disabled until billing is on', (await oshi.html('/admin/members')).includes('someone@example.com') && /Tell the waitlist \(2\)/.test((await oshi.html('/admin/members')).replace(/<!-- -->/g, '')));
     const co = await jules.json('/api/membership/checkout', 'POST');
     check('checkout unavailable before Stripe is configured (503)', co.status === 503);
     const terms = await anon.html('/membership/terms');
@@ -659,6 +663,17 @@ try {
     check('nothing about the membership changed', (await q(`select status from memberships where member_id = $1`, [ids.marcus]))[0].status === 'active');
     await q(`delete from member_access_requests where id = any($1::uuid[])`, [extra.map((r) => r.id)]);
     check('chip goes when the pattern goes', (await oshi.html('/admin/getmein?view=all')).includes('Heavy week ·') === before);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— Waitlist: members drop off it —');
+  {
+    // Marcus is a lifetime member; an address of his on the waitlist is not "waiting".
+    await q(`insert into membership_waitlist (email, member_id, source) values ('DEV-MARCUS@example.com', null, 'membership_page') on conflict do nothing`);
+    // Visible HTML only: the RSC payload after it repeats the whole page, ledger included.
+    const desk = ((await oshi.html('/admin/members')).split('Waitlist (')[1] ?? '').split('<script')[0].split('class="sectionLabel"')[0];
+    const marcusState = (await q(`select s.status, s.billing_source from memberships s where s.member_id = $1`, [ids.marcus]))[0];
+    check('a waitlisted address that has since joined is no longer listed as waiting', !/dev-marcus@example\.com/i.test(desk) && desk.includes('someone@example.com'), JSON.stringify({ marcusState, listed: /dev-marcus/i.test(desk), snippet: desk.slice(0, 200) }));
   }
 
   // -------------------------------------------------------------------------

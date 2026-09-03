@@ -74,6 +74,26 @@ check('second email for ending now (different dedupe key)', (await outbox('notif
 check('cancelling a cancelled membership is a no-op', (await adminCancelStripeMembership(nadia.id, actor, { when: 'now' })).outcome === 'already');
 check('every action audited', (await q(`select count(*)::int as n from audit_log where action = 'membership_changed' and detail->>'memberId' = $1 and detail->>'action' in ('stripe_refund','stripe_cancel')`, [nadia.id]))[0].n === 4);
 
+console.log('\n— Tell the waitlist —');
+{
+  const { inviteWaitlist, waitlistPending } = await import('../lib/waitlistInvite');
+  await q(`delete from membership_waitlist`);
+  await q(`delete from email_outbox where email_type = 'notification:membership_open'`);
+  // Three addresses: a stranger, a member by account (nadia, cancelled above → still owed), and jules by address (complimentary, active → skipped).
+  await q(`insert into membership_waitlist (email, member_id, source) values ('stranger@example.com', null, 'membership_page'), ('dev-nadia@example.com', $1, 'membership_page'), ('DEV-JULES@example.com', null, 'membership_page')`, [nadia.id]);
+  const before = await waitlistPending();
+  check('an active member is skipped even when only the address matches', before.length === 2 && !before.some((w) => /jules/i.test(w.email)));
+  const r1 = await inviteWaitlist(oshi.id);
+  check('one email each to the people still waiting', r1.sent === 2 && (await q(`select count(*)::int as n from email_outbox where email_type = 'notification:membership_open'`))[0].n === 2);
+  check('the email says it is open and links to /membership', /Membership is open/.test((await q(`select body_text from email_outbox where email_type = 'notification:membership_open' limit 1`))[0]?.body_text ?? '') && /\/membership(\s|$)/.test((await q(`select body_text from email_outbox where email_type = 'notification:membership_open' limit 1`))[0]?.body_text ?? ''));
+  check('invited_at set on those told, not on the member', (await q(`select count(*)::int as n from membership_waitlist where invited_at is not null`))[0].n === 2 && (await q(`select invited_at from membership_waitlist where lower(email) = 'dev-jules@example.com'`))[0].invited_at === null);
+  const r2 = await inviteWaitlist(oshi.id);
+  check('pressing again tells nobody twice', r2.sent === 0 && (await q(`select count(*)::int as n from email_outbox where email_type = 'notification:membership_open'`))[0].n === 2);
+  check('tracked and audited', (await q(`select count(*)::int as n from analytics_events where event_type = 'membership_waitlist_invited'`))[0].n === 2 && (await q(`select count(*)::int as n from audit_log where action = 'membership_changed' and detail->>'action' = 'waitlist_invited'`))[0].n === 2);
+  delete process.env.STRIPE_SECRET_KEY;
+  check('refuses when billing is off', (await expectError(() => inviteWaitlist(oshi.id)))?.status === 400);
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.log('Failures:'); failures.forEach((f) => console.log(` - ${f}`)); }
 await db.end();
