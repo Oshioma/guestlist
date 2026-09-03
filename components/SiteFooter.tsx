@@ -34,8 +34,12 @@ const NO_FOOTER = [/^\/archive(\/|$)/];
 //
 // The links below it still earn their place everywhere — add an article,
 // terms, the contact address.
+// And every page under You — your profile, your settings, your membership,
+// your asks. That is a private control surface, not a place to file an event
+// somebody else is missing.
 const NO_ADD_BOX = [
-  /^\/admin(\/|$)/, /^\/membership(\/|$)/, /^\/people(\/|$)/, /^\/market(\/|$)/,
+  /^\/admin(\/|$)/, /^\/membership(\/|$)/, /^\/people(\/|$)/,
+  /^\/market(\/|$)/, /^\/you(\/|$)/,
 ];
 
 export function SiteFooter({ isSignedIn, isAdmin }: { isSignedIn: boolean; isAdmin: boolean }) {

@@ -3916,6 +3916,82 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 }
 @media (max-width: 480px) { .mbGallery { grid-template-columns: repeat(2, 1fr); } .mbGallery figure:nth-child(5) { grid-column: span 2; aspect-ratio: 21 / 9; } }
 
+/* ===========================================================================
+   SHARE — WHERE IT IS GOING, BEFORE YOU PRESS IT.
+
+   The old control was one grey "Share" button. On a phone it opened the share
+   sheet; on a laptop, where there is no sheet, the only thing it ever did was
+   copy silently and leave you guessing. Naming the destinations costs a row
+   and removes the guess.
+
+   The buttons are neutral until you touch them, then each takes its own
+   network's colour — a row of brand logos would be five companies advertising
+   on a Guestlist page.
+   =========================================================================== */
+
+.shareRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.shareRowLabel {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.shareRowBtns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.shareBtn {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+  cursor: pointer;
+  padding: 0;
+  transition: background .15s, color .15s, border-color .15s, transform .15s;
+}
+.shareBtn svg { width: 18px; height: 18px; }
+.shareBtn:hover { transform: translateY(-2px); border-color: transparent; color: #fff; }
+/* Each one turns into the thing it opens. */
+.shareBtn.sheet:hover { background: var(--accent); }
+.shareBtn.whatsapp:hover { background: #25d366; }
+.shareBtn.x:hover { background: #000; }
+.shareBtn.facebook:hover { background: #1877f2; }
+.shareBtn.copy:hover { background: var(--accent); }
+.shareBtn.copy.done {
+  background: var(--ok); border-color: transparent; color: #fff;
+}
+
+.shareCopied {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ok);
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity .2s, transform .2s;
+  pointer-events: none;
+}
+.shareCopied.on { opacity: 1; transform: none; }
+
+/* In the event sidebar the row is the width of the card, and the rule above
+   it would double up with the card's own divider. */
+.sideCard + .shareRow, aside > .shareRow { margin-top: 18px; }
+
+/* The one button on the editorial desk that cannot be undone. It sits last
+   in the row and reads as danger before it is pressed, not after. */
+.btnGhost.adminDanger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.btnGhost.adminDanger:hover { background: var(--danger); border-color: transparent; color: #fff; }
+
 /* ADMIN → Members: sixteen columns scroll sideways, so the actions column
    (Revoke / Cancel / Refund) pins to the right edge and stays in view. */
 .adminTable th:last-child, .adminTable td:last-child {

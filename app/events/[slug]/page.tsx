@@ -6,7 +6,7 @@ import { getEventBySlug, getMemberAction } from '@/lib/events';
 import { eventTypeLabel, fmtEventDate, fmtEventTime, formatPrice, isPast } from '@/lib/util';
 import { SocialPanel } from '@/components/SocialPanel';
 import { TrackView } from '@/components/TrackView';
-import { ShareButton } from '@/components/ShareButton';
+import { ShareRow } from '@/components/ShareRow';
 import { FollowButton } from '@/components/FollowButton';
 import { ClaimEventPrompt } from '@/components/ClaimEventPrompt';
 import { GuestlistRequest } from '@/components/GuestlistRequest';
@@ -21,6 +21,8 @@ import { billingEnabled, formatPence, getMembership, getPlan, membershipIsActive
 import { eventEligible, liveRequestFor } from '@/lib/accessRequests';
 import { GetMeIn } from '@/components/membership/GetMeIn';
 import { AdminItemActions } from '@/components/admin/AdminItemActions';
+
+const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,6 +91,11 @@ export default async function EventDetailPage({ params, searchParams }: {params:
       {guestlistOpen&&!past&&!cancelled&&guestlistSettings&&<GuestlistRequest eventId={event.id} isSignedIn={!!member} mode={guestlistSettings.mode as 'approve_requests'|'auto_fill'} maxPlusOnes={guestlistSettings.max_plus_ones}/>} 
       {tonight&&<Link href={`/clubmessenger/events/${event.id}`} className="tonightModule"><div className="tonightModuleTitle">⚡ Tonight on Guestlist</div><div className="tonightModuleBody">{liveStats&&liveStats.friends_here>0?`${liveStats.friends_here} friend${liveStats.friends_here===1?'':'s'} here now`:liveStats&&liveStats.visible_here>0?`${liveStats.visible_here} here now`:'Live room is open'} · see who’s out, check in when you arrive →</div></Link>}
       {contextBits.length>0&&<div className="socialContextLine">{`✦ ${contextBits.join(' · ')}`}</div>}
-      <SocialPanel eventId={event.id} isSignedIn={!!member} initial={action} goingCount={event.going_count} interestedCount={event.interested_count} avatars={event.going_avatars} promoter={event.promoter?{id:event.promoter.id,name:event.promoter.name,following:followingPromoter}:null}/><div style={{display:'flex',gap:8}}><ShareButton eventId={event.id} title={event.title}/></div></aside></div>
+      <SocialPanel eventId={event.id} isSignedIn={!!member} initial={action} goingCount={event.going_count} interestedCount={event.interested_count} avatars={event.going_avatars} promoter={event.promoter?{id:event.promoter.id,name:event.promoter.name,following:followingPromoter}:null}/>
+      {/* A share carries the date and the city with it, because a bare link
+          in a group chat is a link nobody opens. */}
+      <ShareRow url={`${SITE}/events/${event.slug}`} title={event.title}
+                blurb={[fmtEventDate(event.start_at,event.end_at,event.timezone),event.venue?.name,event.city].filter(Boolean).join(' · ')}
+                eventId={event.id} label="Send it on"/></aside></div>
   </main>;
 }
