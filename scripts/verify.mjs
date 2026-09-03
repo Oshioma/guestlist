@@ -2316,7 +2316,7 @@ console.log('\n— The pictures on the site —');
   check('the desk lists the pictures', page.includes('Pictures'));
   check('naming each one and where it lands',
     page.includes('Home — first panel') && page.includes('Membership — Get in free')
-      && page.includes('Beside the Queue jump benefit'));
+      && page.includes('Membership — Queue jump'));
   check('and showing what is in each slot now', page.includes('/images/hero.jpg'));
 
   check('a member cannot see them',
@@ -2372,11 +2372,28 @@ console.log('\n— The pictures on the site —');
   check('and the front page is as it shipped',
     (await heroBand()).includes('/images/secret-party.jpg'));
 
-  // The membership picture slots are NOT asserted here any more. The six
-  // photo panels they fed were replaced by an icon card grid (#125), so
-  // /membership renders none of them — the slots are still on the desk with
-  // nothing reading them. Testing that they "follow" would be testing a page
-  // that no longer shows a photograph.
+  // The membership section reads its pictures the same way. #125 replaced the
+  // alternating photo panels with an icon grid AND a captioned photo strip —
+  // the slots did not stop being read, they moved. Asserted on the hero and on
+  // one of the strip's five, so a change to either shows up here.
+  await desk.fetch('/api/admin/site/images', {
+    method: 'POST',
+    body: JSON.stringify({ slot: 'membership.hero', url: 'https://pictures.example/city.jpg' }),
+  });
+  await desk.fetch('/api/admin/site/images', {
+    method: 'POST',
+    body: JSON.stringify({ slot: 'membership.drops', url: 'https://pictures.example/drop.jpg' }),
+  });
+  const membership = await (await client().fetch('/membership')).text();
+  check('the membership hero follows its slot',
+    membership.includes('https://pictures.example/city.jpg'));
+  check('and so does the photo strip under it',
+    membership.includes('https://pictures.example/drop.jpg'));
+  for (const slot of ['membership.hero', 'membership.drops']) {
+    await desk.fetch('/api/admin/site/images', {
+      method: 'POST', body: JSON.stringify({ slot, url: null }),
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
