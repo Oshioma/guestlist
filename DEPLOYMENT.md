@@ -97,6 +97,11 @@ paid, and activates the membership through the same code the webhook uses.
 are arriving; fix the endpoint anyway, because renewals, cancellations and
 failed payments only reach the site through it.
 
+**Telling the waitlist.** Once Stripe is on, ADMIN → Members → *Tell the
+waitlist (N)* emails everyone still waiting that membership is open, once
+each; anyone who has joined since is skipped and drops off the list. Run
+migration `039_waitlist_invite.sql` first (it adds `invited_at`).
+
 **Cancelling or refunding a paying member** is done from ADMIN → Members,
 on the member's row: *Cancel* (at the end of the paid month, or now) and
 *Refund* (blank for the whole last payment, or an amount). Both go through

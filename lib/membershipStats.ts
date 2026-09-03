@@ -29,7 +29,10 @@ export async function membershipOverview(): Promise<MembershipOverview> {
             and not m.cancel_at_period_end) as mrr_pence,
        (select coalesce(sum(amount_pence), 0)::int from membership_billing_events
           where event_type = 'invoice.paid' and processed_at > now() - interval '30 days') as revenue_30d_pence,
-       (select count(*)::int from membership_waitlist) as waitlist`
+       (select count(*)::int from membership_waitlist w
+          where not exists (select 1 from members m join memberships s on s.member_id = m.id
+                             where (m.id = w.member_id or lower(m.email) = lower(w.email))
+                               and (s.status in ('active','trialing') or (s.billing_source = 'lifetime' and s.status = 'active')))) as waitlist`
   );
   const r = row ?? { paying: 0, complimentary: 0, trialing: 0, past_due: 0, new_30d: 0, cancelled_30d: 0, mrr_pence: 0, revenue_30d_pence: 0, waitlist: 0 };
   const base = r.paying + r.cancelled_30d;
@@ -216,10 +219,16 @@ export async function memberLedger(): Promise<LedgerRow[]> {
   });
 }
 
-export async function waitlistRows(limit = 200): Promise<{ email: string; display_name: string | null; created_at: string }[]> {
+// Anyone who has since joined drops off the list: they are a member now, and
+// the waitlist is for people we still owe an answer.
+export async function waitlistRows(limit = 200): Promise<{ email: string; display_name: string | null; created_at: string; invited_at: string | null; joined: boolean }[]> {
   return query(
-    `select w.email, m.display_name, w.created_at::text from membership_waitlist w
-       left join members m on m.id = w.member_id order by w.created_at desc limit $1`,
+    `select w.email, m.display_name, w.created_at::text, w.invited_at::text,
+            (s.id is not null and (s.status in ('active','trialing') or (s.billing_source = 'lifetime' and s.status = 'active'))) as joined
+       from membership_waitlist w
+       left join members m on m.id = w.member_id or lower(m.email) = lower(w.email)
+       left join memberships s on s.member_id = m.id
+      order by w.created_at desc limit $1`,
     [limit]
   );
 }

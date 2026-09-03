@@ -43,6 +43,7 @@ export const MIGRATION_FILES: string[] = [
   '036_email_verification.sql',
   '037_scan_progress.sql',
   '038_guestlist_confirmation.sql',
+  '039_waitlist_invite.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
@@ -208,6 +209,7 @@ export const EXPECTED_COLUMNS: string[] = [
   'members.raving_since',
   'members.signup_ip_hash',
   'members.slug',
+  'membership_waitlist.invited_at',
   'notifications.announcement_id',
   'notifications.archive_event_id',
   'notifications.article_id',
