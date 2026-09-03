@@ -25,7 +25,7 @@ export function VideoArchive({ videos }: { videos: ArtistVideo[] }) {
   if (!clips.length) return null;
 
   return (
-    <section style={{ marginTop: 42 }}>
+    <section className="artistClips">
       <div className="sectionLabel">In their words — Guestlist interviews</div>
       <div className="clipGrid">
         {clips.map(({ video, moment }) => {
