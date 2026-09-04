@@ -33,8 +33,15 @@ const fmtDay = (s: string) => new Date(s).toLocaleDateString('en-GB', { day: 'nu
 
 function RequestLine({ r, closed = false }: { r: MemberRequest; closed?: boolean }) {
   const when = r.start_at ? fmtEventDate(r.start_at, r.end_at, r.timezone ?? 'Europe/London') : `asked ${fmtDay(r.requested_at)}`;
+  // A small picture of the night: the event's own, or its initial when it
+  // has none (an ask about a link we do not have yet has nothing to show).
+  const thumb = r.image_url
+    // eslint-disable-next-line @next/next/no-img-element
+    ? <img className="requestThumb" src={r.image_url} alt="" loading="lazy" />
+    : <span className="requestThumb fallback" aria-hidden>{(r.title || '?').trim().charAt(0).toUpperCase()}</span>;
   return (
-    <div className="requestRow">
+    <div className="requestRow withThumb">
+      {r.slug ? <Link href={`/events/${r.slug}`} className="requestThumbLink">{thumb}</Link> : thumb}
       <div>
         {r.slug ? <Link href={`/events/${r.slug}`} className="title">{r.title}</Link> : <span className="title">{r.title}</span>}
         <div className="meta">

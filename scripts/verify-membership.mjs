@@ -329,6 +329,9 @@ try {
     check('member reads YOU’RE ON THE GUESTLIST', nadiaPage.includes('ON THE GUESTLIST') && nadiaPage.includes('Bring ID'));
     const you = await nadia.html('/you/membership');
     check('member area lists the event as guestlisted', you.includes('GMI Test: Closed List') && you.includes('ON THE GUESTLIST'));
+    await q(`update events set primary_image_url = 'https://pictures.example/closed-list.jpg' where id = $1`, [evClosed.id]);
+    const youPic = await nadia.html('/you/membership');
+    check('each ask carries a thumbnail — the event picture, or its initial', youPic.includes('class="requestThumb" src="https://pictures.example/closed-list.jpg"') && youPic.includes('requestThumb fallback'));
     const mbMember = await nadia.html('/membership');
     check('/membership becomes the member view once joined', mbMember.includes('You’re in.') && mbMember.includes('How to use it') && mbMember.includes('What you’ve got')
       && !mbMember.includes('Join the waitlist') && !mbMember.includes('Join Guestlist —'));
