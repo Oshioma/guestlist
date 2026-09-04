@@ -329,9 +329,12 @@ try {
     check('member reads YOU’RE ON THE GUESTLIST', nadiaPage.includes('ON THE GUESTLIST') && nadiaPage.includes('Bring ID'));
     const you = await nadia.html('/you/membership');
     check('member area lists the event as guestlisted', you.includes('GMI Test: Closed List') && you.includes('ON THE GUESTLIST'));
+    const glPanel = you.split('aria-label="You’re on the guestlist"')[1]?.split('class="memberGrid"')[0] ?? '';
+    check('YOU’RE ON THE GUESTLIST leads the page: the night, +1, the promoter, a pass link', glPanel.includes('GMI Test: Closed List') && glPanel.includes('you +1') && glPanel.includes('href="http') && glPanel.includes('/d/') && glPanel.includes('Under your name'));
+    check('a night on the list is not repeated under Your requests', !((you.split('<h2 class="youPanelTitle">Your requests</h2>')[1] ?? '').split('</section>')[0].split('<details')[0]).includes('GMI Test: Closed List'));
     await q(`update events set primary_image_url = 'https://pictures.example/closed-list.jpg' where id = $1`, [evClosed.id]);
     const youPic = await nadia.html('/you/membership');
-    check('each ask carries a thumbnail — the event picture, or its initial', youPic.includes('class="requestThumb" src="https://pictures.example/closed-list.jpg"') && youPic.includes('requestThumb fallback'));
+    check('the guestlisted night shows its picture', youPic.includes('src="https://pictures.example/closed-list.jpg"'));
     const mbMember = await nadia.html('/membership');
     check('/membership becomes the member view once joined', mbMember.includes('You’re in.') && mbMember.includes('How to use it') && mbMember.includes('What you’ve got')
       && !mbMember.includes('Join the waitlist') && !mbMember.includes('Join Guestlist —'));
@@ -520,6 +523,7 @@ try {
     check('ANSWER needs a message', (await oshi.json(`/api/admin/access-requests/${rec.data.requestId}`, 'PATCH', { action: 'answer' })).status === 400);
     const ans = await oshi.json(`/api/admin/access-requests/${rec.data.requestId}`, 'PATCH', { action: 'answer', memberMessage: 'Motion for the big room, Strange Brew after.' });
     check('ANSWER → answered', ans.status === 200 && ans.data.status === 'answered');
+    check('an ask about a link we do not have shows an initial tile, not a broken picture', (await marcus.html('/you/membership')).includes('requestThumb fallback'));
     check('member reads HERE’S WHAT WE THINK with the message', (await marcus.html('/you/membership')).includes('HERE’S WHAT WE THINK') && (await marcus.html('/you/membership')).includes('Strange Brew'));
     check('member notified of the answer', (await q(`select 1 from notifications where member_id = $1 and type = 'membership_request_update' and payload->>'state' = 'answered'`, [ids.marcus])).length === 1);
 
