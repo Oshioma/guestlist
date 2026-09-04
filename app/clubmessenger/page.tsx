@@ -21,6 +21,7 @@ import { NotificationsPanel } from '@/components/clubmessenger/NotificationsPane
 import { HeatCardLink } from '@/components/clubmessenger/HeatCardLink';
 import { tierHeading } from '@/lib/proximity';
 import { rankTonight, tonightGroups, knowsWhereTheyAre, homeCountryFrom } from '@/lib/tonight';
+import { DEFAULT_HOME } from '@/lib/proximity';
 import { EventImage } from '@/components/EventImage';
 
 export const dynamic = 'force-dynamic';
@@ -109,10 +110,13 @@ export default async function ClubMessengerPage() {
   const ranked = rankTonight(events, heat);
 
   // Where the member says they are, for the headings. Their own country beats
-  // the country of whatever happens to be first in the list.
+  // the country of whatever happens to be first in the list. A member who has
+  // not set a city is placed in London (lib/proximity) and the headings say
+  // so, rather than "near you" over a list we chose for them.
+  const placed = !!member.home_location_id;
   const home = {
-    city: member.home_city ?? null,
-    country: homeCountryFrom(ranked, member.home_country ?? null),
+    city: member.home_city ?? (placed ? null : DEFAULT_HOME.city),
+    country: homeCountryFrom(ranked, member.home_country ?? (placed ? null : DEFAULT_HOME.country)),
   };
   const knowsWhereIAm = knowsWhereTheyAre(ranked);
   const groups = tonightGroups(ranked);
@@ -186,11 +190,13 @@ export default async function ClubMessengerPage() {
         </>
       )}
 
-      {!knowsWhereIAm && ranked.length > 0 && (
+      {/* Placed in London by default, but still asked: London is where the
+          list starts, not where we have decided they live. */}
+      {!placed && ranked.length > 0 && (
         <p className="clubPlacePrompt">
-          {'Tonight is a local question and we don’t know where you are. '}
+          {`Tonight is a local question and we don’t know where you are, so this starts with ${DEFAULT_HOME.city}. `}
           <Link href="/you#places">Tell us your city</Link>
-          {' and this list starts with what’s on around you.'}
+          {' and it starts with what’s on around you instead.'}
         </p>
       )}
 

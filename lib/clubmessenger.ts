@@ -22,7 +22,7 @@
 
 import { query, queryOne } from './db';
 import { closeFriendSql } from './connections';
-import { memberPlaceAnchors, proximityTierSql } from './proximity';
+import { placeAnchorsFor, proximityTierSql, DEFAULT_ANCHORS } from './proximity';
 
 export const CLUB_LIMITS = {
   messagesPerMinute: 12,
@@ -235,7 +235,8 @@ export async function tonightEvents(viewerId: string): Promise<TonightEvent[]> {
     args.push(v);
     return `$${args.length}`;
   };
-  const tier = proximityTierSql(await memberPlaceAnchors(viewerId), arg);
+  // Their own places, or London when they have not set any (lib/proximity).
+  const tier = proximityTierSql(await placeAnchorsFor(viewerId), arg);
   return query<TonightEvent>(
     `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
             e.city, e.country, ${tier} as proximity,
@@ -307,6 +308,9 @@ export type TonightPublicEvent = {
   timezone: string;
   city: string | null;
   country: string | null;
+  // Ranked from London for a visitor (lib/proximity DEFAULT_ANCHORS):
+  // London first, then the rest of the UK, then everywhere else.
+  proximity: number;
   venue_name: string | null;
   primary_image_url: string | null;
   listing_status: string;
@@ -316,9 +320,18 @@ export type TonightPublicEvent = {
 };
 
 export async function tonightEventsPublic(): Promise<TonightPublicEvent[]> {
+  const args: unknown[] = [];
+  const arg = (v: unknown) => {
+    args.push(v);
+    return `$${args.length}`;
+  };
+  // A signed-out visitor has no place of their own, so Tonight is answered
+  // from London — the same default the events browse uses.
+  const tier = proximityTierSql(DEFAULT_ANCHORS, arg);
   return query<TonightPublicEvent>(
     `select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
-            e.city, e.country, v.name as venue_name, e.primary_image_url, e.listing_status,
+            e.city, e.country, ${tier} as proximity,
+            v.name as venue_name, e.primary_image_url, e.listing_status,
             e.featured, coalesce(gj.genres, '[]'::json) as genres,
             coalesce(gc.n, 0) as going_count
        from events e
@@ -333,8 +346,10 @@ export async function tonightEventsPublic(): Promise<TonightPublicEvent[]> {
           where mea.event_id = e.id and mea.rsvp = 'going'
        ) gc on true
       where ${TONIGHT_WINDOW}
-      order by e.start_at
-      limit 40`
+      -- London first, then the UK, then the world; soonest within each.
+      order by proximity, e.start_at
+      limit 40`,
+    args
   );
 }
 

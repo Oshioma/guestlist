@@ -10,7 +10,7 @@ import { EventCard } from '@/components/EventCard';
 import { FilterControls } from '@/components/FilterControls';
 import { StickyFilters } from '@/components/StickyFilters';
 import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
-import { memberPlaceAnchors } from '@/lib/proximity';
+import { placeAnchorsFor } from '@/lib/proximity';
 import { toRecCards } from '@/lib/recCards';
 import { PicksHero } from '@/components/PicksHero';
 import { AskPanel } from '@/components/ask/AskPanel';
@@ -72,10 +72,9 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 
   // Where home is, as their PLACE knows it — the profile's country field is
   // empty for anyone who set a city instead, and Worth Travelling For needs
-  // to know what "away" means.
-  const homeCountry = member
-    ? (await memberPlaceAnchors(member.id)).map((p) => p.country_name).find(Boolean) ?? null
-    : null;
+  // to know what "away" means. Nobody we cannot place is at home in the UK
+  // (lib/proximity), signed in or not.
+  const homeCountry = (await placeAnchorsFor(member?.id)).map((p) => p.country_name).find(Boolean) ?? null;
 
   const [events, genres, cities] = await Promise.all([
     browseEvents({
