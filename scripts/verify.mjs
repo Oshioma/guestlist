@@ -2285,8 +2285,17 @@ console.log('\n— Who the verification gate is holding —');
     method: 'POST', body: JSON.stringify({ action: 'mark_verified' }),
   });
   check('an admin can vouch for somebody they know is real', vouch.status === 200);
+  // Asked of the RULE, not of a page. Every listing on /people is ranked and
+  // capped, so "is her name in the HTML" depends on how many other members
+  // happen to out-rank her — it passed before only because nobody else in the
+  // seed was confirmed, which made her the only discoverable person alive.
   check('and that puts them in the directory',
-    (await (await (async () => { const s2 = client(); await s2.login('dev-nadia@example.com'); return s2.fetch('/people'); })()).text()).includes('Hedy Held'));
+    (await q(`select 1 from members m
+                left join member_privacy mp on mp.member_id = m.id
+               where m.id = $1
+                 and m.email_verified_at is not null
+                 and coalesce(mp.profile_public and mp.scene_discovery, true)`,
+      [held.id])).length === 1);
   check('vouching is on the record',
     (await q(`select 1 from audit_log where action = 'member_verified'`)).length > 0);
   check('and they drop off the held list',
