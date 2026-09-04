@@ -4099,3 +4099,94 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 .glActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .glPanel .btnGhost { border-color: rgba(255,255,255,0.35); color: #f2f1ec; }
 @media (max-width: 480px) { .glCard { grid-template-columns: 72px minmax(0, 1fr); } .glArt { width: 72px; height: 72px; } }
+
+/* ---------------------------------------------------------------------------
+   QUIET THE BRAIN — the retreats on Balance.
+
+   Set apart from the article grid on purpose. The articles are ours; these are
+   adverts for somewhere else, and a reader should be able to tell at a glance
+   which is which. So the whole section sits on a dark panel: it reads as a
+   break in the page rather than three more articles in a different typeface.
+--------------------------------------------------------------------------- */
+.retreatShelf {
+  background: #16151a;
+  color: #f3f1ee;
+  border-radius: var(--radius);
+  padding: 40px 34px 44px;
+  margin: 10px 0 54px;
+}
+.retreatShelfHead {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  gap: 24px; flex-wrap: wrap; margin-bottom: 26px;
+}
+.retreatShelfKicker {
+  font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+  color: #c9a2e8;
+}
+.retreatShelfTitle {
+  font-size: clamp(32px, 5vw, 52px); line-height: .98; letter-spacing: -.035em;
+  margin: 8px 0 0; color: #fff;
+}
+.retreatShelfLead { max-width: 340px; margin: 0; color: #a8a49c; font-size: 14px; line-height: 1.6; }
+
+.retreatGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.retreatCard {
+  display: flex; flex-direction: column; overflow: hidden;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--radius); color: inherit; text-decoration: none;
+  transition: border-color .18s ease, transform .18s ease, background .18s ease;
+}
+.retreatCard:hover { border-color: rgba(201,162,232,.55); background: rgba(255,255,255,.07); transform: translateY(-2px); }
+.retreatCardImg { position: relative; aspect-ratio: 4/3; background: #232028; overflow: hidden; }
+.retreatCardImg img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .25s ease; }
+.retreatCard:hover .retreatCardImg img { transform: scale(1.03); }
+.retreatCardNoImg {
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, #2a2333, #16151a 65%);
+}
+/* When it runs, over the picture — it is the first thing anyone wants and it
+   costs no vertical space up there. */
+.retreatCardWhen {
+  position: absolute; left: 12px; bottom: 12px;
+  background: rgba(10,9,12,.78); backdrop-filter: blur(6px);
+  color: #f3f1ee; font-size: 11.5px; font-weight: 700; letter-spacing: .02em;
+  border-radius: 999px; padding: 6px 11px;
+}
+.retreatCardBody { padding: 16px 16px 15px; display: flex; flex-direction: column; flex: 1; }
+.retreatCardWhere {
+  font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #c9a2e8;
+}
+.retreatCardTitle { font-size: 21px; line-height: 1.1; letter-spacing: -.02em; margin: 7px 0 0; color: #fff; }
+.retreatCardBlurb {
+  color: #a8a49c; font-size: 13.5px; line-height: 1.55; margin: 9px 0 0;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.retreatCardFoot {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  margin-top: auto; padding-top: 14px; font-size: 12px;
+}
+.retreatCardPrice { font-weight: 800; color: #f3f1ee; white-space: nowrap; }
+/* The price never wraps; the address gives way first, because a truncated
+   hostname still reads as "this leaves the site" and a broken price does not. */
+.retreatCardGo { color: #8d8a82; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 900px) { .retreatGrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 620px) {
+  .retreatShelf { padding: 30px 20px 34px; }
+  .retreatGrid { grid-template-columns: 1fr; }
+  .retreatShelfHead { align-items: flex-start; }
+}
+
+/* The admin side: paste a link, then check what came back. */
+.retreatRead {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); padding: 14px; margin-bottom: 16px;
+}
+.retreatReadRow { display: flex; gap: 8px; align-items: center; }
+.retreatReadRow input { flex: 1; }
+.retreatFound { margin-top: 8px; font-size: 12.5px; color: var(--text-muted); }
+.retreatPreview {
+  margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; background: var(--media-ph); max-width: 320px;
+}
+.retreatPreview img { display: block; width: 100%; height: 180px; object-fit: cover; }

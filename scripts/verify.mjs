@@ -2606,6 +2606,73 @@ console.log('\n— Deleting an article from the desk —');
     (await desk.fetch(`/api/admin/articles/${doomed.id}`, { method: 'DELETE' })).status === 404);
 }
 
+console.log('\n— Quiet the brain: retreats on Balance —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  // Nothing live yet, so Balance carries no empty heading.
+  const bare = await (await anon.fetch('/balance')).text();
+  check('with no retreats, Balance never shows the heading', !bare.includes('Quiet the brain'));
+
+  const payload = {
+    action: 'save',
+    title: 'Escape Space Zanzibar',
+    location: 'Zanzibar, Tanzania',
+    whenText: 'Monthly, October to April',
+    blurb: 'Seven days on the east coast with nothing on the schedule but the tide.',
+    imageUrl: 'https://escapespace.example.com/img/beach.jpg',
+    url: 'https://escapespace.example.com/',
+    priceText: 'From £1,200',
+    status: 'live',
+  };
+
+  check('a member cannot put an advert on Balance',
+    (await nadia.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify(payload) })).status === 403);
+  check('nor can a stranger',
+    (await anon.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify(payload) })).status === 401);
+
+  const saved = await (await desk.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify(payload) })).json();
+  check('the admin can', !!saved.id);
+
+  const page = await (await anon.fetch('/balance')).text();
+  check('and it appears under its own heading', page.includes('Quiet the brain'));
+  check('with its name', page.includes('Escape Space Zanzibar'));
+  check('where it is', page.includes('Zanzibar, Tanzania'));
+  check('when it runs, in words rather than a date', page.includes('Monthly, October to April'));
+  check('and what it costs', page.includes('From £1,200'));
+  // It is an advert for somewhere else, and it says so rather than pretending
+  // to be a Guestlist page.
+  check('the card leaves the site, and says where to',
+    page.includes('https://escapespace.example.com/') && page.includes('escapespace.example.com ↗'));
+
+  // A retreat is not a night. It must not turn up anywhere events live.
+  check('it is not an event', (await q(`select 1 from events where title = 'Escape Space Zanzibar'`)).length === 0);
+  check('and it is nowhere on the events page',
+    !(await (await anon.fetch('/events')).text()).includes('Escape Space Zanzibar'));
+
+  // Taking it down is one press and it is off the page immediately.
+  await desk.fetch('/api/admin/retreats', {
+    method: 'POST', body: JSON.stringify({ action: 'save', ...payload, id: saved.id, status: 'draft' }),
+  });
+  check('back to draft and it is off Balance',
+    !(await (await anon.fetch('/balance')).text()).includes('Escape Space Zanzibar'));
+
+  check('a retreat with no name is refused',
+    (await desk.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify({ action: 'save', title: '', url: 'https://x.example.com/' }) })).status === 400);
+  check('and one with nowhere to send anybody is too',
+    (await desk.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify({ action: 'save', title: 'Nowhere', url: '' }) })).status === 400);
+
+  check('the desk lists it', (await (await desk.fetch('/admin/retreats')).text()).includes('Escape Space Zanzibar'));
+  check('a member cannot delete it',
+    (await nadia.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify({ action: 'delete', id: saved.id }) })).status === 403);
+  check('the admin can',
+    (await desk.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify({ action: 'delete', id: saved.id }) })).status === 200);
+  check('and it is gone, not hidden', (await q(`select 1 from retreats where id = $1`, [saved.id])).length === 0);
+  check('deleting it twice is a 404, not a crash',
+    (await desk.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify({ action: 'delete', id: saved.id }) })).status === 404);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));
