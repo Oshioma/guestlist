@@ -8,6 +8,7 @@
 
 import { query } from './db';
 import { NEAR_KM } from './events';
+import { DEFAULT_HOME } from './proximity';
 import { tasteGenreIds } from './taste';
 import { track } from './analytics';
 
@@ -144,7 +145,7 @@ export async function getRecommendedEvents(
       featured: boolean;
     }
   >(
-    `with my_places as (
+    `with own_places as (
        select l.latitude, l.longitude, l.country_name
          from members m join locations l on l.id = m.home_location_id
         where m.id = $1
@@ -152,6 +153,15 @@ export async function getRecommendedEvents(
        select l.latitude, l.longitude, l.country_name
          from member_locations ml join locations l on l.id = ml.location_id
         where ml.member_id = $1
+     ),
+     -- A member who has never set a city is placed in London (lib/proximity
+     -- DEFAULT_HOME), the same stand-in every other surface uses, so their
+     -- picks are not the whole world weighted equally.
+     my_places as (
+       select * from own_places
+       union all
+       select $7::float, $8::float, $9::text
+        where not exists (select 1 from own_places)
      )
      select e.id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
             e.city, e.country, e.location_id, v.name as venue_name,
@@ -269,7 +279,8 @@ export async function getRecommendedEvents(
                          where ef.member_id = $1 and ef.event_id = e.id)
         ${ctx.excludeGoing === false ? '' : `and (my.rsvp is distinct from 'going')`}
       limit 300`,
-    [memberId, explicitIds, inferredIds, from, to, ctx.locationId ?? null]
+    [memberId, explicitIds, inferredIds, from, to, ctx.locationId ?? null,
+     DEFAULT_HOME.latitude, DEFAULT_HOME.longitude, DEFAULT_HOME.country]
   );
 
   const w = REC_WEIGHTS;

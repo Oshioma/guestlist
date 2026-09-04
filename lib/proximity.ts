@@ -44,34 +44,38 @@ export async function memberPlaceAnchors(memberId: string): Promise<PlaceAnchor[
   );
 }
 
-// WHERE A VISITOR IS WHEN THEY HAVE NOT TOLD US.
+// WHERE SOMEBODY IS WHEN THEY HAVE NOT TOLD US.
 //
-// Somebody who is not signed in has no home city and no followed cities, and
-// Guestlist is a London-born, UK-first guide. So a signed-out visitor is
-// placed in London: London nights rank first, the rest of the United Kingdom
-// next, the world after that — and Worth Travelling For means leaving the UK.
+// A visitor who is not signed in, and a member who has never set a city, have
+// no home and no followed cities — and Guestlist is a London-born, UK-first
+// guide. So they are placed in London: London nights rank first, the rest of
+// the United Kingdom next, the world after that, and Worth Travelling For
+// means leaving the UK.
 //
-// This is ONLY for the signed-out. A signed-in member with no place set keeps
-// TIER_UNKNOWN on everything (see proximityTierSql), so the site asks where
-// they live instead of quietly deciding it is London.
-export const SIGNED_OUT_HOME = {
+// This is a stand-in, not an answer. A member without a place is still asked
+// where they live (components/SetYourCity, the Tonight page), because London
+// is where we start, not where we have decided they are.
+export const DEFAULT_HOME = {
   city: 'London',
   country: 'United Kingdom',
   latitude: 51.5074,
   longitude: -0.1278,
 } as const;
 
-export const SIGNED_OUT_ANCHORS: PlaceAnchor[] = [{
-  latitude: SIGNED_OUT_HOME.latitude,
-  longitude: SIGNED_OUT_HOME.longitude,
-  country_name: SIGNED_OUT_HOME.country,
+export const DEFAULT_ANCHORS: PlaceAnchor[] = [{
+  latitude: DEFAULT_HOME.latitude,
+  longitude: DEFAULT_HOME.longitude,
+  country_name: DEFAULT_HOME.country,
   kind: 'home',
 }];
 
-// The anchors for whoever is looking: a member's own places, or London for
-// a visitor. One call so every surface ranks the signed-out the same way.
+// The anchors for whoever is looking: a member's own places when they have
+// any, London otherwise — signed out or simply never asked. One call so every
+// surface places the unplaced the same way.
 export async function placeAnchorsFor(memberId: string | null | undefined): Promise<PlaceAnchor[]> {
-  return memberId ? memberPlaceAnchors(memberId) : SIGNED_OUT_ANCHORS;
+  if (!memberId) return DEFAULT_ANCHORS;
+  const own = await memberPlaceAnchors(memberId);
+  return own.length ? own : DEFAULT_ANCHORS;
 }
 
 // The order Guestlist puts a member's world in.
@@ -79,18 +83,18 @@ export const TIER_NEAR = 0;      // near the city they live in
 export const TIER_FOLLOWED = 1;  // near a city they follow
 export const TIER_COUNTRY = 2;   // their country, or a followed city's country
 export const TIER_ELSEWHERE = 3; // the rest of the world
-// Nobody has told us where this member lives. Distinct from "near" on
-// purpose: treating an unplaced member as if everything were on their
-// doorstep is how a page ends up claiming Ibiza is local.
+// No anchors at all were given. Distinct from "near" on purpose: treating
+// nowhere as if everything were on the doorstep is how a page ends up
+// claiming Ibiza is local. Surfaces that go through placeAnchorsFor never
+// see this — they get London instead — but the SQL builder stays honest.
 export const TIER_UNKNOWN = 4;
 
 // A SQL expression giving 0 / 1 / 2 for an events row aliased `e`. `arg`
 // appends a bind parameter and returns its placeholder, so this drops into
 // whatever query the caller is already building.
 //
-// A member with no place set gets TIER_UNKNOWN for everything — a flat value,
-// so nothing is reordered, and a value a caller can recognise so it can ask
-// where they live instead of pretending to know.
+// No anchors at all gives TIER_UNKNOWN for everything — a flat value, so
+// nothing is reordered, and a value a caller can recognise.
 export function proximityTierSql(
   places: PlaceAnchor[],
   arg: (value: unknown) => string,
