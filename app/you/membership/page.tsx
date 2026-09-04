@@ -73,7 +73,31 @@ export default async function YourMembershipPage() {
   const { live: liveAll, past } = splitRequests(requests);
   // Nights already on the door list lead the page; no need to list them twice.
   const onList = new Set(guestlisted.map((g) => g.event_id));
-  const live = liveAll.filter((r) => !(r.event_id && r.entry_status === 'confirmed' && onList.has(r.event_id)));
+  // Every night that is sorted leads the page: the door-list entries, plus
+  // any request Guestlist has confirmed without a door entry (a ticket we
+  // bought, a name given by hand, an event we do not have yet). The desk's
+  // message to the member stands in for the pass in that case.
+  type Night = {
+    key: string; title: string; slug: string | null; start_at: string | null; end_at: string | null; timezone: string | null;
+    image_url: string | null; venue_name: string | null; city: string | null; plus_ones: number;
+    promoter_name: string | null; entry_id: string | null; checked_in: boolean; note: string | null;
+  };
+  const nights: Night[] = [
+    ...guestlisted.map((g) => ({
+      key: `entry:${g.entry_id}`, title: g.title, slug: g.slug, start_at: g.start_at, end_at: g.end_at, timezone: g.timezone,
+      image_url: g.image_url, venue_name: g.venue_name, city: g.city, plus_ones: g.plus_ones,
+      promoter_name: g.promoter_name, entry_id: g.entry_id, checked_in: !!g.checked_in_at, note: null,
+    })),
+    ...liveAll
+      .filter((r) => r.friendly.key === 'guestlisted' && !(r.event_id && onList.has(r.event_id)))
+      .map((r) => ({
+        key: `request:${r.id}`, title: r.title, slug: r.slug, start_at: r.start_at, end_at: r.end_at, timezone: r.timezone,
+        image_url: r.image_url, venue_name: r.venue_name, city: r.city, plus_ones: Math.max(0, r.places - 1),
+        promoter_name: null, entry_id: null, checked_in: false, note: r.friendly.body,
+      })),
+  ].sort((a, b) => (a.start_at ?? '9').localeCompare(b.start_at ?? '9'));
+  const shown = new Set(nights.map((n) => n.key));
+  const live = liveAll.filter((r) => !shown.has(`request:${r.id}`) && !(r.event_id && r.entry_status === 'confirmed' && onList.has(r.event_id)));
   const since = m?.member_since ? fmtMonth(m.member_since) : null;
   const periodEnd = m?.current_period_end ? fmtDay(m.current_period_end) : null;
   const refunds = m?.billing_source === 'stripe' ? await memberRefunds(me.id) : [];
@@ -94,26 +118,33 @@ export default async function YourMembershipPage() {
         <Link href="/you" className="btnGhost">Your Guestlist →</Link>
       </div>
 
-      {guestlisted.length > 0 && (
+      {nights.length > 0 && (
         <section className="glPanel" aria-label="You’re on the guestlist">
           <div className="glKicker">Guestlist Membership</div>
           <h2 className="glTitle">You’re on the guestlist.</h2>
-          <p className="glSub">{guestlisted.length === 1 ? 'One night sorted.' : `${guestlisted.length} nights sorted.`} Bring ID, arrive before the list closes, and show your pass at the door.</p>
+          <p className="glSub">{nights.length === 1 ? 'One night sorted.' : `${nights.length} nights sorted.`} Bring ID, arrive before the list closes, and show your pass at the door.</p>
           <div className="glGrid">
-            {guestlisted.map((g) => (
-              <article className="glCard" key={g.entry_id}>
-                <Link href={`/events/${g.slug}`} className="glArt">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {g.image_url ? <img src={g.image_url} alt="" loading="lazy" /> : <span className="glArtFallback" aria-hidden>{g.title.trim().charAt(0).toUpperCase()}</span>}
-                </Link>
+            {nights.map((g) => (
+              <article className="glCard" key={g.key}>
+                {g.slug ? (
+                  <Link href={`/events/${g.slug}`} className="glArt">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {g.image_url ? <img src={g.image_url} alt="" loading="lazy" /> : <span className="glArtFallback" aria-hidden>{g.title.trim().charAt(0).toUpperCase()}</span>}
+                  </Link>
+                ) : (
+                  <span className="glArt">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {g.image_url ? <img src={g.image_url} alt="" loading="lazy" /> : <span className="glArtFallback" aria-hidden>{g.title.trim().charAt(0).toUpperCase()}</span>}
+                  </span>
+                )}
                 <div className="glBody">
-                  <span className="reqChip guestlisted glChip">{g.checked_in_at ? 'CHECKED IN' : 'ON THE GUESTLIST'}</span>
-                  <Link href={`/events/${g.slug}`} className="glName">{g.title}</Link>
-                  <div className="glMeta">{[fmtEventDate(g.start_at, g.end_at, g.timezone ?? 'Europe/London'), g.venue_name, g.city].filter(Boolean).join(' · ')}</div>
-                  <div className="glMeta">Under your name{g.plus_ones > 0 ? `, you +${g.plus_ones}` : ''}, with {g.promoter_name}.</div>
+                  <span className="reqChip guestlisted glChip">{g.checked_in ? 'CHECKED IN' : 'ON THE GUESTLIST'}</span>
+                  {g.slug ? <Link href={`/events/${g.slug}`} className="glName">{g.title}</Link> : <span className="glName">{g.title}</span>}
+                  <div className="glMeta">{[g.start_at ? fmtEventDate(g.start_at, g.end_at, g.timezone ?? 'Europe/London') : 'Date to come', g.venue_name, g.city].filter(Boolean).join(' · ')}</div>
+                  <div className="glMeta">{g.promoter_name ? `Under your name${g.plus_ones > 0 ? `, you +${g.plus_ones}` : ''}, with ${g.promoter_name}.` : (g.note ?? 'Sorted by Guestlist — check your email for the details.')}</div>
                   <div className="glActions">
-                    <a href={doorUrl(g.entry_id)} className="btnAccent" target="_blank" rel="noopener noreferrer">Your pass →</a>
-                    <Link href={`/events/${g.slug}`} className="btnGhost">Event</Link>
+                    {g.entry_id && <a href={doorUrl(g.entry_id)} className="btnAccent" target="_blank" rel="noopener noreferrer">Your pass →</a>}
+                    {g.slug && <Link href={`/events/${g.slug}`} className="btnGhost">Event</Link>}
                   </div>
                 </div>
               </article>
