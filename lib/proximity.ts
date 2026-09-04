@@ -44,6 +44,36 @@ export async function memberPlaceAnchors(memberId: string): Promise<PlaceAnchor[
   );
 }
 
+// WHERE A VISITOR IS WHEN THEY HAVE NOT TOLD US.
+//
+// Somebody who is not signed in has no home city and no followed cities, and
+// Guestlist is a London-born, UK-first guide. So a signed-out visitor is
+// placed in London: London nights rank first, the rest of the United Kingdom
+// next, the world after that — and Worth Travelling For means leaving the UK.
+//
+// This is ONLY for the signed-out. A signed-in member with no place set keeps
+// TIER_UNKNOWN on everything (see proximityTierSql), so the site asks where
+// they live instead of quietly deciding it is London.
+export const SIGNED_OUT_HOME = {
+  city: 'London',
+  country: 'United Kingdom',
+  latitude: 51.5074,
+  longitude: -0.1278,
+} as const;
+
+export const SIGNED_OUT_ANCHORS: PlaceAnchor[] = [{
+  latitude: SIGNED_OUT_HOME.latitude,
+  longitude: SIGNED_OUT_HOME.longitude,
+  country_name: SIGNED_OUT_HOME.country,
+  kind: 'home',
+}];
+
+// The anchors for whoever is looking: a member's own places, or London for
+// a visitor. One call so every surface ranks the signed-out the same way.
+export async function placeAnchorsFor(memberId: string | null | undefined): Promise<PlaceAnchor[]> {
+  return memberId ? memberPlaceAnchors(memberId) : SIGNED_OUT_ANCHORS;
+}
+
 // The order Guestlist puts a member's world in.
 export const TIER_NEAR = 0;      // near the city they live in
 export const TIER_FOLLOWED = 1;  // near a city they follow

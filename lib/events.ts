@@ -1,7 +1,7 @@
 // Event queries for discovery, detail and admin surfaces.
 
 import { query, queryOne } from './db';
-import { memberPlaceAnchors, proximityTierSql } from './proximity';
+import { placeAnchorsFor, proximityTierSql, SIGNED_OUT_HOME } from './proximity';
 
 export type GenreTag = { id: string; name: string; slug: string; parent_genre_id: string | null };
 
@@ -118,7 +118,10 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
       //    Paris night nobody had flagged was invisible.
       // 2. `e.country <> home` drops every event with NO country recorded.
       //    An event whose country we never captured is not thereby at home.
-      const home = params.member?.home_country ?? params.homeCountry ?? null;
+      // A visitor who is not signed in is at home in the UK (lib/proximity),
+      // so "away" means outside the United Kingdom for them.
+      const home = params.member?.home_country ?? params.homeCountry
+        ?? (params.member ? null : SIGNED_OUT_HOME.country);
       const eventCountry =
         `coalesce(e.country, (select l.country_name from locations l where l.id = e.location_id))`;
       where.push(
@@ -180,9 +183,11 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
   // where somebody lives.
   // Worth Travelling For is *about* leaving home, so it never gets the
   // near-home tier applied to it.
+  // A signed-out visitor is placed in London (lib/proximity): London first,
+  // then the rest of the UK, then the world — a UK guide by default.
   let proximityTier = '(select 0)';
-  if (params.member?.id && params.tab !== 'travel') {
-    proximityTier = proximityTierSql(await memberPlaceAnchors(params.member.id), arg);
+  if (params.tab !== 'travel') {
+    proximityTier = proximityTierSql(await placeAnchorsFor(params.member?.id), arg);
   }
 
   // Recommended ranking: near home first, then featured, then follow +
