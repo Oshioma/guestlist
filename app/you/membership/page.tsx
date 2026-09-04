@@ -5,7 +5,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { billingEnabled, currentMemberWithMembership, formatPence, getPlan, membershipLabel } from '@/lib/membership';
-import { memberRequests, requestTypeLabel, type MemberRequest } from '@/lib/accessRequests';
+import { memberGuestlisted, memberRequests, requestTypeLabel, type MemberRequest } from '@/lib/accessRequests';
+import { doorUrl } from '@/lib/doorPass';
 import { listApprovedBusinesses, memberClaims, offerHeadline } from '@/lib/market';
 import { liveDrops, liveGoodCauses, memberDropClaims } from '@/lib/drops';
 import { fmtEventDate } from '@/lib/util';
@@ -62,13 +63,17 @@ function RequestLine({ r, closed = false }: { r: MemberRequest; closed?: boolean
 export default async function YourMembershipPage() {
   const me = await currentMemberWithMembership();
   if (!me) redirect('/login?next=/you/membership');
-  const [plan, requests, businesses, claims, drops, dropClaims, causes] = await Promise.all([
+  const [plan, requests, businesses, claims, drops, dropClaims, causes, guestlisted] = await Promise.all([
     getPlan(), memberRequests(me.id), listApprovedBusinesses({ featuredOnly: true, limit: 6 }),
     memberClaims(me.id, 6), me.isMember ? liveDrops() : Promise.resolve([]), memberDropClaims(me.id), liveGoodCauses(),
+    memberGuestlisted(me.id),
   ]);
   const price = formatPence(plan?.price_pence ?? 3000, plan?.currency ?? 'GBP');
   const m = me.membership;
-  const { live, past } = splitRequests(requests);
+  const { live: liveAll, past } = splitRequests(requests);
+  // Nights already on the door list lead the page; no need to list them twice.
+  const onList = new Set(guestlisted.map((g) => g.event_id));
+  const live = liveAll.filter((r) => !(r.event_id && r.entry_status === 'confirmed' && onList.has(r.event_id)));
   const since = m?.member_since ? fmtMonth(m.member_since) : null;
   const periodEnd = m?.current_period_end ? fmtDay(m.current_period_end) : null;
   const refunds = m?.billing_source === 'stripe' ? await memberRefunds(me.id) : [];
@@ -88,6 +93,34 @@ export default async function YourMembershipPage() {
         </div>
         <Link href="/you" className="btnGhost">Your Guestlist →</Link>
       </div>
+
+      {guestlisted.length > 0 && (
+        <section className="glPanel" aria-label="You’re on the guestlist">
+          <div className="glKicker">Guestlist Membership</div>
+          <h2 className="glTitle">You’re on the guestlist.</h2>
+          <p className="glSub">{guestlisted.length === 1 ? 'One night sorted.' : `${guestlisted.length} nights sorted.`} Bring ID, arrive before the list closes, and show your pass at the door.</p>
+          <div className="glGrid">
+            {guestlisted.map((g) => (
+              <article className="glCard" key={g.entry_id}>
+                <Link href={`/events/${g.slug}`} className="glArt">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {g.image_url ? <img src={g.image_url} alt="" loading="lazy" /> : <span className="glArtFallback" aria-hidden>{g.title.trim().charAt(0).toUpperCase()}</span>}
+                </Link>
+                <div className="glBody">
+                  <span className="reqChip guestlisted glChip">{g.checked_in_at ? 'CHECKED IN' : 'ON THE GUESTLIST'}</span>
+                  <Link href={`/events/${g.slug}`} className="glName">{g.title}</Link>
+                  <div className="glMeta">{[fmtEventDate(g.start_at, g.end_at, g.timezone ?? 'Europe/London'), g.venue_name, g.city].filter(Boolean).join(' · ')}</div>
+                  <div className="glMeta">Under your name{g.plus_ones > 0 ? `, you +${g.plus_ones}` : ''}, with {g.promoter_name}.</div>
+                  <div className="glActions">
+                    <a href={doorUrl(g.entry_id)} className="btnAccent" target="_blank" rel="noopener noreferrer">Your pass →</a>
+                    <Link href={`/events/${g.slug}`} className="btnGhost">Event</Link>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="memberGrid">
         <section className="youPanel">

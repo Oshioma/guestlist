@@ -4072,3 +4072,30 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 .requestThumb.fallback { display: grid; place-items: center; font-weight: 800; font-size: 20px; color: var(--accent-ink); background: var(--accent-soft); border-color: transparent; }
 .requestThumbLink { display: block; line-height: 0; }
 @media (max-width: 480px) { .requestRow.withThumb { grid-template-columns: 44px minmax(0, 1fr) auto; } .requestThumb { width: 44px; height: 44px; } }
+
+/* /you/membership: the nights you are on the list for lead the page. */
+.glPanel {
+  position: relative; overflow: hidden; margin-top: 18px; padding: clamp(22px, 4vw, 36px);
+  border-radius: var(--radius); background: #0d0b12; color: #f2f1ec;
+}
+.glPanel::before {
+  content: ""; position: absolute; inset: -40%; pointer-events: none;
+  background: radial-gradient(circle at 15% 20%, rgba(124,74,158,0.6), transparent 42%), radial-gradient(circle at 85% 80%, rgba(201,162,232,0.3), transparent 40%);
+}
+.glPanel > * { position: relative; z-index: 1; }
+.glKicker { font-size: 11px; letter-spacing: 2.4px; text-transform: uppercase; font-weight: 700; color: #c9a2e8; margin-bottom: 8px; }
+.glTitle { font-size: clamp(28px, 5vw, 44px); font-weight: 800; letter-spacing: -0.03em; line-height: 0.95; margin: 0 0 8px; text-transform: uppercase; }
+.glSub { margin: 0 0 18px; color: rgba(242,241,236,0.78); font-size: 14.5px; max-width: 60ch; }
+.glGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.glCard { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 14px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 12px; }
+.glArt { display: block; width: 96px; height: 96px; border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.08); }
+.glArt img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.glArtFallback { display: grid; place-items: center; width: 100%; height: 100%; font-size: 34px; font-weight: 800; color: #c9a2e8; }
+.glBody { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.glChip { align-self: flex-start; color: #8fd3a0; border-color: rgba(143,211,160,0.5); background: rgba(69,112,76,0.25); }
+.glName { font-weight: 800; font-size: 16px; letter-spacing: -0.2px; color: #f2f1ec; text-decoration: none; line-height: 1.2; }
+.glName:hover { text-decoration: underline; }
+.glMeta { font-size: 12.5px; color: rgba(242,241,236,0.72); }
+.glActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.glPanel .btnGhost { border-color: rgba(255,255,255,0.35); color: #f2f1ec; }
+@media (max-width: 480px) { .glCard { grid-template-columns: 72px minmax(0, 1fr); } .glArt { width: 72px; height: 72px; } }

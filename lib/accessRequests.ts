@@ -596,6 +596,35 @@ export async function liveRequestFor(memberId: string, eventId: string): Promise
   return row ? decorate(row) : null;
 }
 
+// --- Where you are on the list --------------------------------------------
+//
+// The point of the membership, stated plainly: the upcoming nights this
+// member has a confirmed door entry for — however it got there (the desk,
+// an open list, the promoter's own button) — with the pass to show.
+
+export type GuestlistedEvent = {
+  entry_id: string; plus_ones: number; checked_in_at: string | null; source: string; promoter_name: string;
+  event_id: string; title: string; slug: string; start_at: string; end_at: string | null; timezone: string;
+  image_url: string | null; venue_name: string | null; city: string | null;
+};
+
+export async function memberGuestlisted(memberId: string, limit = 20): Promise<GuestlistedEvent[]> {
+  return query<GuestlistedEvent>(
+    `select g.id as entry_id, g.plus_ones, g.checked_in_at::text, g.source, p.name as promoter_name,
+            e.id as event_id, e.title, e.slug, e.start_at::text, e.end_at::text, e.timezone,
+            e.primary_image_url as image_url, v.name as venue_name, e.city
+       from event_guestlist_entries g
+       join events e on e.id = g.event_id
+       join promoters p on p.id = g.promoter_id
+       left join venues v on v.id = e.venue_id
+      where g.member_id = $1 and g.status = 'confirmed'
+        and coalesce(e.end_at, e.start_at + interval '6 hours') > now()
+      order by e.start_at asc
+      limit $2`,
+    [memberId, limit]
+  );
+}
+
 export async function memberRequests(memberId: string, limit = 40): Promise<MemberRequest[]> {
   const rows = await query<Omit<MemberRequest, 'friendly'>>(
     `${MEMBER_REQUEST_SQL}
