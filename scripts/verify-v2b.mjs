@@ -323,9 +323,21 @@ try {
     const connect = await alex.fetch(`/api/promoter/${nb}/source`, {
       method: 'POST', body: JSON.stringify({ url: `${FIX}/events` }),
     });
-    check('owner connects website', connect.status === 201);
-    const src = (await q(`select id, promoter_id, polling_enabled from event_sources where promoter_id = $1`, [nb]))[0];
-    check('source linked to promoter with polling scheduled', !!src && src.polling_enabled === true);
+    const connected = await connect.json();
+    check('owner connects website', connect.status === 201 && !!connected.sourceId);
+
+    // Pinned to the row that was just created. Looking it up by promoter and
+    // taking the first of an unordered result was testing whichever row the
+    // database felt like returning — and the seed already ships one.
+    const src = (await q(
+      `select id, promoter_id, polling_enabled from event_sources where id = $1`,
+      [connected.sourceId]))[0];
+    check('the source is linked to the promoter', !!src && src.promoter_id === nb);
+    // CONNECTING IS NOT SUBSCRIBING. Adding a site says "read this", not "read
+    // this every day for ever" — a schedule nobody chose is a schedule nobody
+    // is watching, so an admin turns polling on once the scans look right.
+    // This check used to assert the opposite and had been red ever since.
+    check('and connecting does not schedule polling by itself', src.polling_enabled === false);
 
     const scan = await (await alex.fetch(`/api/promoter/${nb}/source/scan`, { method: 'POST' })).json();
     check('first scan finds both events', scan.ok && scan.found === 2 && scan.newEvents === 2, JSON.stringify(scan));
