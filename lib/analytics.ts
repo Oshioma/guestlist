@@ -97,6 +97,8 @@ export type AnalyticsEventType =
   | 'market_business_decided'
   | 'member_drop_viewed'
   | 'member_drop_claimed'
+  // Balance
+  | 'retreat_clicked'
   // ASK GUESTLIST
   | 'ask_guestlist_opened'
   | 'ask_guestlist_submitted'

@@ -23,6 +23,7 @@ const GROUPS: { name: string; items: Item[] }[] = [
     name: 'Editorial',
     items: [
       { href: '/admin/articles', label: 'Articles' },
+      { href: '/admin/retreats', label: 'Retreats' },
       { href: '/admin/archive', label: 'Archive' },
       { href: '/admin/video-archive', label: 'Video' },
     ],

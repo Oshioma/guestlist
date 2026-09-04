@@ -44,6 +44,7 @@ export const MIGRATION_FILES: string[] = [
   '037_scan_progress.sql',
   '038_guestlist_confirmation.sql',
   '039_waitlist_invite.sql',
+  '040_retreats.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
@@ -145,6 +146,7 @@ export const EXPECTED_TABLES: string[] = [
   'promoter_notifications',
   'promoter_outreach',
   'promoters',
+  'retreats',
   'room_message_reports',
   'scene_entities',
   'scene_entity_links',

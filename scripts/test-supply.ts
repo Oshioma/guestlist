@@ -43,6 +43,7 @@ import { findListingLink, previewBody } from '@/lib/supply/probe';
 import { testVerdict } from '@/lib/supply/verdict';
 import { fetcherFor, renderingConfigured } from '@/lib/supply/render';
 import { parse } from 'node-html-parser';
+import { readRetreatLink } from '@/lib/retreats';
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 const q = (text: string, params: unknown[] = []) => db.query(text, params).then((r) => r.rows);
@@ -2231,6 +2232,70 @@ async function main() {
     const fresh = await startScan(src.id);
     check('a scan that has only just started is still running', (await getScan(fresh))?.running === true);
     check('and the sweep does not touch it', (await sweepStaleScans(src.id)) === 0);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— Reading a retreat\'s own page —');
+  {
+    // What a retreat website actually looks like: OpenGraph tags, a paragraph
+    // of marketing, and no date anywhere, because it runs in seasons.
+    const RETREAT_URL = 'https://escapespace.example.com/';
+    const RETREAT_PAGE = `<!doctype html><html><head>
+      <title>Escape Space Zanzibar | Paradise Beyond</title>
+      <meta property="og:title" content="Escape Space Zanzibar" />
+      <meta property="og:description" content="Seven days on the east coast with nothing on the schedule but the tide. Yoga if you want it, and nobody minds if you do not." />
+      <meta property="og:image" content="https://escapespace.example.com/img/beach.jpg" />
+      <link rel="canonical" href="https://escapespace.example.com/" />
+      </head><body><h1>Escape Space</h1><p>Book a week.</p></body></html>`;
+
+    const out = await readRetreatLink(RETREAT_URL, {
+      fetcher: mockFetcher({ [RETREAT_URL]: { body: RETREAT_PAGE } }),
+    });
+    check('a retreat page with no date at all still reads', out.ok === true);
+    if (out.ok) {
+      check('the name comes off the page', out.draft.title === 'Escape Space Zanzibar');
+      check('so does the picture', out.draft.imageUrl === 'https://escapespace.example.com/img/beach.jpg');
+      check('and the description', (out.draft.blurb ?? '').startsWith('Seven days on the east coast'));
+      check('the link is the page\'s own canonical', out.draft.url === RETREAT_URL);
+      // The whole reason retreats are not events: nothing on the page says
+      // when it runs, and we would rather show nothing than invent a date.
+      check('when it runs is never invented', out.draft.whenText === null);
+      check('and the admin is told what was actually read',
+        out.found.includes('title') && out.found.includes('image') && out.found.includes('blurb'));
+    }
+
+    // The event pipeline would reject this same page outright — that is the
+    // behaviour retreats had to route around, so it is worth pinning down.
+    const asEvent = await runExtractionPipeline(RETREAT_URL, {
+      fetcher: mockFetcher({ [RETREAT_URL]: { body: RETREAT_PAGE } }), ai: noAI,
+    });
+    check('the same page is not an event, and the event pipeline says so',
+      asEvent.status === 'insufficient_information', asEvent.status);
+
+    const longBlurb = `<!doctype html><html><head><title>Long</title>
+      <meta property="og:description" content="${'word '.repeat(120).trim()}" />
+      </head><body></body></html>`;
+    const trimmed = await readRetreatLink('https://long.example.com/', {
+      fetcher: mockFetcher({ 'https://long.example.com/': { body: longBlurb } }),
+    });
+    check('a page that will not stop talking is cut short',
+      trimmed.ok && (trimmed.draft.blurb ?? '').length <= 241 && (trimmed.draft.blurb ?? '').endsWith('\u2026'));
+    // Every word in the fixture is "word", so a clean break leaves a whole
+    // one before the ellipsis and a mid-word break leaves "wor" or "wo".
+    check('and cut at a word, not mid-word',
+      trimmed.ok && /(^|\s)word\u2026$/.test(trimmed.draft.blurb ?? ''));
+
+    const missing = await readRetreatLink('https://nothing.example.com/', {
+      fetcher: mockFetcher({}),
+    });
+    check('a page we cannot reach is advice, not a crash',
+      !missing.ok && /not found|by hand/i.test(missing.ok ? '' : missing.error));
+
+    // An admin pasting a link is still pasting a URL from outside, so the
+    // SSRF guard has to stand in front of this door too.
+    const internal = await readRetreatLink('http://169.254.169.254/latest/meta-data/');
+    check('an admin cannot make the server read its own metadata service',
+      !internal.ok && /allowed to fetch|web address/i.test(internal.ok ? '' : internal.error));
   }
 
   // -------------------------------------------------------------------------
