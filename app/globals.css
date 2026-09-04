@@ -4065,3 +4065,10 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 }
 .memoryCardWho a { color: var(--text-muted); text-decoration: underline; }
 .memoryCardWho a:hover { color: var(--text); }
+
+/* Your asks: a thumbnail of the night beside each one. */
+.requestRow.withThumb { grid-template-columns: 56px minmax(0, 1fr) auto; }
+.requestThumb { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; display: block; background: var(--bg-raised); border: 1px solid var(--border); }
+.requestThumb.fallback { display: grid; place-items: center; font-weight: 800; font-size: 20px; color: var(--accent-ink); background: var(--accent-soft); border-color: transparent; }
+.requestThumbLink { display: block; line-height: 0; }
+@media (max-width: 480px) { .requestRow.withThumb { grid-template-columns: 44px minmax(0, 1fr) auto; } .requestThumb { width: 44px; height: 44px; } }

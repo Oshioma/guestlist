@@ -561,6 +561,7 @@ export type MemberRequest = {
   venue_name: string | null;
   city: string | null;
   external_url: string | null;
+  image_url: string | null;
   friendly: FriendlyState;
 };
 
@@ -573,7 +574,8 @@ const MEMBER_REQUEST_SQL = `
            when 'afterparty' then 'Afterparty'
            else 'Your ask' end) as title,
          e.slug, coalesce(e.start_at, x.starts_at)::text as start_at, e.end_at::text, e.timezone,
-         coalesce(e.city, x.city) as city, coalesce(v.name, x.venue_name) as venue_name, x.url as external_url
+         coalesce(e.city, x.city) as city, coalesce(v.name, x.venue_name) as venue_name, x.url as external_url,
+         e.primary_image_url as image_url
     from member_access_requests r
     left join events e on e.id = r.event_id
     left join venues v on v.id = e.venue_id
