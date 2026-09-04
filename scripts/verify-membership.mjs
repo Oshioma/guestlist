@@ -542,7 +542,9 @@ try {
     const conf = await oshi.json(`/api/admin/access-requests/${n1.data.requestId}`, 'PATCH', { action: 'confirm_free', fulfilmentMethod: 'venue', memberMessage: 'You’re on the door under your name.' });
     check('CONFIRM FREE on an external request (no door list, message says how)', conf.status === 200 && conf.data.status === 'confirmed_free'
       && (await q(`select guestlist_entry_id, fulfilment_method from member_access_requests where id = $1`, [n1.data.requestId]))[0].guestlist_entry_id === null);
-    check('member reads YOU’RE ON THE GUESTLIST for an external event', (await nadia.html('/you/membership')).includes('under your name'));
+    const youExt = await nadia.html('/you/membership');
+    check('member reads YOU’RE ON THE GUESTLIST for an external event', youExt.includes('under your name'));
+    check('a confirmed night with no door entry still leads the page', (youExt.split('aria-label="You’re on the guestlist"')[1] ?? '').split('class="memberGrid"')[0].includes('under your name'));
 
     // CREATE / IMPORT runs the EXISTING submission pipeline against a fixture page.
     const fixture = http.createServer((req, res) => {
