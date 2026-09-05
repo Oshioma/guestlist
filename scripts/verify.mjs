@@ -2683,6 +2683,27 @@ console.log('\n— Quiet the brain: retreats on Balance —');
     (await desk.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify({ action: 'delete', id: saved.id }) })).status === 404);
 }
 
+console.log('\n— Balance does not ask you to write —');
+{
+  // Three buttons asked a reader to contribute before they had finished
+  // reading: one in the hero, one under the articles, one on the home page.
+  // The invitation lives in the footer now, once, on every page.
+  const bal = await (await anon.fetch('/balance')).text();
+  const home = await (await anon.fetch('/')).text();
+  const strip = (html) => html.replace(/<script[\s\S]*?<\/script>/g, '');
+  const footerOf = (html) => strip(html).slice(strip(html).indexOf('siteFooter'));
+  const bodyOf = (html) => strip(html).slice(0, strip(html).indexOf('siteFooter'));
+
+  check('the Balance hero does not ask', !/Write for Balance|Sign in to write/.test(bodyOf(bal)));
+  check('nor does anything under the articles', !/Got something worth saying|Start an article/.test(bodyOf(bal)));
+  check('and the home page band does not either', !/Add article/.test(bodyOf(home)));
+  check('the footer still asks, once', footerOf(bal).includes('Add article'));
+  check('on every page', footerOf(home).includes('Add article'));
+  // Removing the buttons must not remove the way in.
+  check('and the way in still works',
+    [200, 307, 302].includes((await anon.fetch('/articles/new')).status));
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));
