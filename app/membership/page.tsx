@@ -41,8 +41,9 @@ export default async function MembershipPage({ searchParams }: { searchParams: P
         <h1 className="mbTitle">Get in.</h1>
         <p className="mbPrice">Guestlist Membership — {price}/month</p>
         <p className="mbLead">
-          Free entrance to parties. Queue jumps. Member offers. Independent businesses.
-          And a membership that does some good along the way.
+          Free entrance to parties. Ask us about any party anywhere. Member offers,
+          queue jumps, independent businesses — and a membership that does some good
+          along the way.
         </p>
         {sp.cancelled && <p className="mbErr" style={{ marginBottom: 14 }}>No charge was made. Whenever you’re ready.</p>}
         <JoinCta mode={live ? 'checkout' : 'waitlist'} isSignedIn={!!me} isMember={!!me?.isMember} onWaitlist={onWaitlist} price={price} />

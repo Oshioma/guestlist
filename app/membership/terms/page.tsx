@@ -24,31 +24,35 @@ export default function MembershipTermsPage() {
         <h2>3. Fair use</h2>
         <p>Membership is built on Guestlist using its judgement to look after members. There is no fixed number of free events. In return, we ask that requests are reasonable. Guestlist may decline, limit or prioritise requests that are unusually frequent, unusually costly, made for events you do not attend, or otherwise outside reasonable use of the membership. We will always try to tell you why. We do not automatically restrict members by formula; decisions are made by people at Guestlist.</p>
 
-        <h2>4. Queue jump and priority entrance</h2>
+        <h2>4. Ask Guestlist — events we do not list</h2>
+        <p>Members can also send Guestlist an event that is not listed on the site — a link, a flyer, a social media post — or ask for a recommendation, a +1, an afterparty, or somewhere to go in a city they are visiting. Requests are read by people at Guestlist, and we will tell you what we can do either way.</p>
+        <p>The same limits in sections 2 and 3 apply: nothing is guaranteed, what we can arrange depends on the event and our relationship with whoever runs it, and requests made very close to an event may not be possible to fulfil. Where an event is unsuitable, unsafe, or run by someone we cannot verify, Guestlist may decline the request. Guestlist has no relationship with, and no responsibility for, events and organisers it does not list.</p>
+
+        <h2>5. Queue jump and priority entrance</h2>
         <p>Priority, fast-track or queue-jump entrance is offered by participating events and venues and only applies where it is available. It is not offered at every event and may be withdrawn by the organiser or venue at any time.</p>
 
-        <h2>5. Guestlist Market and member offers</h2>
+        <h2>6. Guestlist Market and member offers</h2>
         <p>Guestlist Market offers are provided by independent businesses selected by Guestlist. Each offer has its own terms, set by that business, which are shown with the offer. The business — not Guestlist — is responsible for the goods and services it supplies, including their quality, availability, safety and any refunds. Offers can change or end at any time, and membership does not guarantee that any particular offer or business will remain available. Claim codes are for the member who claimed them and cannot be sold, transferred or shared.</p>
 
-        <h2>6. Member drops and community projects</h2>
+        <h2>7. Member drops and community projects</h2>
         <p>Member drops are occasional and discretionary; they may be limited in number and offered on a first-come basis. Where Guestlist describes community projects supported by the membership, the details of each project are as published on the site at the time; Guestlist will not make claims about contributions that it does not make.</p>
 
-        <h2>7. Your membership account</h2>
+        <h2>8. Your membership account</h2>
         <p>Membership is personal to you and attached to your Guestlist account. Sharing your account or membership benefits, reselling or transferring places, codes or tickets arranged for you, using benefits fraudulently or providing false information may result in suspension or termination of your membership without refund of the current month, and may result in suspension of your Guestlist account.</p>
 
-        <h2>8. Payment, renewal and cancellation</h2>
+        <h2>9. Payment, renewal and cancellation</h2>
         <p>Payments are taken by our payment provider (Stripe) using the card you provide. Your membership renews automatically each month until cancelled. You can cancel at any time from your membership page; cancellation stops future renewals and your membership continues until the end of the period you have already paid for, in accordance with the payment provider’s billing terms. If a payment fails we will let you know and retry it; if it cannot be collected your membership will lapse. Guestlist may change the membership price with reasonable notice; any change applies from your next renewal after that notice, and you may cancel before it takes effect. Complimentary memberships granted by Guestlist may carry an expiry date and may be withdrawn by Guestlist.</p>
 
-        <h2>9. Changes to the membership</h2>
+        <h2>10. Changes to the membership</h2>
         <p>Guestlist may add, change or remove benefits, participating events, venues, businesses and offers as the membership develops. Material changes will be reflected on the membership page and, where appropriate, told to members directly.</p>
 
-        <h2>10. Liability</h2>
+        <h2>11. Liability</h2>
         <p>Nothing in these terms excludes liability that cannot lawfully be excluded. To the extent permitted by law, Guestlist is not liable for refused admission, event cancellations or changes, the acts or omissions of promoters, venues or Market businesses, or for indirect or consequential loss. Where Guestlist has purchased a ticket on your behalf, the ticket seller’s terms also apply to that ticket.</p>
 
-        <h2>11. Your statutory rights</h2>
+        <h2>12. Your statutory rights</h2>
         <p>These terms do not affect your statutory rights as a consumer, including rights relating to cancellation, faulty services and unfair terms under the laws of England and Wales.</p>
 
-        <h2>12. Contact</h2>
+        <h2>13. Contact</h2>
         <p>Questions about membership can be sent to <a href="mailto:info@guestlist.net">info@guestlist.net</a>.</p>
       </div>
     </main>

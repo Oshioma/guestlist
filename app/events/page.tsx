@@ -8,6 +8,7 @@ import {
 import { query } from '@/lib/db';
 import { EventCard } from '@/components/EventCard';
 import { FilterControls } from '@/components/FilterControls';
+import { EventSearch } from '@/components/EventSearch';
 import { StickyFilters } from '@/components/StickyFilters';
 import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
 import { placeAnchorsFor } from '@/lib/proximity';
@@ -67,6 +68,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   const lat = one(sp.lat) ? Number(one(sp.lat)) : null;
   const lng = one(sp.lng) ? Number(one(sp.lng)) : null;
   const showAllGenres = one(sp.more) === '1';
+  const q = (one(sp.q) ?? '').trim().slice(0, 120) || null;
 
   const { from, to } = datePresetRange(datePreset);
 
@@ -90,6 +92,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
       lng: Number.isFinite(lng as number) ? lng : null,
       radiusKm: lat != null && lng != null ? 80 : null,
       sort,
+      q,
       member: member ? { id: member.id, home_country: member.home_country } : null,
       homeCountry,
     }),
@@ -196,6 +199,8 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
             </Link>
           )}
         </div>
+
+        <EventSearch initial={q ?? ''} />
 
         <FilterControls
           cities={cities.map((c) => c.city)}

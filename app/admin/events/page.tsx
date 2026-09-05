@@ -3,6 +3,7 @@ import { query } from '@/lib/db';
 import { ReviewCard, type AdminEventRow } from '@/components/admin/ReviewCard';
 import { PublishAll } from '@/components/admin/PublishAll';
 import { FindImages } from '@/components/admin/FindImages';
+import { EventSearch } from '@/components/EventSearch';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,10 +18,11 @@ const STATES = [
 export default async function AdminEventsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string }>;
+  searchParams: Promise<{ state?: string; q?: string }>;
 }) {
   const sp = await searchParams;
   const state = STATES.some((s) => s.key === sp.state) ? sp.state! : 'new';
+  const q = (sp.q ?? '').trim().slice(0, 120);
 
   // "Past" is derived (live + finished); the stored states exclude finished
   // events from LIVE so the working queues stay clean.
@@ -71,9 +73,19 @@ export default async function AdminEventsPage({
              left join event_sources s on s.id = l.source_id
             where l.event_id = e.id
          ) sl on true
-        where ${cond}
+        where ${cond}${q ? ` and (
+                e.title ilike $1 escape '\\'
+                or e.city ilike $1 escape '\\'
+                or e.slug ilike $1 escape '\\'
+                or v.name ilike $1 escape '\\'
+                or p.name ilike $1 escape '\\'
+              )` : ''}
         order by e.created_at desc
-        limit 200`
+        limit 200`,
+      // Two hundred rows a queue means the one you are looking for is on a
+      // page you have to scroll. The same fields as the public search, plus
+      // the slug, because an admin often arrives holding a URL.
+      q ? [`%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`] : []
     ),
     query<{ status: string; n: number; past: number }>(
       `select e.status::text, count(*)::int as n,
@@ -100,7 +112,7 @@ export default async function AdminEventsPage({
         {STATES.map((s) => (
           <Link
             key={s.key}
-            href={`/admin/events?state=${s.key}`}
+            href={`/admin/events?state=${s.key}${q ? `&q=${encodeURIComponent(q)}` : ''}`}
             className={`statePill${state === s.key ? ' active' : ''}`}
           >
             {s.label}
@@ -108,6 +120,8 @@ export default async function AdminEventsPage({
           </Link>
         ))}
       </div>
+
+      <EventSearch initial={q} placeholder="Search this queue — name, slug, venue, promoter, city…" />
 
       {(state === 'new' || state === 'needs_review') && events.length > 0 && (
         <PublishAll state={state} count={events.length} />
@@ -121,7 +135,7 @@ export default async function AdminEventsPage({
       )}
 
       {events.length === 0 ? (
-        <p className="adminSub">Nothing in this queue.</p>
+        <p className="adminSub">{q ? `Nothing in this queue matches “${q}”.` : 'Nothing in this queue.'}</p>
       ) : (
         events.map((e) => <ReviewCard key={e.id} event={e} />)
       )}
