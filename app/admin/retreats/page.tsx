@@ -1,4 +1,4 @@
-// ADMIN → RETREATS. What sits under "Quiet the brain" on Balance.
+// ADMIN → RETREATS. What sits under "Retreats" on Balance.
 
 import Link from 'next/link';
 import { allRetreats } from '@/lib/retreats';
@@ -16,7 +16,7 @@ export default async function AdminRetreatsPage() {
       <p className="adminSub">
         Paste a retreat’s link and we read the page for you — name, picture, where, the description.
         Check it, say when it runs, set it live, and it appears on{' '}
-        <Link href="/balance" style={{ textDecoration: 'underline' }}>Balance</Link> under “Quiet the brain”.
+        <Link href="/balance" style={{ textDecoration: 'underline' }}>Balance</Link> under “Retreats”.
         Cards send people straight to the retreat’s own site to book.
       </p>
       <NewRetreat />
@@ -49,7 +49,7 @@ export default async function AdminRetreatsPage() {
           </p>
         )}
         {retreats.length > 0 && live === 0 && (
-          <p className="adminSub">Nothing is live, so “Quiet the brain” is not on Balance yet.</p>
+          <p className="adminSub">Nothing is live, so the retreats section is not on Balance yet.</p>
         )}
       </div>
     </main>
