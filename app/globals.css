@@ -4112,7 +4112,9 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
   background: #16151a;
   color: #f3f1ee;
   border-radius: var(--radius);
-  padding: 40px 34px 44px;
+  /* Room above the kicker: it is small type against a big dark field, and it
+     needs the panel's edge to be somewhere else. */
+  padding: 52px 34px 44px;
   margin: 10px 0 54px;
 }
 .retreatShelfHead {
@@ -4125,7 +4127,9 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 }
 .retreatShelfTitle {
   font-size: clamp(32px, 5vw, 52px); line-height: .98; letter-spacing: -.035em;
-  margin: 8px 0 0; color: #fff;
+  /* A 0.98 line-height pulls the cap-height up, so eight pixels of margin read
+     as four. The kicker was sitting on the K of "Quiet". */
+  margin: 16px 0 0; color: #fff;
 }
 .retreatShelfLead { max-width: 340px; margin: 0; color: #a8a49c; font-size: 14px; line-height: 1.6; }
 
@@ -4185,7 +4189,7 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 
 @media (max-width: 900px) { .retreatGrid, .retreatGrid.two { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 620px) {
-  .retreatShelf { padding: 30px 20px 34px; }
+  .retreatShelf { padding: 38px 20px 34px; }
   .retreatGrid, .retreatGrid.one, .retreatGrid.two { grid-template-columns: 1fr; }
   /* Lying down needs width. On a phone it stands back up. */
   .retreatGrid.one .retreatCard { flex-direction: column; }
