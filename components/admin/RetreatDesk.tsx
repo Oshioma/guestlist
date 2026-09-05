@@ -20,7 +20,7 @@ async function post(body: Record<string, unknown>) {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
   const j = await r.json().catch(() => ({}));
-  return { ok: r.ok, ...j } as { ok: boolean; error?: string; draft?: Record<string, string | null>; found?: string[]; sourceUrl?: string };
+  return { ok: r.ok, ...j } as { ok: boolean; error?: string; draft?: Record<string, string | null>; found?: string[]; images?: string[]; sourceUrl?: string };
 }
 
 export type RetreatForm = {
@@ -45,12 +45,17 @@ export function RetreatEditor({ initial, onDone }: { initial: RetreatForm; onDon
   const [link, setLink] = useState('');
   const [reading, setReading] = useState(false);
   const [found, setFound] = useState<string[] | null>(null);
+  // Every picture the page had, so the first pick is a suggestion rather than
+  // a verdict — the top one is usually right, and when it is not the right
+  // one is nearly always three thumbnails along.
+  const [pics, setPics] = useState<string[]>(initial.imageUrl ? [initial.imageUrl] : []);
 
   async function read() {
     setReading(true); setErr(''); setFound(null);
     const r = await post({ action: 'read_link', url: link });
     setReading(false);
     if (!r.ok || !r.draft) { setErr(r.error ?? 'Couldn’t read that link'); return; }
+    setPics(r.images ?? []);
     setV((cur) => ({
       ...cur,
       title: (r.draft!.title as string) || cur.title,
@@ -130,6 +135,26 @@ export function RetreatEditor({ initial, onDone }: { initial: RetreatForm; onDon
         </div>
         <div><label>Order</label><input type="number" value={v.sortOrder} onChange={(e) => setV({ ...v, sortOrder: e.target.value })} /></div>
       </div>
+
+      {pics.length > 1 && (
+        <div className="retreatPics">
+          <label>Pictures on that page — pick the one people should see</label>
+          <div className="retreatPicGrid">
+            {pics.map((src) => (
+              <button
+                key={src}
+                type="button"
+                className={`retreatPic${src === v.imageUrl ? ' on' : ''}`}
+                onClick={() => setV({ ...v, imageUrl: src })}
+                title={src}
+                aria-pressed={src === v.imageUrl}
+              >
+                <img src={src} alt="" loading="lazy" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {v.imageUrl && (
         // Checking a picture URL by eye beats saving it and looking at Balance.

@@ -4130,6 +4130,19 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 .retreatShelfLead { max-width: 340px; margin: 0; color: #a8a49c; font-size: 14px; line-height: 1.6; }
 
 .retreatGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.retreatGrid.two { grid-template-columns: repeat(2, 1fr); }
+/* A single retreat lies down instead of standing in a column: picture on the
+   left, the words beside it, the whole panel used. */
+.retreatGrid.one { grid-template-columns: 1fr; }
+.retreatGrid.one .retreatCard { flex-direction: row; align-items: stretch; }
+/* A definite ratio, not auto: without one the column takes its height from
+   whatever the picture happens to be, and a portrait photo turns the card
+   into a poster three screens tall. */
+.retreatGrid.one .retreatCardImg { flex: 0 0 44%; aspect-ratio: 16/10; }
+.retreatGrid.one .retreatCardBody { padding: 26px 28px 24px; }
+.retreatGrid.one .retreatCardTitle { font-size: 30px; }
+.retreatGrid.one .retreatCardBlurb { font-size: 15px; -webkit-line-clamp: 4; max-width: 46ch; }
+.retreatGrid.one .retreatCardFoot { font-size: 13px; padding-top: 20px; }
 .retreatCard {
   display: flex; flex-direction: column; overflow: hidden;
   background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
@@ -4170,10 +4183,15 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
    hostname still reads as "this leaves the site" and a broken price does not. */
 .retreatCardGo { color: #8d8a82; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-@media (max-width: 900px) { .retreatGrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 900px) { .retreatGrid, .retreatGrid.two { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 620px) {
   .retreatShelf { padding: 30px 20px 34px; }
-  .retreatGrid { grid-template-columns: 1fr; }
+  .retreatGrid, .retreatGrid.one, .retreatGrid.two { grid-template-columns: 1fr; }
+  /* Lying down needs width. On a phone it stands back up. */
+  .retreatGrid.one .retreatCard { flex-direction: column; }
+  .retreatGrid.one .retreatCardImg { flex: none; aspect-ratio: 4/3; min-height: 0; }
+  .retreatGrid.one .retreatCardBody { padding: 16px 16px 15px; }
+  .retreatGrid.one .retreatCardTitle { font-size: 21px; }
   .retreatShelfHead { align-items: flex-start; }
 }
 
@@ -4190,3 +4208,14 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
   overflow: hidden; background: var(--media-ph); max-width: 320px;
 }
 .retreatPreview img { display: block; width: 100%; height: 180px; object-fit: cover; }
+
+/* Pick a picture off the page rather than typing a URL out of the address bar. */
+.retreatPics { margin-top: 14px; }
+.retreatPicGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin-top: 6px; }
+.retreatPic {
+  padding: 0; border: 2px solid var(--border); border-radius: 10px; overflow: hidden;
+  background: var(--media-ph); cursor: pointer; aspect-ratio: 4/3;
+}
+.retreatPic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.retreatPic.on { border-color: var(--accent); }
+.retreatPic:hover { border-color: var(--accent-ink); }
