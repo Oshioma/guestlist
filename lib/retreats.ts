@@ -18,6 +18,7 @@
 import { query, queryOne } from './db';
 import { safeFetch, type SafeFetchResult } from './supply/safeFetch';
 import { inspectPage } from './supply/structured';
+import { findPageImages, type FoundImage } from './supply/images';
 import { slugify } from './util';
 
 export type Retreat = {
@@ -64,8 +65,45 @@ export type RetreatDraft = {
 };
 
 export type ReadLinkOutcome =
-  | { ok: true; draft: RetreatDraft; found: string[] }
+  | { ok: true; draft: RetreatDraft; found: string[]; images: string[] }
   | { ok: false; error: string };
+
+// A social card is a picture of words: the site's name, the price, the title
+// again, laid over a gradient by a template. Frameworks generate them at
+// /opengraph-image or /api/og, and they are exactly right for WhatsApp and
+// exactly wrong for Balance, where the words are already on the card and the
+// picture is meant to be the place. So it goes to the back of the queue —
+// still offered, never chosen for you.
+const GENERATED_CARD =
+  /(^|\/)(opengraph-image|twitter-image|og-image|og|opengraph)(-[a-z0-9]+)?(\/|\?|$)|\/(api|_vercel)\/og(\/|\?|$)/i;
+
+const IMAGE_FILE = /\.(jpe?g|png|webp|avif|gif)$/i;
+
+export function looksGenerated(url: string): boolean {
+  let u: URL;
+  try { u = new URL(url); } catch { return GENERATED_CARD.test(url); }
+  if (GENERATED_CARD.test(u.pathname) || GENERATED_CARD.test(`${u.pathname}?`)) return true;
+  // The other shape they take: a host that exists to draw cards, serving a
+  // hash with no file extension — opengraph.githubassets.com/<sha>/owner/repo.
+  // A photograph somebody uploaded nearly always ends in .jpg.
+  if (/(^|\.)(opengraph|og|card|social)[.-]/i.test(u.hostname) && !IMAGE_FILE.test(u.pathname)) return true;
+  return false;
+}
+
+/**
+ * Every picture the page offers, the ones that look like photographs first.
+ *
+ * findPageImages already ranks a page's images and puts a declared og:image
+ * at the top, which is right for a club flyer and wrong for a retreat: the
+ * flyer IS the social card, and a retreat's social card is a text template
+ * over the photograph we actually want.
+ */
+function retreatImages(html: string, pageUrl: string): FoundImage[] {
+  const all = findPageImages(html, pageUrl, 14);
+  const real = all.filter((i) => !looksGenerated(i.url));
+  const cards = all.filter((i) => looksGenerated(i.url));
+  return [...real, ...cards];
+}
 
 /** Trim to a length, and never mid-word if we can help it. */
 function tidy(v: string | null | undefined, max: number): string | null {
@@ -119,10 +157,12 @@ export async function readRetreatLink(
   };
 
   const location = [page.city?.value, page.country?.value].filter(Boolean).join(', ') || null;
+  const images = retreatImages(fetched.body, fetched.finalUrl);
 
   return {
     ok: true,
     found,
+    images: images.map((i) => i.url),
     draft: {
       title: take('title', tidy(page.title?.value, 140)) ?? '',
       location: take('location', tidy(location, 120)),
@@ -130,7 +170,7 @@ export async function readRetreatLink(
       // always the admin's sentence to write.
       whenText: null,
       blurb: take('blurb', tidy(page.description?.value, 240)),
-      imageUrl: take('image', page.imageUrl?.value ?? null),
+      imageUrl: take('image', images[0]?.url ?? page.imageUrl?.value ?? null),
       url: page.canonicalUrl ?? fetched.finalUrl,
       priceText: take('price', page.priceFrom != null
         ? `From ${page.currency?.value ?? ''}${page.priceFrom.value}`.trim()

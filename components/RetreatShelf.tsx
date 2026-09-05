@@ -43,7 +43,10 @@ export function RetreatShelf({ retreats }: { retreats: ShelfRetreat[] }) {
         </p>
       </div>
 
-      <div className="retreatGrid">
+      {/* One retreat in a three-column grid is a card marooned in a third of a
+          dark panel. So the shelf lays out for how many there actually are:
+          one lies down across the width, two share it, three or more line up. */}
+      <div className={`retreatGrid ${retreats.length === 1 ? 'one' : retreats.length === 2 ? 'two' : ''}`}>
         {retreats.map((r) => (
           <a
             key={r.id}

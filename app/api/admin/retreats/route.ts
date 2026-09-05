@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       if (!url) return NextResponse.json({ error: 'Paste a link first' }, { status: 400 });
       const outcome = await readRetreatLink(url);
       if (!outcome.ok) return NextResponse.json({ error: outcome.error }, { status: 422 });
-      return NextResponse.json({ ok: true, draft: outcome.draft, found: outcome.found, sourceUrl: url });
+      return NextResponse.json({ ok: true, draft: outcome.draft, found: outcome.found, images: outcome.images, sourceUrl: url });
     }
 
     if (action === 'save') {

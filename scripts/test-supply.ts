@@ -43,7 +43,7 @@ import { findListingLink, previewBody } from '@/lib/supply/probe';
 import { testVerdict } from '@/lib/supply/verdict';
 import { fetcherFor, renderingConfigured } from '@/lib/supply/render';
 import { parse } from 'node-html-parser';
-import { readRetreatLink } from '@/lib/retreats';
+import { readRetreatLink, looksGenerated } from '@/lib/retreats';
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 const q = (text: string, params: unknown[] = []) => db.query(text, params).then((r) => r.rows);
@@ -2296,6 +2296,68 @@ async function main() {
     const internal = await readRetreatLink('http://169.254.169.254/latest/meta-data/');
     check('an admin cannot make the server read its own metadata service',
       !internal.ok && /allowed to fetch|web address/i.test(internal.ok ? '' : internal.error));
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n\u2014 Picking the picture off a retreat page \u2014');
+  {
+    // The real failure this fixes: a modern site's og:image is a card the
+    // framework DREW — the title, the price and the site's name laid over a
+    // gradient. Perfect for WhatsApp, useless on Balance, where the words are
+    // already on our card and the picture is supposed to be the place.
+    const URL_R = 'https://www.paradise.example.com/experiences/escape-space/';
+    const PAGE = `<!doctype html><html><head>
+      <meta property="og:title" content="Escape Space Zanzibar" />
+      <meta property="og:image" content="https://www.paradise.example.com/experiences/escape-space/opengraph-image?9a1f" />
+      </head><body><main>
+        <img src="/media/palms-kendwa-1600.jpg" width="1600" height="1000" alt="Palms over the beach at Kendwa" />
+        <img src="/media/dhow-sunset-1600.jpg" width="1600" height="1000" alt="A dhow at sunset" />
+        <img src="/media/logo.svg" width="240" height="60" alt="Paradise Beyond" />
+      </main></body></html>`;
+
+    const out = await readRetreatLink(URL_R, { fetcher: mockFetcher({ [URL_R]: { body: PAGE } }) });
+    check('a retreat page reads', out.ok === true);
+    if (out.ok) {
+      check('the picture chosen is a photograph, not the drawn social card',
+        out.draft.imageUrl === 'https://www.paradise.example.com/media/palms-kendwa-1600.jpg', String(out.draft.imageUrl));
+      // Demoted, never thrown away: sometimes the card really is the nicest
+      // picture on a thin page, and that is the admin's call to make.
+      check('the card is still offered, just last',
+        out.images.some((u) => u.includes('opengraph-image'))
+        && out.images.indexOf(out.images.find((u) => u.includes('opengraph-image'))!) === out.images.length - 1);
+      check('every picture on the page is offered, so the first pick is a suggestion',
+        out.images.includes('https://www.paradise.example.com/media/dhow-sunset-1600.jpg'));
+      check('the logo is not offered as a retreat picture',
+        !out.images.some((u) => u.includes('logo')));
+    }
+
+    // The shapes frameworks actually generate these at.
+    for (const u of [
+      'https://x.example.com/a/opengraph-image',
+      'https://x.example.com/a/opengraph-image-3f9c2a?v=1',
+      'https://x.example.com/a/twitter-image',
+      'https://x.example.com/api/og?title=Hello',
+      'https://x.example.com/_vercel/og?t=1',
+      // The other shape: a card-drawing host serving a hash, no extension.
+      'https://opengraph.githubassets.com/9f2c/anthropics/claude-code',
+    ]) check(`a drawn card is recognised: ${new URL(u).host}${new URL(u).pathname}`, looksGenerated(u));
+
+    // And the ones that are photographs with unlucky names.
+    for (const u of [
+      'https://x.example.com/media/ogun-beach.jpg',
+      'https://x.example.com/img/dogs-of-kendwa.jpg',
+      'https://x.example.com/uploads/2024/og-mandu-cooking.jpg',
+      // A card host is only a card host when it is not serving a real file.
+      'https://og.example.com/photos/palms-kendwa.jpg',
+    ]) check(`a photograph is not mistaken for one: ${new URL(u).host}${new URL(u).pathname}`, !looksGenerated(u));
+
+    // A page with only the drawn card still gives the admin something.
+    const THIN = 'https://thin.example.com/';
+    const thin = await readRetreatLink(THIN, { fetcher: mockFetcher({ [THIN]: {
+      body: `<!doctype html><html><head><meta property="og:title" content="Thin" />
+        <meta property="og:image" content="https://thin.example.com/opengraph-image" /></head><body></body></html>` } }) });
+    check('a page with nothing but the drawn card still offers it',
+      thin.ok && thin.draft.imageUrl === 'https://thin.example.com/opengraph-image');
   }
 
   // -------------------------------------------------------------------------

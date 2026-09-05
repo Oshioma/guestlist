@@ -2645,6 +2645,8 @@ console.log('\n— Quiet the brain: retreats on Balance —');
   // to be a Guestlist page.
   check('the card leaves the site, and says where to',
     page.includes('https://escapespace.example.com/') && page.includes('escapespace.example.com ↗'));
+  // One retreat used to sit marooned in a third of a wide dark panel.
+  check('one retreat on its own lies down across the panel', page.includes('retreatGrid one'));
 
   // A retreat is not a night. It must not turn up anywhere events live.
   check('it is not an event', (await q(`select 1 from events where title = 'Escape Space Zanzibar'`)).length === 0);
@@ -2662,6 +2664,14 @@ console.log('\n— Quiet the brain: retreats on Balance —');
     (await desk.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify({ action: 'save', title: '', url: 'https://x.example.com/' }) })).status === 400);
   check('and one with nowhere to send anybody is too',
     (await desk.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify({ action: 'save', title: 'Nowhere', url: '' }) })).status === 400);
+
+  // Two share the width; three or more line up.
+  const second = await (await desk.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify({ ...payload, title: 'Sierra Silent Week', url: 'https://sierrasilent.example.com/' }) })).json();
+  await desk.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify({ action: 'save', ...payload, id: saved.id, status: 'live' }) });
+  check('two retreats share the panel rather than lying down',
+    (await (await anon.fetch('/balance')).text()).includes('retreatGrid two'));
+  await desk.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify({ action: 'delete', id: second.id }) });
+  await desk.fetch('/api/admin/retreats', { method: 'POST', body: JSON.stringify({ action: 'save', ...payload, id: saved.id, status: 'draft' }) });
 
   check('the desk lists it', (await (await desk.fetch('/admin/retreats')).text()).includes('Escape Space Zanzibar'));
   check('a member cannot delete it',
