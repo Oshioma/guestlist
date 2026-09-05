@@ -2609,14 +2609,14 @@ console.log('\n— Deleting an article from the desk —');
     (await desk.fetch(`/api/admin/articles/${doomed.id}`, { method: 'DELETE' })).status === 404);
 }
 
-console.log('\n— Quiet the brain: retreats on Balance —');
+console.log('\n— Retreats on Balance —');
 {
   const desk = client();
   check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
 
   // Nothing live yet, so Balance carries no empty heading.
   const bare = await (await anon.fetch('/balance')).text();
-  check('with no retreats, Balance never shows the heading', !bare.includes('Quiet the brain'));
+  check('with no retreats, Balance never shows the heading', !bare.includes('retreatShelf'));
 
   const payload = {
     action: 'save',
@@ -2639,7 +2639,7 @@ console.log('\n— Quiet the brain: retreats on Balance —');
   check('the admin can', !!saved.id);
 
   const page = await (await anon.fetch('/balance')).text();
-  check('and it appears under its own heading', page.includes('Quiet the brain'));
+  check('and it appears under its own heading', page.includes('>Retreats.</h2>'));
   check('with its name', page.includes('Escape Space Zanzibar'));
   check('where it is', page.includes('Zanzibar, Tanzania'));
   check('when it runs, in words rather than a date', page.includes('Monthly, October to April'));

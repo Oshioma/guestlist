@@ -1,6 +1,6 @@
 'use client';
 
-// QUIET THE BRAIN.
+// RETREATS.
 //
 // The other half of Balance. The articles are the culture around the night;
 // this is the week off it — somewhere with no line-up, no door, and nothing
@@ -32,14 +32,14 @@ export function RetreatShelf({ retreats }: { retreats: ShelfRetreat[] }) {
   if (!retreats.length) return null;
 
   return (
-    <section className="retreatShelf" aria-labelledby="quiet-the-brain">
+    <section className="retreatShelf" aria-labelledby="retreats-heading">
       <div className="retreatShelfHead">
         <div>
           <div className="retreatShelfKicker">Balance</div>
-          <h2 className="retreatShelfTitle" id="quiet-the-brain">Quiet the brain.</h2>
+          <h2 className="retreatShelfTitle" id="retreats-heading">Retreats.</h2>
         </div>
         <p className="retreatShelfLead">
-          Retreats and places to go and do nothing in. Booked with them, not with us.
+          Places to go and do nothing in. Booked with them, not with us.
         </p>
       </div>
 

@@ -4101,7 +4101,7 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 @media (max-width: 480px) { .glCard { grid-template-columns: 72px minmax(0, 1fr); } .glArt { width: 72px; height: 72px; } }
 
 /* ---------------------------------------------------------------------------
-   QUIET THE BRAIN — the retreats on Balance.
+   RETREATS — the other half of Balance.
 
    Set apart from the article grid on purpose. The articles are ours; these are
    adverts for somewhere else, and a reader should be able to tell at a glance
