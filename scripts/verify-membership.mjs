@@ -124,7 +124,23 @@ try {
     const html = await anon.html('/membership');
     check('/membership is live without Stripe', html.includes('Get in.') && html.includes('Coming soon'));
     check('waitlist CTA shown, no join-now checkout', html.includes('Join the waitlist'));
-    check('the six benefits are on the page', ['Get in free', 'Queue jump', 'Member prices', 'Guestlist Market', 'Member drops', 'Do good for others'].every((s) => html.includes(s)));
+    check('the six benefits are on the page', ['Get in free', 'Ask Guestlist', 'Member prices', 'Guestlist Market', 'Member drops', 'Do good for others'].every((s) => html.includes(s)));
+    // Ask Guestlist took the second card from Queue jump: it is the one thing
+    // here nobody else offers, and it sits directly under Get in free.
+    check('Ask Guestlist is the second card, not the fifth',
+      html.indexOf('Get in free') < html.indexOf('Ask Guestlist')
+      && html.indexOf('Ask Guestlist') < html.indexOf('Member drops'));
+    check('and it says it covers what we do not list', /Instagram|a flyer/.test(html));
+    check('the picture strip names it too', html.includes('>Ask Guestlist</figcaption>'));
+    // Dropped as a headline, not dropped as a benefit.
+    check('queue jump survives in the line under the headline', html.includes('queue jumps'));
+    const askTerms = await anon.html('/membership/terms');
+    check('and in the terms, alongside a section for Ask Guestlist',
+      askTerms.includes('Queue jump and priority entrance') && askTerms.includes('Ask Guestlist — events we do not list'));
+    check('which is honest that we do not stand behind events we do not list',
+      askTerms.includes('no responsibility for, events and organisers it does not list'));
+    // A prospect must never be shown a member-only door as if it were open.
+    check('a prospect is not linked into the members-only ask', !html.includes('/you/ask'));
     check('hero photograph and the five-picture strip render from the image slots', html.includes('class="mbHeroBg"') && (html.match(/<figcaption>/g) ?? []).length === 5 && html.includes('/images/'));
     // The strip closes the page rather than interrupting it: somebody
     // scrolling this far has read the argument, and the photographs are what
@@ -339,7 +355,8 @@ try {
     check('/membership becomes the member view once joined', mbMember.includes('You’re in.') && mbMember.includes('How to use it') && mbMember.includes('What you’ve got')
       && !mbMember.includes('Join the waitlist') && !mbMember.includes('Join Guestlist —'));
     check('member view shows what is live right now', mbMember.includes('Right now') && mbMember.includes('GMI Test: Closed List') && mbMember.includes('ON THE GUESTLIST'));
-    check('member view keeps the six benefits and the qualifier', ['Get in free', 'Queue jump', 'Member prices', 'Guestlist Market', 'Member drops', 'Do good for others'].every((s) => mbMember.includes(s)) && mbMember.includes('fair use'));
+    check('member view keeps the six benefits and the qualifier', ['Get in free', 'Ask Guestlist', 'Member prices', 'Guestlist Market', 'Member drops', 'Do good for others'].every((s) => mbMember.includes(s)) && mbMember.includes('fair use'));
+    check('and a member gets the door, not the sales pitch', mbMember.includes('/you/ask'));
     const timeline = await q(`select count(*)::int as n from member_access_request_events where request_id = $1`, [reqId]);
     check('full timeline kept', timeline[0].n >= 4);
     check('desk actions audited', (await q(`select count(*)::int as n from audit_log where action in ('access_request_updated','promoter_outreach_logged','promoter_contact_added','promoter_relationship_changed')`))[0].n >= 5);

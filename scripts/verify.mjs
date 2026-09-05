@@ -2325,7 +2325,7 @@ console.log('\n— The pictures on the site —');
   check('the desk lists the pictures', page.includes('Pictures'));
   check('naming each one and where it lands',
     page.includes('Home — first panel') && page.includes('Membership — Get in free')
-      && page.includes('Membership — Queue jump'));
+      && page.includes('Membership — Ask Guestlist'));
   check('and showing what is in each slot now', page.includes('/images/hero.jpg'));
 
   check('a member cannot see them',

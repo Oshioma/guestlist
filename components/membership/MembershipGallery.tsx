@@ -7,7 +7,7 @@
 import { siteImages } from '@/lib/siteImages';
 
 const STRIP: { key: string; caption: string }[] = [
-  { key: 'membership.queueJump', caption: 'Queue jump' },
+  { key: 'membership.ask', caption: 'Ask Guestlist' },
   { key: 'membership.drops', caption: 'Member drops' },
   { key: 'membership.prices', caption: 'Member prices' },
   { key: 'membership.market', caption: 'Guestlist Market' },

@@ -24,6 +24,8 @@ export type SiteImageSlot = {
   guidance: string;
   /** The picture shipped with the code. Never removed — reset comes back to it. */
   fallback: string;
+  /** A key this slot used to have, read as a fallback so a rename loses nothing. */
+  previousKey?: string;
 };
 
 export const SITE_IMAGE_SLOTS: SiteImageSlot[] = [
@@ -56,10 +58,14 @@ export const SITE_IMAGE_SLOTS: SiteImageSlot[] = [
     fallback: '/images/hero.jpg',
   },
   {
-    key: 'membership.queueJump',
-    label: 'Membership — Queue jump',
-    where: 'The photo strip under the /membership hero — the “Queue jump” picture',
-    guidance: 'Arriving, or a door. Cropped to a wide band, so the subject wants to be central.',
+    key: 'membership.ask',
+    // This slot used to be "Queue jump". A picture an admin already put in it
+    // is still the right picture for the strip, so it comes across rather
+    // than reverting to the shipped one the day the card was renamed.
+    previousKey: 'membership.queueJump',
+    label: 'Membership — Ask Guestlist',
+    where: 'The photo strip under the /membership hero — the “Ask Guestlist” picture',
+    guidance: 'A party you would want to be at and had to ask about. Cropped to a wide band, so the subject wants to be central.',
     fallback: '/images/secret-party.jpg',
   },
   {
@@ -120,7 +126,9 @@ export async function siteImages(): Promise<SiteImages> {
   const stored = (await getSetting<Record<string, unknown>>(SETTING_KEY)) ?? {};
   const out: SiteImages = {};
   for (const slot of SITE_IMAGE_SLOTS) {
-    out[slot.key] = usableImageUrl(stored[slot.key]) ?? slot.fallback;
+    out[slot.key] = usableImageUrl(stored[slot.key])
+      ?? (slot.previousKey ? usableImageUrl(stored[slot.previousKey]) : null)
+      ?? slot.fallback;
   }
   return out;
 }
@@ -131,7 +139,8 @@ export type SiteImageRow = SiteImageSlot & { url: string; overridden: boolean };
 export async function siteImageRows(): Promise<SiteImageRow[]> {
   const stored = (await getSetting<Record<string, unknown>>(SETTING_KEY)) ?? {};
   return SITE_IMAGE_SLOTS.map((slot) => {
-    const override = usableImageUrl(stored[slot.key]);
+    const override = usableImageUrl(stored[slot.key])
+      ?? (slot.previousKey ? usableImageUrl(stored[slot.previousKey]) : null);
     return { ...slot, url: override ?? slot.fallback, overridden: !!override };
   });
 }

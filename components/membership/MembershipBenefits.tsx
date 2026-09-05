@@ -5,6 +5,11 @@
 // Market, or for what the membership funds, is joining for a real reason too —
 // and a small grey box underneath a big card says otherwise.
 //
+// Ask Guestlist took the second card from Queue jump. Queue jump is real and
+// stays in the line under the headline and in the terms, but it is a smaller
+// promise than "send us any party, anywhere, and a person will answer", and
+// the second card is the second most-read thing on the page.
+//
 // Six equal cards in a grid: a round icon tile, the name, a line in the
 // accent, a short rule, the substance, and a link. No card is bigger than
 // another.
@@ -34,11 +39,6 @@ const Icon = {
       <circle cx="12" cy="12" r="9" /><path d="M8.5 12.3l2.4 2.4 4.6-4.9" />
     </svg>
   ),
-  arrow: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M5 12h13M13 6l6 6-6 6" />
-    </svg>
-  ),
   spark: (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9L12 2Z" />
@@ -58,6 +58,12 @@ const Icon = {
   heart: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M12 20s-7.2-4.4-7.2-9.2A4.1 4.1 0 0 1 12 8.3a4.1 4.1 0 0 1 7.2 2.5C19.2 15.6 12 20 12 20Z" />
+    </svg>
+  ),
+  ask: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M20.5 12.2c0 4-3.8 7.2-8.5 7.2a10 10 0 0 1-2.6-.34L4.2 20.5l1.3-3.6A6.9 6.9 0 0 1 3.5 12.2C3.5 8.2 7.3 5 12 5s8.5 3.2 8.5 7.2Z" />
+      <path d="M9.9 10.2a2.2 2.2 0 0 1 4.2.8c0 1.5-2.1 1.8-2.1 3.1M12 16.1h.01" />
     </svg>
   ),
   crown: (
@@ -97,14 +103,26 @@ export function MembershipBenefits({ variant, drops = 0, causes = [] }: Props) {
       fine: 'Subject to availability and fair use.',
       link: isMember ? { href: '/events', label: 'Browse events →' } : { href: '/membership/terms', label: 'How it works →' },
     },
+    // The distinctive one, and the reason it sits second rather than fifth:
+    // the card above it is about a night we already list. This one is about
+    // everything we do not — a flyer, an Instagram post, a promoter's own
+    // site, a city you are going to next month. You send it, a person reads
+    // it, and you get an answer either way. Nothing else on the site does
+    // that, and queue jumping — which used to have this card — is a smaller
+    // promise that belongs in the line under the headline and in the terms.
     {
-      key: 'membership.queueJump',
-      icon: Icon.arrow,
-      title: 'Queue jump',
-      sub: 'Less queue. More party.',
-      lead: 'Priority and fast-track entrance where available.',
-      body: 'Through participating events and venues — less time on the pavement, more time inside.',
-      link: { href: '/membership/terms', label: 'Learn more →' },
+      key: 'membership.ask',
+      icon: Icon.ask,
+      title: 'Ask Guestlist',
+      sub: 'Anywhere. Not just here.',
+      lead: isMember
+        ? 'Found a party we don’t list? Send us the link and we’ll see what we can do.'
+        : 'Found a party on Instagram, a flyer, a promoter’s site? Members send it to us.',
+      body: 'A +1, a night that’s sold out, an afterparty, somewhere to go in a city you’re '
+        + 'visiting, or just tell us what you’re after and we’ll come back with something. '
+        + 'A person reads every one.',
+      state: isMember ? { label: 'Yours', text: 'Ask Guestlist →', href: '/you/ask' } : undefined,
+      link: { href: '/membership/terms', label: 'How it works →' },
     },
     {
       key: 'membership.drops',
