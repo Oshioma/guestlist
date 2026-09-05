@@ -46,7 +46,10 @@ function client() {
         ...opts,
         redirect: 'manual',
         headers: {
-          ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+          // Only a string body is JSON. FormData sets its own content-type
+          // with a multipart boundary, and stamping application/json over it
+          // makes every upload look like a malformed request.
+          ...(typeof opts.body === 'string' ? { 'Content-Type': 'application/json' } : {}),
           ...(cookie ? { Cookie: cookie } : {}),
           ...(opts.headers ?? {}),
         },
@@ -2702,6 +2705,89 @@ console.log('\n— Balance does not ask you to write —');
   // Removing the buttons must not remove the way in.
   check('and the way in still works',
     [200, 307, 302].includes((await anon.fetch('/articles/new')).status));
+}
+
+console.log('\n— Searching the listings —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  const [venue] = await q(`insert into venues (name, slug, city, country) values
+    ('The Findable Room', 'findable-room-fixture', 'Bristol', 'United Kingdom') returning id`);
+  const [artist] = await q(`insert into artists (name, slug) values ('Needle Haystack', 'needle-haystack-fixture') returning id`);
+  const [ev] = await q(
+    `insert into events (slug, title, title_normalized, start_at, end_at, timezone, status, city, country,
+                         venue_id, listing_status, published_at)
+     values ('search-fixture-night', 'Zephyrine Sessions', lower('Zephyrine Sessions'),
+             now() + interval '5 days', now() + interval '5 days 6 hours', 'Europe/London', 'live',
+             'Bristol', 'United Kingdom', $1, 'confirmed', now())
+     returning id`, [venue.id]);
+  await q(`insert into event_artists (event_id, artist_id, position) values ($1, $2, 0)`, [ev.id, artist.id]);
+
+  const find = async (term, path = '/events') =>
+    (await (await anon.fetch(`${path}?q=${encodeURIComponent(term)}`)).text());
+
+  check('the events page has a search box', (await (await anon.fetch('/events')).text()).includes('eventSearch'));
+  check('searching finds a night by its name', (await find('Zephyrine')).includes('Zephyrine Sessions'));
+  check('by its venue', (await find('Findable Room')).includes('Zephyrine Sessions'));
+  check('by its city', (await find('Bristol')).includes('Zephyrine Sessions'));
+  // The half-remembered DJ is the whole reason for this box.
+  check('and by somebody on the line-up', (await find('Needle Haystack')).includes('Zephyrine Sessions'));
+  check('a search that matches nothing returns nothing rather than everything',
+    !(await find('qzxvwmpl')).includes('Zephyrine Sessions'));
+  // A wildcard typed into the box is a character, not a query.
+  check('a percent sign is text, not a wildcard', !(await find('%')).includes('Zephyrine Sessions'));
+  check('searching does not throw away the tab you are in',
+    (await (await anon.fetch('/events?tab=nightlife&q=Zephyrine')).text()).includes('eventSearch'));
+
+  const deskPage = await (await desk.fetch('/admin/events?state=live')).text();
+  check('the admin queue has one too', deskPage.includes('eventSearch'));
+  check('and it searches the queue', (await (await desk.fetch('/admin/events?state=live&q=Zephyrine')).text()).includes('Zephyrine Sessions'));
+  check('an admin can search by slug, because they arrive holding a URL',
+    (await (await desk.fetch('/admin/events?state=live&q=search-fixture-night')).text()).includes('Zephyrine Sessions'));
+  check('a queue search that matches nothing says so',
+    (await (await desk.fetch('/admin/events?state=live&q=qzxvwmpl')).text()).includes('Nothing in this queue matches'));
+  // Changing queue while searching must not silently drop the search.
+  check('the state pills carry the search across',
+    deskPage.includes('/admin/events?state=new') && (await (await desk.fetch('/admin/events?state=live&q=Zephyrine')).text()).includes('q=Zephyrine'));
+  check('a member cannot search the admin queue',
+    [302, 307].includes((await nadia.fetch('/admin/events?state=live')).status));
+
+  await q(`delete from event_artists where event_id = $1`, [ev.id]);
+  await q(`delete from events where id = $1`, [ev.id]);
+  await q(`delete from artists where id = $1`, [artist.id]);
+  await q(`delete from venues where id = $1`, [venue.id]);
+}
+
+console.log('\n— A picture off your own machine —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  check('the event form offers an upload, not just a URL',
+    (await (await desk.fetch('/admin/events/new')).text()).includes('evImgUpload'));
+
+  // A one-pixel PNG, byte for byte.
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64');
+  const upload = async (client_, bytes, name = 'flyer.png', type = 'image/png') => {
+    const form = new FormData();
+    form.append('file', new Blob([bytes], { type }), name);
+    return client_.fetch('/api/admin/events/image', { method: 'POST', body: form });
+  };
+
+  check('a stranger cannot upload', (await upload(anon, png)).status === 401);
+  check('nor can a member', (await upload(nadia, png)).status === 403);
+
+  const ok = await upload(desk, png);
+  const stored = await ok.json().catch(() => ({}));
+  check('an admin can', ok.status === 200 && typeof stored.url === 'string' && stored.url.length > 0);
+
+  // The bytes decide, not the filename: a .png that is not a PNG is refused.
+  const notAnImage = Buffer.from('<script>alert(1)</script>', 'utf8');
+  check('a file that is not an image is refused whatever it is called',
+    (await upload(desk, notAnImage, 'flyer.png')).status === 400);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -4223,3 +4223,44 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 .retreatPic img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .retreatPic.on { border-color: var(--accent); }
 .retreatPic:hover { border-color: var(--accent-ink); }
+
+/* The picture on the admin event form: a URL, or a file off your machine. */
+.evImgRow { display: flex; gap: 8px; align-items: center; }
+.evImgRow input { flex: 1; min-width: 0; }
+.evImgUpload { cursor: pointer; white-space: nowrap; }
+.evImgPreview {
+  margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; background: var(--media-ph); max-width: 320px;
+}
+.evImgPreview img { display: block; width: 100%; height: 180px; object-fit: cover; }
+
+/* SEARCHING THE LISTINGS. Sits above the filter row on /events and above the
+   queue on the admin desk — the same control in both places, because it is
+   the same job. */
+.eventSearch {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--bg-raised); padding: 4px 4px 4px 14px;
+  margin: 0 0 12px; max-width: 560px;
+}
+.eventSearch:focus-within { border-color: var(--accent); }
+.eventSearchIcon { display: flex; width: 17px; height: 17px; color: var(--text-faint); flex: none; }
+.eventSearchIcon svg { width: 100%; height: 100%; }
+.eventSearch input {
+  flex: 1; min-width: 0; border: 0; background: none; padding: 9px 0;
+  font: inherit; font-size: 14px; color: var(--text); outline: none;
+}
+/* The browser's own clear cross sits under ours and does not clear the URL. */
+.eventSearch input::-webkit-search-cancel-button { display: none; }
+.eventSearchClear {
+  border: 0; background: none; cursor: pointer; font-size: 19px; line-height: 1;
+  color: var(--text-faint); padding: 0 4px;
+}
+.eventSearchClear:hover { color: var(--text); }
+.eventSearchGo {
+  border: 0; border-radius: 999px; cursor: pointer; flex: none;
+  background: var(--accent); color: #fff; font: inherit; font-size: 12.5px;
+  font-weight: 800; letter-spacing: .04em; padding: 9px 17px;
+}
+.eventSearchGo:hover { filter: brightness(1.08); }
+@media (max-width: 560px) { .eventSearch { max-width: none; } }

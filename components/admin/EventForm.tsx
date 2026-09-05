@@ -1,6 +1,11 @@
 'use client';
 
 // Manual event create/edit form for admins.
+//
+// The picture can be a URL or a file. An event typed in by hand has no source
+// page to scrape a flyer from — somebody was sent a JPEG on WhatsApp — and
+// pasting a URL means hosting the file somewhere else first, which is a job
+// nobody should have to do to add a night.
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -63,6 +68,8 @@ export function EventForm({
   const [values, setValues] = useState(initial);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   const upd = (patch: Partial<EventFormValues>) => setValues((v) => ({ ...v, ...patch }));
 
@@ -237,8 +244,48 @@ export function EventForm({
       <label htmlFor="f-ticket">Ticket URL</label>
       <input id="f-ticket" type="url" value={values.ticketUrl} onChange={(e) => upd({ ticketUrl: e.target.value })} />
 
-      <label htmlFor="f-img">Primary image URL</label>
-      <input id="f-img" value={values.primaryImageUrl} onChange={(e) => upd({ primaryImageUrl: e.target.value })} />
+      <label htmlFor="f-img">Primary image</label>
+      <div className="evImgRow">
+        <input id="f-img" value={values.primaryImageUrl} placeholder="https://… or upload a file →"
+               onChange={(e) => upd({ primaryImageUrl: e.target.value })} />
+        {/* A label wrapping a hidden input, because a bare file input cannot be
+            styled to look like the rest of this form in any browser. */}
+        <label className="btnGhost evImgUpload" style={{ margin: 0 }}>
+          {uploading ? 'Uploading…' : 'Upload'}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            hidden
+            disabled={uploading}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              // Clear it either way, so choosing the same file twice still fires.
+              e.target.value = '';
+              if (!file) return;
+              setUploading(true);
+              setUploadError('');
+              try {
+                const body = new FormData();
+                body.append('file', file);
+                const res = await fetch('/api/admin/events/image', { method: 'POST', body });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error ?? 'Could not upload that');
+                upd({ primaryImageUrl: data.url });
+              } catch (err) {
+                setUploadError(err instanceof Error ? err.message : 'Could not upload that');
+              } finally {
+                setUploading(false);
+              }
+            }}
+          />
+        </label>
+      </div>
+      {uploadError && <div className="formError">{uploadError}</div>}
+      {values.primaryImageUrl && (
+        // Looking at it beats saving and finding out.
+        // eslint-disable-next-line @next/next/no-img-element
+        <div className="evImgPreview"><img src={values.primaryImageUrl} alt="" /></div>
+      )}
 
       <label htmlFor="f-src">Source URL</label>
       <input id="f-src" value={values.sourceUrl} onChange={(e) => upd({ sourceUrl: e.target.value })} />

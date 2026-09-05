@@ -60,6 +60,8 @@ export type BrowseParams = {
   // The member's country as their PLACE knows it, when the text field on
   // their profile is empty. Resolved by the caller so this stays one query.
   homeCountry?: string | null;
+  /** Free text: the night's name, its venue, its city, its promoter, its line-up. */
+  q?: string | null;
   limit?: number;
 };
 
@@ -135,6 +137,24 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
         join genres g on g.id = eg.genre_id
         left join genres pg on pg.id = g.parent_genre_id
        where eg.event_id = e.id and (g.slug = ${arg(params.genreSlug)} or pg.slug = ${arg(params.genreSlug)})
+    )`);
+  }
+  if (params.q) {
+    // Searching a listings site means "I half-remember something": a name, a
+    // room, a DJ. So it looks in all of them at once rather than making
+    // somebody choose which field their memory belongs to. ILIKE with a
+    // wildcard both ends — a prefix index would not help a search for
+    // "warehouse" inside "The Old Warehouse", and these are small tables.
+    const like = `%${params.q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+    where.push(`(
+      e.title ilike ${arg(like)} escape '\\'
+      or e.city ilike ${arg(like)} escape '\\'
+      or exists (select 1 from venues v2 where v2.id = e.venue_id and v2.name ilike ${arg(like)} escape '\\')
+      or exists (select 1 from promoters p2 where p2.id = e.promoter_id and p2.name ilike ${arg(like)} escape '\\')
+      or exists (
+        select 1 from event_artists ea2 join artists a2 on a2.id = ea2.artist_id
+         where ea2.event_id = e.id and a2.name ilike ${arg(like)} escape '\\'
+      )
     )`);
   }
   if (params.eventType) where.push(`e.event_type = ${arg(params.eventType)}::event_type`);
