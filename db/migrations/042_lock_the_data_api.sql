@@ -29,6 +29,43 @@
 -- decided deliberately rather than inherited from a default.
 
 -- ---------------------------------------------------------------------------
+-- 0. Refuse to run if the assumption underneath all of this is wrong.
+--
+-- Everything below is safe for exactly one reason: the app connects as the
+-- role that OWNS these tables, and an owner bypasses RLS. If that were not
+-- true — a separate application role with grants but no ownership — turning
+-- RLS on with no policies would lock the site out of its own database in one
+-- statement.
+--
+-- So it is checked rather than assumed. The session running this migration is
+-- the same postgres role the app's DATABASE_URL uses (both come from the one
+-- Supabase project), so checking here is checking the app. If this raises,
+-- nothing has changed: read the message, and nothing below has run.
+-- ---------------------------------------------------------------------------
+do $$
+declare owner name;
+begin
+  select pg_get_userbyid(c.relowner) into owner
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'members';
+
+  if owner is null then
+    raise exception
+      'Refusing to run: there is no public.members here, so this is not the Guestlist database.';
+  end if;
+
+  if current_user <> owner
+     and not exists (select 1 from pg_roles
+                      where rolname = current_user and (rolsuper or rolbypassrls)) then
+    raise exception
+      'Refusing to run: this session is "%", and public.members is owned by "%". '
+      'Enabling row level security as a non-owner would lock the application out of its own '
+      'database. Run this as % (the Supabase SQL editor does, by default).',
+      current_user, owner, owner;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 1. RLS on everything in public that does not have it.
 -- ---------------------------------------------------------------------------
 do $$
