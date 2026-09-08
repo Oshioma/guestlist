@@ -45,6 +45,7 @@ export const MIGRATION_FILES: string[] = [
   '038_guestlist_confirmation.sql',
   '039_waitlist_invite.sql',
   '040_retreats.sql',
+  '041_signed_in.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
