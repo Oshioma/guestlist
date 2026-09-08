@@ -2831,6 +2831,44 @@ console.log('\n— The numbers, read back —');
     [302, 307].includes((await anon.fetch('/admin/analytics')).status));
 }
 
+console.log('\n— Nothing in public is open to the Data API —');
+{
+  // The advisor that found this assumed Supabase Auth. Guestlist has none:
+  // lib/db.ts is a pg Pool, Supabase is used only for Storage with the
+  // service key, and auth.uid() is null on every request that could reach
+  // this database through PostgREST. So there is no per-user policy to write
+  // — everything is backend-only, and this check keeps it that way as tables
+  // are added.
+  const open = await q(
+    `select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity
+      order by 1`);
+  check('every table in public has row level security on',
+    open.length === 0, open.map((r) => r.relname).join(', ').slice(0, 300));
+
+  // The ones the advisor named, held by name so a regression is legible.
+  const named = ['member_scene_history_genres', 'member_blocks', 'member_connections',
+    'member_reports', 'member_privacy', 'event_feedback', 'promoter_email_prefs',
+    'event_duplicate_requests', 'email_outbox', 'member_email_prefs'];
+  const secured = (await q(
+    `select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relrowsecurity and relname = any($1)`, [named])).map((r) => r.relname);
+  check('including the ten the advisor named', named.every((t) => secured.includes(t)),
+    named.filter((t) => !secured.includes(t)).join(', '));
+
+  // The tables that would actually hurt. Session tokens and reset tokens are
+  // hashed, but a readable row is still a list of who has an account.
+  for (const t of ['members', 'auth_sessions', 'password_resets', 'email_verifications', 'email_outbox']) {
+    check(`${t} is not readable by anybody but us`,
+      (await q(`select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                 where n.nspname = 'public' and c.relname = $1 and c.relrowsecurity`, [t])).length === 1);
+  }
+
+  // And the app is untouched by any of it, because it is the owner.
+  check('the app still reads its own tables', (await q(`select count(*)::int n from members`))[0].n > 0);
+  check('and the site still serves', (await anon.fetch('/events')).status === 200);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));
