@@ -2925,6 +2925,51 @@ console.log('\n— A confirmation link that actually leaves —');
   await q(`delete from members where id = $1`, [m.id]);
 }
 
+console.log('\n— A renamed member does not break every link to themselves —');
+{
+  const renamer = client();
+  const email = `renamer-${Date.now()}@example.com`;
+  await renamer.fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'a-brand-new-password',
+      displayName: 'Master Craig Gordon Irving', startedAt: Date.now() - 9000 }),
+  });
+  const [m] = await q(`select id, slug from members where email = $1`, [email]);
+  const oldSlug = m.slug;
+  check('a long name becomes a long slug', oldSlug.startsWith('master-craig-gordon-irving'));
+  check('their profile is there', (await anon.fetch(`/members/${oldSlug}`)).status === 200);
+
+  // Exactly what happened in production: they shorten their name.
+  const renamed = await renamer.fetch('/api/you/settings', {
+    method: 'PATCH', body: JSON.stringify({ profile: { displayName: 'Craig' } }),
+  });
+  check('they shorten their name', renamed.status === 200);
+  const [after] = await q(`select slug from members where id = $1`, [m.id]);
+  check('which regenerates the slug', after.slug !== oldSlug, `${oldSlug} -> ${after.slug}`);
+
+  // The bug: every address anybody already had for them used to 404.
+  const stale = await anon.fetch(`/members/${oldSlug}`);
+  check('the old address does not 404', stale.status !== 404, String(stale.status));
+  check('it sends you to where they are now',
+    [307, 308, 302].includes(stale.status) && (stale.headers.get('location') ?? '').endsWith(`/members/${after.slug}`),
+    `${stale.status} ${stale.headers.get('location')}`);
+  check('and that address works', (await anon.fetch(`/members/${after.slug}`)).status === 200);
+
+  // A slug for nobody is still a 404 — the tail has to actually find someone.
+  check('an invented address is still gone',
+    (await anon.fetch('/members/somebody-who-never-was-ffffff')).status === 404);
+  check('and so is one with no id on the end',
+    (await anon.fetch('/members/not-a-real-slug')).status === 404);
+
+  // The admin notification links by who they are, not what they were called.
+  const desk = client();
+  await desk.login('oshi@guestlist.net');
+  const notif = (await (await desk.fetch('/notifications')).text()).replace(/<script[\s\S]*?<\/script>/g, '');
+  check('the new-member notification carries no stale slug', !notif.includes(oldSlug));
+
+  await q(`delete from members where id = $1`, [m.id]);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

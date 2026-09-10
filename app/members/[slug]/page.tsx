@@ -3,7 +3,7 @@
 // history is shown only when mutually visible.
 
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
 import { profileRobots } from '@/lib/profileVisibility';
 import { DeleteMember } from '@/components/admin/DeleteMember';
@@ -58,7 +58,26 @@ export default async function MemberProfilePage({ params }: { params: Promise<{ 
        from members where slug = $1`,
     [slug]
   );
-  if (!member) notFound();
+  // A RENAMED MEMBER DOES NOT BREAK EVERY LINK TO THEMSELVES.
+  //
+  // Changing your display name regenerates your slug, which used to kill
+  // every address anybody already had for you — a shared link, a bookmark,
+  // the link frozen into an old notification. All of them 404'd, and the
+  // person looking assumed the profile was gone.
+  //
+  // Every slug ends in the first six characters of the member's id, which is
+  // exactly what that suffix is for. So a slug we do not recognise is looked
+  // up by its tail, and if that finds somebody, their current address is
+  // where you go. The name in the URL is decoration; the id is the address.
+  if (!member) {
+    const tail = slug.split('-').pop() ?? '';
+    const moved = /^[0-9a-f]{6}$/.test(tail)
+      ? await queryOne<{ slug: string }>(
+          `select slug from members where id::text like $1 || '%' and slug is not null limit 1`, [tail])
+      : null;
+    if (moved && moved.slug !== slug) redirect(`/members/${moved.slug}`);
+    notFound();
+  }
   const isSelf = viewer?.id === member.id;
 
   const privacy = await getPrivacy(member.id);

@@ -20,11 +20,11 @@ export default async function NotificationsPage() {
     id: string; type: string; created_at: string; read_at: string | null;
     payload: Record<string, unknown>;
     event_id: string | null; event_title: string | null; event_slug: string | null;
-    actor_name: string | null; promoter_id: string | null;
+    actor_name: string | null; actor_slug: string | null; promoter_id: string | null;
   }>(
     `select n.id, n.type, n.created_at::text, n.read_at::text, n.payload,
             n.event_id, e.title as event_title, e.slug as event_slug,
-            a.display_name as actor_name, n.promoter_id
+            a.display_name as actor_name, a.slug as actor_slug, n.promoter_id
        from notifications n
        left join events e on e.id = n.event_id
        left join members a on a.id = n.actor_member_id
@@ -109,7 +109,11 @@ export default async function NotificationsPage() {
       // say so and go straight to the desk that fixes them.
       case 'admin_new_member':
         text = `New member: ${n.actor_name ?? p.name ?? 'someone'}${p.city ? ` · ${p.city}` : ''}`;
-        href = p.slug ? `/members/${p.slug}` : '/admin/network';
+        // The payload froze a slug on the day they joined. Renaming
+        // regenerates it, so the frozen one is a dead link — read the live
+        // one off the member instead, and keep the payload as the fallback
+        // for rows written before this.
+        href = n.actor_slug ? `/members/${n.actor_slug}` : p.slug ? `/members/${p.slug}` : '/admin/network';
         break;
       case 'admin_new_article':
         text = `New article for review: “${p.title ?? 'Untitled'}” by ${p.author ?? 'a member'}`;
