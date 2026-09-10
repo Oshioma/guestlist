@@ -9,8 +9,23 @@ import { FollowButton } from '@/components/FollowButton';
 import { VideoArchive } from '@/components/artists/VideoArchive';
 import { videosForArtist } from '@/lib/videoArchive';
 import { query } from '@/lib/db';
+import { pageMeta } from '@/lib/seo';
+import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const a = await getArtistBySlug(slug);
+  if (!a) return { title: 'Artist not found' };
+  const genres = a.genres?.slice(0, 3).map((g) => g.name).join(', ');
+  return pageMeta({
+    title: `${a.name} — upcoming dates`,
+    description: `Where ${a.name} is playing${genres ? ` — ${genres}` : ''}. Dates, venues and tickets on Guestlist.`,
+    path: `/artists/${a.slug}`,
+    image: a.image_url,
+  });
+}
 
 export default async function ArtistPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

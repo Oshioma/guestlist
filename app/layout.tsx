@@ -6,11 +6,32 @@ import { SiteFooter } from '@/components/SiteFooter';
 import { SetYourCity } from '@/components/SetYourCity';
 import { ConfirmYourEmail } from '@/components/auth/ConfirmYourEmail';
 import { getCurrentMember } from '@/lib/auth';
+import { SITE_URL, organisationSchema } from '@/lib/seo';
 
+// The site's own metadata, and the template every page title hangs off.
+//
+// `template` is the piece that was missing: a page setting its own title used
+// to replace this one entirely, and a page setting none inherited the bare
+// word "Guestlist". Now a night is "Sunfall — Brockwell Park, Sat 12 Jul ·
+// Guestlist" and the brand rides along without being written out each time.
+//
+// metadataBase makes every relative image in an og: tag absolute, which is
+// the difference between a link preview showing the flyer and showing nothing.
 export const metadata: Metadata = {
-  title: 'Guestlist',
+  metadataBase: new URL(SITE_URL),
+  title: { default: 'Guestlist — what\u2019s on tonight', template: '%s · Guestlist' },
   description:
     'Guestlist — curated events, nights and experiences for the generation that grew up on rave culture.',
+  alternates: { canonical: '/' },
+  openGraph: {
+    siteName: 'Guestlist',
+    type: 'website',
+    url: SITE_URL,
+    title: 'Guestlist — what\u2019s on tonight',
+    description:
+      'Curated events, nights and experiences for the generation that grew up on rave culture.',
+  },
+  twitter: { card: 'summary_large_image' },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -23,6 +44,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" data-theme={theme}>
       <body>
+        {/* The site itself, once, so a search for the name shows the name and
+            a search box rather than a bare link. */}
+        <script type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organisationSchema()) }}/>
         <SiteHeader />
         {/* A member with no resolved place is, to Guestlist, nowhere. Asked
             once a visit until they answer — see components/SetYourCity. */}
