@@ -30,6 +30,51 @@ export async function listAuthorArticles(authorId:string):Promise<Article[]>{ret
 export async function getAuthorArticle(id:string,authorId:string):Promise<Article|null>{return queryOne<Article>(`${SELECT} where a.id=$1 and a.author_id=$2`,[id,authorId]);}
 export async function listAdminArticles():Promise<Article[]>{return query<Article>(`${SELECT} order by case a.status when 'submitted' then 0 when 'changes_requested' then 1 when 'approved' then 2 when 'published' then 3 else 4 end, a.updated_at desc limit 200`);}
 
+
+/**
+ * Does that hero image actually load?
+ *
+ * "Has a hero image" was already required to submit and to publish, and a
+ * piece still went out with a grey box and a broken-image icon on it: the URL
+ * was there and the picture behind it was gone. A column being non-null is
+ * not the same as a photograph existing.
+ *
+ * So the last check before something carries Guestlist's name in public is to
+ * go and look. Refusing when we cannot confirm is deliberate — allowing it on
+ * a failed check is exactly how the broken one shipped, and an editor who
+ * sees "that image gives a 404" picks another one in ten seconds.
+ */
+export async function heroImageLoads(url: string): Promise<{ ok: true } | { ok: false; why: string }> {
+  // A hero can legitimately be one of ours, stored as /images/whatever.jpg.
+  // That is not a broken address, it is a relative one, so it is resolved
+  // against the site before anybody decides it does not exist.
+  const site = process.env.SITE_URL ?? 'https://www.guestlist.net';
+  let parsed: URL;
+  try {
+    parsed = url.startsWith('/') ? new URL(url, site) : new URL(url);
+  } catch {
+    return { ok: false, why: 'that image address is not a valid URL' };
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return { ok: false, why: 'that image address is not http(s)' };
+  }
+  try {
+    // HEAD first: nearly every host answers it and it costs no bandwidth.
+    // Some refuse it, so a 405 falls through to a real request.
+    const target = parsed.toString();
+    let res = await fetch(target, { method: 'HEAD', cache: 'no-store', redirect: 'follow' });
+    if (res.status === 405 || res.status === 501) {
+      res = await fetch(target, { method: 'GET', cache: 'no-store', redirect: 'follow' });
+    }
+    if (!res.ok) return { ok: false, why: `that image gives a ${res.status}` };
+    const type = res.headers.get('content-type') ?? '';
+    if (type && !type.startsWith('image/')) return { ok: false, why: `that address is ${type}, not an image` };
+    return { ok: true };
+  } catch {
+    return { ok: false, why: 'that image could not be reached' };
+  }
+}
+
 export async function createDraft(authorId:string, section='balance') {
   const safeSection=section==='events'?'events':'balance';
   return queryOne<{id:string;slug:string}>(`insert into articles(section_id,author_id,slug) select id,$1,$2 from editorial_sections where slug=$3 and active=true returning id,slug`,[authorId,articleSlug('draft'),safeSection]);
@@ -65,6 +110,8 @@ export async function submitArticle(id:string,authorId:string){
   if(a.title.trim().length<8) throw new Error('Add a clear title');
   if(a.body.trim().split(/\s+/).length<80) throw new Error('Article must be at least 80 words');
   if(!a.hero_image_url) throw new Error('Every article needs a hero image');
+  const heroOk=await heroImageLoads(a.hero_image_url);
+  if(!heroOk.ok) throw new Error(`Your hero image does not load — ${heroOk.why}. Pick another one.`);
   await query(`update articles set slug=$3,status='submitted',submitted_at=now(),admin_note=null,updated_at=now() where id=$1 and author_id=$2`,[id,authorId,articleSlug(a.title)]);
   // The editorial desk hears about it — and the review digest is refreshed
   // inside that call, so the bell and the queue agree.
@@ -93,7 +140,9 @@ export async function adminReviewArticle(id:string,adminId:string,action:'reques
   if(action==='feature'){await query(`update articles set featured=$2,updated_at=now() where id=$1`,[id,!!featured]);}
   else if(action==='request_changes') await query(`update articles set status='changes_requested',admin_note=$2,updated_at=now() where id=$1`,[id,note||'Please make the requested changes.']);
   else if(action==='approve') await query(`update articles set status='approved',approved_at=now(),admin_note=$2,updated_at=now() where id=$1`,[id,note||null]);
-  else if(action==='publish') { if(!a.hero_image_url) throw new Error('Article needs a hero image before publishing'); await query(`update articles set status='published',approved_at=coalesce(approved_at,now()),published_at=coalesce(published_at,now()),admin_note=$2,updated_at=now() where id=$1`,[id,note||null]); }
+  else if(action==='publish') { if(!a.hero_image_url) throw new Error('Article needs a hero image before publishing');
+    const heroOk=await heroImageLoads(a.hero_image_url);
+    if(!heroOk.ok) throw new Error(`Not publishing with a broken hero image — ${heroOk.why}.`); await query(`update articles set status='published',approved_at=coalesce(approved_at,now()),published_at=coalesce(published_at,now()),admin_note=$2,updated_at=now() where id=$1`,[id,note||null]); }
   else if(action==='reject') await query(`update articles set status='rejected',admin_note=$2,updated_at=now() where id=$1`,[id,note||null]);
   else if(action==='archive') await query(`update articles set status='archived',featured=false,admin_note=$2,updated_at=now() where id=$1`,[id,note||null]);
   return queryOne<Article>(`${SELECT} where a.id=$1`,[id]);

@@ -802,7 +802,7 @@ console.log('\n— Articles ↔ events —');
     body: JSON.stringify({
       title: 'Two nights in one piece',
       body: 'A preview of the weekend, written for the verify suite. '.repeat(20),
-      hero_image_url: 'https://images.example.com/hero.jpg',
+      hero_image_url: `${BASE}/images/hero.jpg`,
     }),
   });
   await author.fetch(`/api/articles/${draft.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'submit' }) });
@@ -1338,7 +1338,7 @@ console.log('\n— Admin notifications —');
     body: JSON.stringify({
       title: 'A night worth writing about',
       body: 'Words for the verify suite, enough of them to pass the length check. '.repeat(15),
-      hero_image_url: 'https://images.example.com/hero.jpg',
+      hero_image_url: `${BASE}/images/hero.jpg`,
     }),
   });
   const submitted = await author.fetch(`/api/articles/${draft.id}`, {
@@ -3021,6 +3021,58 @@ console.log('\n— Seeing who has an account, and removing what is not a person 
 
   check('an empty selection is refused rather than deleting everything',
     (await desk.fetch('/api/admin/members/bulk-delete', { method: 'POST', body: JSON.stringify({ ids: [] }) })).status === 400);
+}
+
+console.log('\n— No article goes out with a broken picture —');
+{
+  // "Has a hero image" was already required, and a piece still went out with
+  // a grey box on it: the URL was there and the picture behind it was gone.
+  // A column being non-null is not the same as a photograph existing.
+  const author = client();
+  check('an author signs in', (await author.login('dev-nadia@example.com')) === 200);
+  const [me] = await q(`select id from members where email = 'dev-nadia@example.com'`);
+  const [section] = await q(`select id from editorial_sections limit 1`);
+
+  const write = async (hero) => {
+    const [a] = await q(
+      `insert into articles (title, slug, body, status, author_id, article_type, section_id, hero_image_url)
+       values ('A piece that needs a picture', $1, $2, 'draft', $3, 'story', $4, $5) returning id`,
+      [`hero-check-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+       'word '.repeat(120).trim(), me.id, section.id, hero]);
+    return a.id;
+  };
+
+  // A URL that is well formed and points at nothing — exactly the shape the
+  // rotted Unsplash address had.
+  const broken = await write('https://images.unsplash.com/photo-does-not-exist-at-all.jpg');
+  const res = await author.fetch(`/api/articles/${broken}`, {
+    method: 'PATCH', body: JSON.stringify({ action: 'submit' }) });
+  check('a piece with a dead image cannot be submitted', res.status >= 400, String(res.status));
+  const said = await res.json().catch(() => ({}));
+  check('and it says what is wrong with it rather than "invalid"',
+    /does not load|gives a|could not be reached/.test(said.error ?? ''), said.error);
+  check('so it stays a draft',
+    (await q(`select status from articles where id = $1`, [broken]))[0].status === 'draft');
+
+  // Something that actually resolves goes through.
+  const working = await write(`${BASE}/images/retreat-beach.jpg`);
+  const ok = await author.fetch(`/api/articles/${working}`, {
+    method: 'PATCH', body: JSON.stringify({ action: 'submit' }) });
+  check('a piece with a picture that loads goes through', ok.status === 200, String(ok.status));
+
+  // The publish side has the same guard, because an image can rot between
+  // somebody writing the piece and an editor pressing publish.
+  await q(`update articles set hero_image_url = $2 where id = $1`,
+    [working, 'https://images.unsplash.com/photo-gone-since-submission.jpg']);
+  const desk = client();
+  await desk.login('oshi@guestlist.net');
+  const pub = await desk.fetch(`/api/admin/articles/${working}`, {
+    method: 'PATCH', body: JSON.stringify({ action: 'publish' }) });
+  check('and it cannot be published if the image died in between', pub.status >= 400, String(pub.status));
+  check('so it never reaches the public',
+    (await q(`select status from articles where id = $1`, [working]))[0].status !== 'published');
+
+  await q(`delete from articles where id = any($1)`, [[broken, working]]);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
