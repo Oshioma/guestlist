@@ -2110,7 +2110,16 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 
 /* My Guestlist (member home) */
 .myGuestlist { padding-top: 26px; }
-.myGuestlistTitle { font-size: clamp(24px, 5vw, 32px); letter-spacing: -0.7px; margin: 4px 0 14px; }
+.myGuestlistTitle { font-size: clamp(24px, 5vw, 32px); letter-spacing: -0.7px; margin: 4px 0 10px; }
+/* The promise, under the name. Wide enough to read as a sentence rather than
+   a caption, and short enough to be read at all. */
+.myGuestlistPitch {
+  max-width: 46ch; margin: 0 0 18px;
+  font-size: 16px; line-height: 1.5; color: var(--text-soft);
+}
+.myGuestlistPitch b { color: var(--text); font-weight: 800; }
+.myGuestlistTerms { font-size: 13px; color: var(--text-faint); white-space: nowrap; }
+.myGuestlistTerms:hover { color: var(--accent-ink); }
 .travelStrip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
 .travelCard {
   display: grid; gap: 2px;

@@ -65,6 +65,17 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
       <div className="homeKicker">{greeting}</div>
       <h1 className="myGuestlistTitle">{firstName}, here’s your Guestlist.</h1>
 
+      {/* The one sentence that says what Guestlist is for. It sits directly
+          under the name because everything below it — picks, your people,
+          tonight — is the ordinary listings half; this is the half nobody
+          else does. The asterisk goes somewhere: a caveat with no page
+          behind it is a caveat hiding. */}
+      <p className="myGuestlistPitch">
+        Our members can ask us to get them on the guestlist to <b>ANY</b> event.
+        We work out the rest.{' '}
+        <Link href="/membership/terms" className="myGuestlistTerms">Terms apply*</Link>
+      </p>
+
       {travel.length > 0 && (
         <div className="travelStrip">
           {travel.map((t) => (

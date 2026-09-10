@@ -2869,6 +2869,20 @@ console.log('\n— Nothing in public is open to the Data API —');
   check('and the site still serves', (await anon.fetch('/events')).status === 200);
 }
 
+console.log('\n— The promise, under the name —');
+{
+  const home = await (await nadia.fetch('/')).text();
+  const body = home.replace(/<script[\s\S]*?<\/script>/g, '');
+  check('a signed-in member is greeted by name', /here’s your Guestlist/.test(body));
+  check('and told what Guestlist is actually for',
+    /Our members can ask us to get them on the guestlist to/.test(body)
+    && /We work out the rest/.test(body));
+  // A caveat with no page behind it is a caveat hiding.
+  check('and the asterisk goes somewhere', /membership\/terms[^>]*>Terms apply\*/.test(body));
+  check('which is a page that exists',
+    (await anon.fetch('/membership/terms')).status === 200);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));
