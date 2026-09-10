@@ -192,6 +192,83 @@ export async function topPages(days: number): Promise<PageRow[]> {
   );
 }
 
+export type SourceRow = { source: string; people: number; n: number };
+
+/**
+ * WHERE THEY CAME FROM.
+ *
+ * The People number was unreadable on its own: 550 of them and twelve
+ * accounts, and no way to tell whether that was Instagram working or a
+ * scraper looping. This is the answer to "where".
+ *
+ * A browser arriving with no referrer is not a mystery, it is the normal
+ * case — typed in, opened from a message, a bookmark, or a site that
+ * suppresses the header — so it is named "Direct or unknown" rather than
+ * being hidden, because it is usually the biggest row and pretending
+ * otherwise would make the rest look bigger than it is.
+ */
+export async function trafficSources(days: number): Promise<SourceRow[]> {
+  return query<SourceRow>(
+    `select coalesce(referrer_host, 'Direct or unknown') as source,
+            count(distinct coalesce(member_id::text, anon_id))::int as people,
+            count(*)::int as n
+       from analytics_events
+      where created_at >= now() - make_interval(days => $1::int)
+        and coalesce(member_id::text, anon_id) is not null
+      group by 1 order by people desc, n desc limit 15`,
+    [days]
+  );
+}
+
+export type CountryRow = { country: string; people: number };
+
+/** Which countries they were in, as far as the CDN edge knows. */
+export async function visitorCountries(days: number): Promise<CountryRow[]> {
+  return query<CountryRow>(
+    `select country,
+            count(distinct coalesce(member_id::text, anon_id))::int as people
+       from analytics_events
+      where created_at >= now() - make_interval(days => $1::int)
+        and country is not null
+        and coalesce(member_id::text, anon_id) is not null
+      group by country order by people desc limit 15`,
+    [days]
+  );
+}
+
+export type Realness = { people: number; oneHit: number; returned: number; members: number };
+
+/**
+ * How much of the People number is a person who looked at more than one thing.
+ *
+ * A browser that fires exactly one event and is never seen again is what an
+ * automated visit looks like — anything that runs JavaScript but keeps no
+ * localStorage is a fresh id every single time, so it can inflate the
+ * headline without a single human being involved. Saying how many did more
+ * than one thing, and how many came back on another day, is the cheapest
+ * honest check on whether the big number means anything.
+ */
+export async function realness(days: number): Promise<Realness> {
+  const row = await queryOne<Realness>(
+    `with seen as (
+       select coalesce(member_id::text, anon_id) as who,
+              count(*) as hits,
+              count(distinct date_trunc('day', created_at)) as days,
+              bool_or(member_id is not null) as is_member
+         from analytics_events
+        where created_at >= now() - make_interval(days => $1::int)
+          and coalesce(member_id::text, anon_id) is not null
+        group by 1)
+     select count(*)::int as people,
+            count(*) filter (where hits = 1)::int as "oneHit",
+            count(*) filter (where days > 1)::int as returned,
+            count(*) filter (where is_member)::int as members
+       from seen`,
+    [days]
+  );
+  return row ?? { people: 0, oneHit: 0, returned: 0, members: 0 };
+}
+
 export type PlaceRow = { place: string; n: number };
 
 /** Where the membership is, which is the only map that decides what we chase. */

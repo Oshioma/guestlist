@@ -802,7 +802,7 @@ console.log('\n— Articles ↔ events —');
     body: JSON.stringify({
       title: 'Two nights in one piece',
       body: 'A preview of the weekend, written for the verify suite. '.repeat(20),
-      hero_image_url: 'https://images.example.com/hero.jpg',
+      hero_image_url: `${BASE}/images/hero.jpg`,
     }),
   });
   await author.fetch(`/api/articles/${draft.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'submit' }) });
@@ -1338,7 +1338,7 @@ console.log('\n— Admin notifications —');
     body: JSON.stringify({
       title: 'A night worth writing about',
       body: 'Words for the verify suite, enough of them to pass the length check. '.repeat(15),
-      hero_image_url: 'https://images.example.com/hero.jpg',
+      hero_image_url: `${BASE}/images/hero.jpg`,
     }),
   });
   const submitted = await author.fetch(`/api/articles/${draft.id}`, {
@@ -3021,6 +3021,118 @@ console.log('\n— Seeing who has an account, and removing what is not a person 
 
   check('an empty selection is refused rather than deleting everything',
     (await desk.fetch('/api/admin/members/bulk-delete', { method: 'POST', body: JSON.stringify({ ids: [] }) })).status === 400);
+}
+
+console.log('\n— No article goes out with a broken picture —');
+{
+  // "Has a hero image" was already required, and a piece still went out with
+  // a grey box on it: the URL was there and the picture behind it was gone.
+  // A column being non-null is not the same as a photograph existing.
+  const author = client();
+  check('an author signs in', (await author.login('dev-nadia@example.com')) === 200);
+  const [me] = await q(`select id from members where email = 'dev-nadia@example.com'`);
+  const [section] = await q(`select id from editorial_sections limit 1`);
+
+  const write = async (hero) => {
+    const [a] = await q(
+      `insert into articles (title, slug, body, status, author_id, article_type, section_id, hero_image_url)
+       values ('A piece that needs a picture', $1, $2, 'draft', $3, 'story', $4, $5) returning id`,
+      [`hero-check-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+       'word '.repeat(120).trim(), me.id, section.id, hero]);
+    return a.id;
+  };
+
+  // A URL that is well formed and points at nothing — exactly the shape the
+  // rotted Unsplash address had.
+  const broken = await write('https://images.unsplash.com/photo-does-not-exist-at-all.jpg');
+  const res = await author.fetch(`/api/articles/${broken}`, {
+    method: 'PATCH', body: JSON.stringify({ action: 'submit' }) });
+  check('a piece with a dead image cannot be submitted', res.status >= 400, String(res.status));
+  const said = await res.json().catch(() => ({}));
+  check('and it says what is wrong with it rather than "invalid"',
+    /does not load|gives a|could not be reached/.test(said.error ?? ''), said.error);
+  check('so it stays a draft',
+    (await q(`select status from articles where id = $1`, [broken]))[0].status === 'draft');
+
+  // Something that actually resolves goes through.
+  const working = await write(`${BASE}/images/retreat-beach.jpg`);
+  const ok = await author.fetch(`/api/articles/${working}`, {
+    method: 'PATCH', body: JSON.stringify({ action: 'submit' }) });
+  check('a piece with a picture that loads goes through', ok.status === 200, String(ok.status));
+
+  // The publish side has the same guard, because an image can rot between
+  // somebody writing the piece and an editor pressing publish.
+  await q(`update articles set hero_image_url = $2 where id = $1`,
+    [working, 'https://images.unsplash.com/photo-gone-since-submission.jpg']);
+  const desk = client();
+  await desk.login('oshi@guestlist.net');
+  const pub = await desk.fetch(`/api/admin/articles/${working}`, {
+    method: 'PATCH', body: JSON.stringify({ action: 'publish' }) });
+  check('and it cannot be published if the image died in between', pub.status >= 400, String(pub.status));
+  check('so it never reaches the public',
+    (await q(`select status from articles where id = $1`, [working]))[0].status !== 'published');
+
+  await q(`delete from articles where id = any($1)`, [[broken, working]]);
+}
+
+console.log('\n— Where the traffic came from —');
+{
+  // The People tile could say 550 and not one word about where any of them
+  // came from. These are the two columns that answer it, and the rule that
+  // keeps them from becoming a tracking pixel: a hostname, never a URL.
+  const anon = `verify-src-${Date.now()}`;
+  const post = (body, headers = {}) =>
+    fetch(`${BASE}/api/track`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    });
+
+  const sent = await post(
+    { type: 'membership_page_viewed', anonId: anon, path: '/membership', referrerHost: 'instagram.com' },
+    { 'x-vercel-ip-country': 'nl' });
+  check('a visit records where it came from', sent.status === 200, String(sent.status));
+  const [row] = await q(
+    `select referrer_host, country from analytics_events where anon_id = $1 order by id desc limit 1`, [anon]);
+  check('the sending site is kept', row?.referrer_host === 'instagram.com', row?.referrer_host);
+  check('and the country, upper-cased', row?.country === 'NL', row?.country);
+
+  // The point of the whole design: a full referrer says which post, which
+  // search, which private page. If one ever arrives it is dropped, not stored.
+  const leaky = `verify-src-leak-${Date.now()}`;
+  await post({ type: 'membership_page_viewed', anonId: leaky, path: '/membership',
+    referrerHost: 'https://instagram.com/p/somebodys-private-post' });
+  const [leak] = await q(
+    `select referrer_host from analytics_events where anon_id = $1 order by id desc limit 1`, [leaky]);
+  check('a full URL is thrown away rather than stored', leak?.referrer_host === null, leak?.referrer_host);
+
+  // Junk in the country header does not become a country.
+  const junk = `verify-src-junk-${Date.now()}`;
+  await post({ type: 'membership_page_viewed', anonId: junk, path: '/membership' },
+    { 'x-vercel-ip-country': 'XX' });
+  const [none] = await q(
+    `select country, referrer_host from analytics_events where anon_id = $1 order by id desc limit 1`, [junk]);
+  check('an unknown country is left blank, not recorded as "XX"', none?.country === null, none?.country);
+  check('and no referrer means no referrer', none?.referrer_host === null, none?.referrer_host);
+
+  // Read it back the way the desk reads it — through the page, so this covers
+  // the query, the grouping and the rendering rather than just the columns.
+  const desk = client();
+  await desk.login('oshi@guestlist.net');
+  const page = await (await desk.fetch('/admin/analytics?days=30')).text();
+  check('the desk has a section saying where they came from',
+    page.includes('Where they came from'));
+  check('and it names instagram.com', page.includes('instagram.com'));
+  check('and browsers with no referrer are named, not hidden',
+    page.includes('Direct or unknown'));
+  check('and a country code is shown as a country', page.includes('Netherlands'));
+
+  // The honesty check on the headline: one hit and never seen again is what an
+  // automated visit looks like, so the page says how many did more than that.
+  check('and the headline is qualified by how many did more than one thing',
+    /did more than one thing/.test(page));
+
+  await q(`delete from analytics_events where anon_id like 'verify-src-%'`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

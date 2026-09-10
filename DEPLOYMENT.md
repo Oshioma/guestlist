@@ -207,8 +207,25 @@ select j.jobname, r.status, r.start_time, r.return_message
  order by r.start_time desc limit 20;
 ```
 
-A `401` in `return_message` means the token does not match `CRON_SECRET` (or
-`SUPPLY_CRON_SECRET`) in the Vercel environment. To see what is stored:
+That tells you the schedule fired — but not what the website said back.
+`net.http_post` hands the request off and returns a row id immediately, so a
+job that fired at a dead domain with a wrong token still reads `succeeded`
+here. The reply lands somewhere else, and this is the query that matters:
+
+```sql
+select id, status_code, error_msg, created
+  from net._http_response
+ order by created desc limit 20;
+```
+
+`200` is the job actually running. A `401` means the token does not match
+`CRON_SECRET` (or `SUPPLY_CRON_SECRET`) in the Vercel environment. A `timeout`
+in `error_msg` is usually not a failure: `pg_net` gives up listening after five
+seconds by default while `/api/jobs/send-emails` is allowed five minutes, so
+the job is still running on Vercel long after Postgres stops waiting for it.
+Nothing depends on the answer coming back, so that is harmless — pass
+`timeout_milliseconds := 30000` to `net.http_post` if you would rather see the
+status code than guess. To see what token is stored:
 `select name, decrypted_secret from vault.decrypted_secrets where name = 'guestlist_cron_secret';` To change a schedule, call
 `cron.schedule` again with the same job name; `select cron.unschedule('guestlist-scan-sources');`
 removes one.

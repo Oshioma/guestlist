@@ -48,6 +48,26 @@ function anonId(): string | null {
   }
 }
 
+// Who sent them, and nothing else about it.
+//
+// document.referrer is a full URL, and a full URL is a confession: which
+// Instagram post, which search, which private page somebody had open before
+// they got here. The hostname alone answers "where did they come from" and
+// carries none of that, so the hostname is all that leaves the browser.
+//
+// Our own pages are dropped — a member walking from /events to a night is not
+// a traffic source, and counting them would drown the real ones.
+function referrerHost(): string | null {
+  try {
+    const raw = document.referrer;
+    if (!raw) return null;
+    const host = new URL(raw).hostname.replace(/^www\./, '');
+    return host === window.location.hostname.replace(/^www\./, '') ? null : host.slice(0, 120);
+  } catch {
+    return null;
+  }
+}
+
 export function track(type: ClientTrackType, metadata: Record<string, unknown> = {}) {
   try {
     const body = JSON.stringify({
@@ -56,6 +76,7 @@ export function track(type: ClientTrackType, metadata: Record<string, unknown> =
       eventId: (metadata.eventId as string) ?? null,
       promoterId: (metadata.promoterId as string) ?? null,
       anonId: anonId(),
+      referrerHost: referrerHost(),
       path: window.location.pathname,
     });
     if (navigator.sendBeacon) {
