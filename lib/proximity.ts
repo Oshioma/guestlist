@@ -47,10 +47,11 @@ export async function memberPlaceAnchors(memberId: string): Promise<PlaceAnchor[
 // WHERE SOMEBODY IS WHEN THEY HAVE NOT TOLD US.
 //
 // A visitor who is not signed in, and a member who has never set a city, have
-// no home and no followed cities — and Guestlist is a London-born, UK-first
-// guide. So they are placed in London: London nights rank first, the rest of
-// the United Kingdom next, the world after that, and Worth Travelling For
-// means leaving the UK.
+// no home and no followed cities. They are placed in London for a plain
+// reason: London has more on it than anywhere else we cover, so a list that
+// starts there is the one most likely to be useful to somebody we know
+// nothing about. London nights rank first, the rest of the United Kingdom
+// next, the world after that, and Worth Travelling For means leaving the UK.
 //
 // This is a stand-in, not an answer. A member without a place is still asked
 // where they live (components/SetYourCity, the Tonight page), because London
@@ -135,6 +136,13 @@ export function proximityTierSql(
 
 // What to call each tier on screen. The country is named when we know it,
 // because "elsewhere" means nothing without saying elsewhere than what.
+//
+// Every heading here describes the NIGHTS, not the reader. "Tonight near
+// London" says these nights are near London — which is true whether or not
+// the reader is, and stays true for somebody we have placed in London by
+// default, because the page tells them in as many words that is what it did.
+// The only heading that makes a claim about the reader is "Tonight near you",
+// and it is reached solely when there is no city to name.
 export function tierHeading(tier: number, home: { city: string | null; country: string | null }): string {
   if (tier === TIER_NEAR) return home.city ? `Tonight near ${home.city}` : 'Tonight near you';
   // A followed city is somewhere they chose to care about, so it is named as

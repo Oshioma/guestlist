@@ -1619,8 +1619,20 @@ console.log('\n— Tonight, from where you are —');
   const unplaced = await (await nowhere.fetch('/clubmessenger')).text();
   check('a member with no city is asked for one rather than sorted wrongly',
     unplaced.includes('we don’t know where you are') && unplaced.includes('/you#places'));
-  check('and still sees what is on, under a plain heading',
-    unplaced.includes('Tonight In London') && !unplaced.includes('Tonight near'));
+  // "Tonight near London" is right, and this check used to call it wrong.
+  //
+  // "near London" describes the events — they are near London — and London is
+  // where the list starts because London has more on than anywhere else we
+  // cover. Read with the line above it, which says in as many words that we do
+  // not know where they are, it is the honest version.
+  //
+  // The sentence we must never show someone who has not told us where they
+  // live is "Tonight near you", because that one is a claim about *them*. That
+  // is the line worth pinning, so it is the one pinned here.
+  check('and still sees what is on, under a heading that names the city',
+    unplaced.includes('Tonight In London') && unplaced.includes('Tonight near London'));
+  check('and is never told the nights are near *them*, which we do not know',
+    !unplaced.includes('Tonight near you'));
 
   await q(`delete from events where slug like 'tonight-%'`);
 }
