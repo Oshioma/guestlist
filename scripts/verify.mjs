@@ -2790,6 +2790,99 @@ console.log('\n— A picture off your own machine —');
     (await upload(desk, notAnImage, 'flyer.png')).status === 400);
 }
 
+console.log('\n— The numbers, read back —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  // Signing in is the one thing that was never recorded: auth_sessions is a
+  // list of live sessions, not a log — a row goes on sign-out.
+  const before = (await q(`select count(*)::int n from analytics_events where event_type = 'signed_in'`))[0].n;
+  await client().login('dev-nadia@example.com');
+  const after = (await q(`select count(*)::int n from analytics_events where event_type = 'signed_in'`))[0].n;
+  check('signing in is recorded', after === before + 1);
+  check('and against the member who signed in',
+    (await q(`select 1 from analytics_events a join members m on m.id = a.member_id
+               where a.event_type = 'signed_in' and m.email = 'dev-nadia@example.com'`)).length > 0);
+  const wrongPassword = await client().login('dev-nadia@example.com', 'not-the-password');
+  check('a failed sign-in is not a sign-in', wrongPassword === 401
+    && (await q(`select count(*)::int n from analytics_events where event_type = 'signed_in'`))[0].n === after);
+
+  const page = await (await desk.fetch('/admin/analytics')).text();
+  check('the desk has a page for it', page.includes('Analytics'));
+  check('with the headline numbers', ['People', 'Sign-ins', 'Joined', 'Ticket clicks'].every((s) => page.includes(s)));
+  check('a day-by-day chart', page.includes('anChart') && page.includes('anBar'));
+  check('and where it stops', page.includes('Where it stops') && page.includes('Got in'));
+  check('what people did, in words rather than event_type', page.includes('Looked at a night'));
+  check('the nights that did something', page.includes('The nights that did something'));
+  check('and what there is to look at', page.includes('What there is to look at'));
+  // A dashboard that does not say what it cannot see is a dashboard that lies.
+  check('it says what the numbers are not', page.includes('What these numbers are not'));
+  check('including that a signed-out person is a browser', /browser rather than a person/.test(page));
+
+  const windows = await Promise.all([7, 30, 90].map((d) => desk.fetch(`/admin/analytics?days=${d}`)));
+  check('the window can be changed', windows.every((r) => r.status === 200));
+  check('and a silly window falls back rather than breaking',
+    (await desk.fetch('/admin/analytics?days=99999')).status === 200);
+
+  check('a member cannot read the numbers',
+    [302, 307].includes((await nadia.fetch('/admin/analytics')).status));
+  check('nor can a stranger',
+    [302, 307].includes((await anon.fetch('/admin/analytics')).status));
+}
+
+console.log('\n— Nothing in public is open to the Data API —');
+{
+  // The advisor that found this assumed Supabase Auth. Guestlist has none:
+  // lib/db.ts is a pg Pool, Supabase is used only for Storage with the
+  // service key, and auth.uid() is null on every request that could reach
+  // this database through PostgREST. So there is no per-user policy to write
+  // — everything is backend-only, and this check keeps it that way as tables
+  // are added.
+  const open = await q(
+    `select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity
+      order by 1`);
+  check('every table in public has row level security on',
+    open.length === 0, open.map((r) => r.relname).join(', ').slice(0, 300));
+
+  // The ones the advisor named, held by name so a regression is legible.
+  const named = ['member_scene_history_genres', 'member_blocks', 'member_connections',
+    'member_reports', 'member_privacy', 'event_feedback', 'promoter_email_prefs',
+    'event_duplicate_requests', 'email_outbox', 'member_email_prefs'];
+  const secured = (await q(
+    `select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relrowsecurity and relname = any($1)`, [named])).map((r) => r.relname);
+  check('including the ten the advisor named', named.every((t) => secured.includes(t)),
+    named.filter((t) => !secured.includes(t)).join(', '));
+
+  // The tables that would actually hurt. Session tokens and reset tokens are
+  // hashed, but a readable row is still a list of who has an account.
+  for (const t of ['members', 'auth_sessions', 'password_resets', 'email_verifications', 'email_outbox']) {
+    check(`${t} is not readable by anybody but us`,
+      (await q(`select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                 where n.nspname = 'public' and c.relname = $1 and c.relrowsecurity`, [t])).length === 1);
+  }
+
+  // And the app is untouched by any of it, because it is the owner.
+  check('the app still reads its own tables', (await q(`select count(*)::int n from members`))[0].n > 0);
+  check('and the site still serves', (await anon.fetch('/events')).status === 200);
+}
+
+console.log('\n— The promise, under the name —');
+{
+  const home = await (await nadia.fetch('/')).text();
+  const body = home.replace(/<script[\s\S]*?<\/script>/g, '');
+  check('a signed-in member is greeted by name', /here’s your Guestlist/.test(body));
+  check('and told what Guestlist is actually for',
+    /Our members can ask us to get them on the guestlist to/.test(body)
+    && /We work out the rest/.test(body));
+  // A caveat with no page behind it is a caveat hiding.
+  check('and the asterisk goes somewhere', /membership\/terms[^>]*>Terms apply\*/.test(body));
+  check('which is a page that exists',
+    (await anon.fetch('/membership/terms')).status === 200);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

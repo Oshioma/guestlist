@@ -2110,7 +2110,16 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
 
 /* My Guestlist (member home) */
 .myGuestlist { padding-top: 26px; }
-.myGuestlistTitle { font-size: clamp(24px, 5vw, 32px); letter-spacing: -0.7px; margin: 4px 0 14px; }
+.myGuestlistTitle { font-size: clamp(24px, 5vw, 32px); letter-spacing: -0.7px; margin: 4px 0 10px; }
+/* The promise, under the name. Wide enough to read as a sentence rather than
+   a caption, and short enough to be read at all. */
+.myGuestlistPitch {
+  max-width: 46ch; margin: 0 0 18px;
+  font-size: 16px; line-height: 1.5; color: var(--text-soft);
+}
+.myGuestlistPitch b { color: var(--text); font-weight: 800; }
+.myGuestlistTerms { font-size: 13px; color: var(--text-faint); white-space: nowrap; }
+.myGuestlistTerms:hover { color: var(--accent-ink); }
 .travelStrip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
 .travelCard {
   display: grid; gap: 2px;
@@ -4264,3 +4273,93 @@ a.mbPerkDropState.live { color: var(--accent-ink); }
 }
 .eventSearchGo:hover { filter: brightness(1.08); }
 @media (max-width: 560px) { .eventSearch { max-width: none; } }
+
+/* ---------------------------------------------------------------------------
+   ADMIN → ANALYTICS. Bars drawn in CSS: a chart library for nine numbers a
+   week is a megabyte nobody needed.
+--------------------------------------------------------------------------- */
+.anH2 { margin-top: 40px; }
+.anTiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 18px; }
+.anTiles.small { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+.anTile {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-raised); padding: 15px 16px 14px; text-decoration: none; color: inherit;
+  display: block;
+}
+a.anTile:hover { border-color: var(--accent); }
+.anTileTop { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.anTileLabel { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
+.anTileNum { font-size: 30px; font-weight: 800; letter-spacing: -.03em; line-height: 1.05; margin-top: 6px; }
+.anTileHint { font-size: 11.5px; color: var(--text-faint); line-height: 1.45; margin-top: 5px; }
+.anDelta { font-size: 11px; font-weight: 800; white-space: nowrap; }
+.anDelta.up { color: #1f7a3f; }
+.anDelta.down { color: var(--danger, #a32020); }
+.anDelta.flat { color: var(--text-faint); }
+
+.anChart {
+  display: flex; align-items: flex-end; gap: 2px; height: 190px; margin-top: 16px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-raised); padding: 14px 12px;
+}
+.anDay { flex: 1; height: 100%; display: flex; align-items: flex-end; min-width: 0; }
+.anBars { display: flex; align-items: flex-end; gap: 1px; width: 100%; height: 100%; }
+/* A day with nothing in it still gets a hairline, so an empty day reads as a
+   day rather than as a hole in the chart. */
+.anBar { flex: 1; min-height: 1px; border-radius: 2px 2px 0 0; }
+.anBar.people { background: var(--accent); }
+.anBar.signIns { background: #4a8fb5; }
+.anBar.joined { background: #c9a23f; }
+.anLegend { display: flex; gap: 16px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
+.anLegend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.anLegend i.people { background: var(--accent); }
+.anLegend i.signIns { background: #4a8fb5; }
+.anLegend i.joined { background: #c9a23f; }
+.anLegendEnds { margin-left: auto; color: var(--text-faint); }
+
+.anFunnel { margin-top: 16px; display: grid; gap: 8px; }
+.anStep {
+  position: relative; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-raised); overflow: hidden; padding: 13px 16px;
+}
+.anStepBar { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.anStepText { position: relative; font-size: 14px; }
+.anStepText b { font-size: 19px; margin-right: 7px; }
+.anStepHint { display: block; font-size: 11.5px; color: var(--text-faint); margin-top: 3px; }
+
+.anTable { margin-top: 14px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--bg-raised); }
+.anRow { display: grid; grid-template-columns: 2.4fr repeat(5, .5fr); gap: 10px; padding: 11px 14px; font-size: 13px; align-items: baseline; }
+.anRow.three { grid-template-columns: 2.4fr .5fr .5fr; }
+.anRow + .anRow { border-top: 1px solid var(--border); }
+.anRow.anHead { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); background: var(--surface); }
+.anRow em { display: block; font-style: normal; font-size: 11.5px; color: var(--text-faint); margin-top: 2px; }
+.anRow a { text-decoration: none; }
+.anRow a:hover { text-decoration: underline; }
+
+.anTwoUp { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+.anActions { margin-top: 14px; display: grid; gap: 4px; }
+.anAction {
+  position: relative; display: flex; justify-content: space-between; align-items: baseline;
+  gap: 12px; padding: 9px 12px; border-radius: 8px; overflow: hidden; font-size: 13px;
+}
+.anActionBar { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 11%, transparent); }
+.anActionName, .anActionN { position: relative; }
+.anActionN { font-weight: 800; text-align: right; white-space: nowrap; }
+.anActionN em { display: block; font-style: normal; font-weight: 400; font-size: 11px; color: var(--text-faint); }
+
+.anNote {
+  margin: 34px 0 60px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); padding: 18px 20px; font-size: 13px; color: var(--text-soft);
+}
+.anNote p { margin: 8px 0 0; line-height: 1.6; }
+
+@media (max-width: 1000px) {
+  .anTiles { grid-template-columns: repeat(2, 1fr); }
+  .anTwoUp { grid-template-columns: 1fr; }
+  .anRow { grid-template-columns: 1.6fr repeat(5, .5fr); font-size: 12px; }
+}
+@media (max-width: 620px) {
+  .anTiles { grid-template-columns: 1fr 1fr; }
+  .anChart { height: 150px; }
+  .anRow, .anRow.three { grid-template-columns: 1fr .4fr; }
+  .anRow > span:nth-child(n+3) { display: none; }
+}

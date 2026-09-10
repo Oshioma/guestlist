@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryOne } from '@/lib/db';
 import { createSession, setSessionCookie, verifyPassword } from '@/lib/auth';
+import { track } from '@/lib/analytics';
 
 export async function POST(req: NextRequest) {
   const isForm = (req.headers.get('content-type') ?? '').includes('form');
@@ -24,5 +25,8 @@ export async function POST(req: NextRequest) {
 
   const token = await createSession(member.id);
   await setSessionCookie(token);
+  // auth_sessions is not a log — a row goes when somebody signs out, and again
+  // on a password reset — so coming back is recorded here or not at all.
+  await track('signed_in', { memberId: member.id });
   return NextResponse.json({ ok: true });
 }
