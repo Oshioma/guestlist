@@ -12,7 +12,8 @@ import Link from 'next/link';
 import { getCurrentMember } from '@/lib/auth';
 import { AccountsTable } from '@/components/admin/AccountsTable';
 import {
-  accounts, actions, byDay, catalogue, funnel, headlines, memberPlaces, recordingSince, topNights, topPages,
+  accounts, actions, byDay, catalogue, funnel, headlines, memberPlaces, realness, recordingSince,
+  topNights, topPages, trafficSources, visitorCountries,
   WINDOWS, type Window,
 } from '@/lib/adminAnalytics';
 
@@ -50,6 +51,16 @@ function Delta({ now, before }: { now: number; before: number }) {
 const short = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
+// 'NL' means nothing at a glance and 'Netherlands' means everything, and the
+// runtime already ships the whole table — no list to keep up to date here.
+// Falls back to the code itself where there is no ICU data.
+const COUNTRIES = (() => {
+  try { return new Intl.DisplayNames(['en-GB'], { type: 'region' }); } catch { return null; }
+})();
+function countryName(code: string): string {
+  try { return COUNTRIES?.of(code) ?? code; } catch { return code; }
+}
+
 export default async function AdminAnalyticsPage({
   searchParams,
 }: {
@@ -61,10 +72,12 @@ export default async function AdminAnalyticsPage({
   // when somebody has actually asked to see it.
   const showWho = sp.who === '1';
 
-  const [tiles, daily, steps, acts, nights, pages, places, cat, since, me, who] = await Promise.all([
+  const [tiles, daily, steps, acts, nights, pages, places, cat, since, me, who,
+         sources, countries, real] = await Promise.all([
     headlines(days), byDay(days), funnel(days), actions(days),
     topNights(days), topPages(days), memberPlaces(), catalogue(), recordingSince(),
     getCurrentMember(), showWho ? accounts() : Promise.resolve([]),
+    trafficSources(days), visitorCountries(days), realness(days),
   ]);
 
   const peak = Math.max(1, ...daily.map((d) => Math.max(d.people, d.sign_ins, d.joined)));
@@ -232,6 +245,45 @@ export default async function AdminAnalyticsPage({
           <div className="anTable">
             {places.map((p) => (
               <div className="anRow three" key={p.place}><span>{p.place}</span><span>{p.n}</span><span /></div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <h2 className="adminTitle anH2">Where they came from</h2>
+      <p className="adminSub">
+        The People number counts browsers, not names, so most of it will never be an account —
+        {' '}that is normal and not a fault. What matters is whether it is anybody. Of the{' '}
+        <b>{real.people.toLocaleString('en-GB')}</b> counted in this window,{' '}
+        <b>{(real.people - real.oneHit).toLocaleString('en-GB')}</b> did more than one thing,{' '}
+        <b>{real.returned.toLocaleString('en-GB')}</b> came back on another day, and{' '}
+        <b>{real.members.toLocaleString('en-GB')}</b> were signed in. A browser that fires once and
+        {' '}is never seen again is what an automated visit looks like.
+      </p>
+      <div className="anTwoUp">
+        <div>
+          <div className="anTable">
+            <div className="anRow anHead three"><span>Source</span><span>People</span><span>Actions</span></div>
+            {sources.length === 0 && <p className="adminSub">Nothing recorded in this window.</p>}
+            {sources.map((r) => (
+              <div className="anRow three" key={r.source}>
+                <span>{r.source}</span><span>{r.people}</span><span>{r.n}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="anTable">
+            <div className="anRow anHead three"><span>Country</span><span>People</span><span /></div>
+            {countries.length === 0 && (
+              <p className="adminSub">
+                No countries yet. They start being recorded from the first visit after this went live.
+              </p>
+            )}
+            {countries.map((r) => (
+              <div className="anRow three" key={r.country}>
+                <span>{countryName(r.country)}</span><span>{r.people}</span><span />
+              </div>
             ))}
           </div>
         </div>

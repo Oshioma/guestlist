@@ -3075,6 +3075,66 @@ console.log('\n— No article goes out with a broken picture —');
   await q(`delete from articles where id = any($1)`, [[broken, working]]);
 }
 
+console.log('\n— Where the traffic came from —');
+{
+  // The People tile could say 550 and not one word about where any of them
+  // came from. These are the two columns that answer it, and the rule that
+  // keeps them from becoming a tracking pixel: a hostname, never a URL.
+  const anon = `verify-src-${Date.now()}`;
+  const post = (body, headers = {}) =>
+    fetch(`${BASE}/api/track`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    });
+
+  const sent = await post(
+    { type: 'membership_page_viewed', anonId: anon, path: '/membership', referrerHost: 'instagram.com' },
+    { 'x-vercel-ip-country': 'nl' });
+  check('a visit records where it came from', sent.status === 200, String(sent.status));
+  const [row] = await q(
+    `select referrer_host, country from analytics_events where anon_id = $1 order by id desc limit 1`, [anon]);
+  check('the sending site is kept', row?.referrer_host === 'instagram.com', row?.referrer_host);
+  check('and the country, upper-cased', row?.country === 'NL', row?.country);
+
+  // The point of the whole design: a full referrer says which post, which
+  // search, which private page. If one ever arrives it is dropped, not stored.
+  const leaky = `verify-src-leak-${Date.now()}`;
+  await post({ type: 'membership_page_viewed', anonId: leaky, path: '/membership',
+    referrerHost: 'https://instagram.com/p/somebodys-private-post' });
+  const [leak] = await q(
+    `select referrer_host from analytics_events where anon_id = $1 order by id desc limit 1`, [leaky]);
+  check('a full URL is thrown away rather than stored', leak?.referrer_host === null, leak?.referrer_host);
+
+  // Junk in the country header does not become a country.
+  const junk = `verify-src-junk-${Date.now()}`;
+  await post({ type: 'membership_page_viewed', anonId: junk, path: '/membership' },
+    { 'x-vercel-ip-country': 'XX' });
+  const [none] = await q(
+    `select country, referrer_host from analytics_events where anon_id = $1 order by id desc limit 1`, [junk]);
+  check('an unknown country is left blank, not recorded as "XX"', none?.country === null, none?.country);
+  check('and no referrer means no referrer', none?.referrer_host === null, none?.referrer_host);
+
+  // Read it back the way the desk reads it — through the page, so this covers
+  // the query, the grouping and the rendering rather than just the columns.
+  const desk = client();
+  await desk.login('oshi@guestlist.net');
+  const page = await (await desk.fetch('/admin/analytics?days=30')).text();
+  check('the desk has a section saying where they came from',
+    page.includes('Where they came from'));
+  check('and it names instagram.com', page.includes('instagram.com'));
+  check('and browsers with no referrer are named, not hidden',
+    page.includes('Direct or unknown'));
+  check('and a country code is shown as a country', page.includes('Netherlands'));
+
+  // The honesty check on the headline: one hit and never seen again is what an
+  // automated visit looks like, so the page says how many did more than that.
+  check('and the headline is qualified by how many did more than one thing',
+    /did more than one thing/.test(page));
+
+  await q(`delete from analytics_events where anon_id like 'verify-src-%'`);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

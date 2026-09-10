@@ -122,14 +122,20 @@ export async function track(
     promoterId?: string | null;
     genreId?: string | null;
     path?: string | null;
+    // Where they came from: the sending site's hostname and a two-letter
+    // country. Only the client ingestion route fills these — an action
+    // recorded server-side has no referrer to speak of.
+    referrerHost?: string | null;
+    country?: string | null;
     metadata?: Record<string, unknown>;
   } = {}
 ): Promise<void> {
   try {
     await query(
       `insert into analytics_events
-         (event_type, member_id, anon_id, event_id, promoter_id, genre_id, path, metadata)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+         (event_type, member_id, anon_id, event_id, promoter_id, genre_id, path,
+          referrer_host, country, metadata)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         type,
         opts.memberId ?? null,
@@ -138,6 +144,8 @@ export async function track(
         opts.promoterId ?? null,
         opts.genreId ?? null,
         opts.path ?? null,
+        opts.referrerHost ?? null,
+        opts.country ?? null,
         JSON.stringify(opts.metadata ?? {}),
       ]
     );
