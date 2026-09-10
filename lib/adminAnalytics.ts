@@ -236,3 +236,45 @@ export async function recordingSince(): Promise<Record<string, string | null>> {
   );
   return row ?? {};
 }
+
+export type AccountRow = {
+  id: string; display_name: string; email: string; slug: string | null;
+  city: string | null; role: string; created_at: string;
+  verified: boolean; same_connection: number; actions: number;
+};
+
+/**
+ * Everyone with an account, newest first, with the two things that tell a
+ * person from a script.
+ *
+ * A real signup confirms its address sooner or later and then does something.
+ * A scripted one arrives, never confirms, never comes back, and usually
+ * arrives beside several others from the same connection — which is why the
+ * count of accounts sharing a signup IP is on the row. It is a hint and not a
+ * verdict: a flatshare and an office share a connection too, so nothing is
+ * ever selected automatically.
+ */
+export async function accounts(limit = 500): Promise<AccountRow[]> {
+  return query<AccountRow>(
+    `select m.id, m.display_name, m.email, m.slug, m.role, m.created_at::text,
+            coalesce(nullif(trim(m.home_city), ''), l.name) as city,
+            (m.email_verified_at is not null) as verified,
+            case when m.signup_ip_hash is null then 1 else
+              (select count(*)::int from members m2 where m2.signup_ip_hash = m.signup_ip_hash)
+            end as same_connection,
+            -- Things the MEMBER did. Queueing their welcome email records a
+            -- row against them, and an impression is us showing them
+            -- something rather than them doing anything — counting either
+            -- would give every account that ever existed a score of one and
+            -- make this column useless for the job it is here for.
+            (select count(*)::int from analytics_events a
+              where a.member_id = m.id
+                and a.event_type not like 'email\\_%'
+                and a.event_type not in ('alert_created', 'recommendation_impression',
+                                         'scene_people_impression', 'notification_clicked')) as actions
+       from members m
+       left join locations l on l.id = m.home_location_id
+      order by m.created_at desc limit $1`,
+    [limit]
+  );
+}

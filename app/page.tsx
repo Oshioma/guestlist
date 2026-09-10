@@ -72,7 +72,7 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
           behind it is a caveat hiding. */}
       <p className="myGuestlistPitch">
         Our members can ask us to get them on the guestlist to <b>ANY</b> event.
-        We work out the rest.{' '}
+        We work out the rest.
         <Link href="/membership/terms" className="myGuestlistTerms">Terms apply*</Link>
       </p>
 

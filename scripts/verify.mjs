@@ -2883,6 +2883,146 @@ console.log('\n— The promise, under the name —');
     (await anon.fetch('/membership/terms')).status === 200);
 }
 
+console.log('\n— A confirmation link that actually leaves —');
+{
+  // The bug this holds shut: queueEmail writes a row and returns. Sending is
+  // a separate scheduled job, so a verification email sat in email_outbox as
+  // 'pending' until that job next ran — which, on a signup, is the difference
+  // between a link arriving and somebody deciding the site is broken.
+  const joiner = client();
+  const email = `verify-send-${Date.now()}@example.com`;
+  const res = await joiner.fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'a-brand-new-password', displayName: 'Post Tester', startedAt: Date.now() - 9000 }),
+  });
+  check('somebody joins', res.status === 200);
+
+  const [m] = await q(`select id from members where email = $1`, [email]);
+  const rows = await q(
+    `select status from email_outbox where member_id = $1 and email_type = 'transactional:verify_email'`, [m.id]);
+  check('a confirmation email is written for them', rows.length === 1);
+  // 'dev_logged' is what a machine with no email provider records instead of
+  // 'sent'; both mean it left the queue. 'pending' is the bug.
+  check('and it has left the queue by the time signup returns',
+    rows[0] && ['sent', 'dev_logged'].includes(rows[0].status), rows[0]?.status);
+
+  // The banner's button is a resend, and it must send too.
+  const before = (await q(`select count(*)::int n from email_outbox where member_id = $1`, [m.id]))[0].n;
+  const again = await joiner.fetch('/api/auth/verify', { method: 'POST', body: '{}' });
+  check('the button asks for another one', again.status === 200);
+  const after = await q(
+    `select status from email_outbox where member_id = $1 order by created_at desc limit 1`, [m.id]);
+  check('which is a second email', (await q(`select count(*)::int n from email_outbox where member_id = $1`, [m.id]))[0].n === before + 1);
+  check('and it left the queue too',
+    after[0] && ['sent', 'dev_logged'].includes(after[0].status), after[0]?.status);
+
+  // The banner no longer implies nothing was sent.
+  const home = await (await joiner.fetch('/')).text();
+  check('the banner says a link was already sent', /We sent you a link when you joined/.test(home));
+  check('and the button offers another rather than the first',
+    /Send it again/.test(home) && !/Send me the link/.test(home));
+
+  await q(`delete from members where id = $1`, [m.id]);
+}
+
+console.log('\n— A renamed member does not break every link to themselves —');
+{
+  const renamer = client();
+  const email = `renamer-${Date.now()}@example.com`;
+  await renamer.fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'a-brand-new-password',
+      displayName: 'Master Craig Gordon Irving', startedAt: Date.now() - 9000 }),
+  });
+  const [m] = await q(`select id, slug from members where email = $1`, [email]);
+  const oldSlug = m.slug;
+  check('a long name becomes a long slug', oldSlug.startsWith('master-craig-gordon-irving'));
+  check('their profile is there', (await anon.fetch(`/members/${oldSlug}`)).status === 200);
+
+  // Exactly what happened in production: they shorten their name.
+  const renamed = await renamer.fetch('/api/you/settings', {
+    method: 'PATCH', body: JSON.stringify({ profile: { displayName: 'Craig' } }),
+  });
+  check('they shorten their name', renamed.status === 200);
+  const [after] = await q(`select slug from members where id = $1`, [m.id]);
+  check('which regenerates the slug', after.slug !== oldSlug, `${oldSlug} -> ${after.slug}`);
+
+  // The bug: every address anybody already had for them used to 404.
+  const stale = await anon.fetch(`/members/${oldSlug}`);
+  check('the old address does not 404', stale.status !== 404, String(stale.status));
+  check('it sends you to where they are now',
+    [307, 308, 302].includes(stale.status) && (stale.headers.get('location') ?? '').endsWith(`/members/${after.slug}`),
+    `${stale.status} ${stale.headers.get('location')}`);
+  check('and that address works', (await anon.fetch(`/members/${after.slug}`)).status === 200);
+
+  // A slug for nobody is still a 404 — the tail has to actually find someone.
+  check('an invented address is still gone',
+    (await anon.fetch('/members/somebody-who-never-was-ffffff')).status === 404);
+  check('and so is one with no id on the end',
+    (await anon.fetch('/members/not-a-real-slug')).status === 404);
+
+  // The admin notification links by who they are, not what they were called.
+  const desk = client();
+  await desk.login('oshi@guestlist.net');
+  const notif = (await (await desk.fetch('/notifications')).text()).replace(/<script[\s\S]*?<\/script>/g, '');
+  check('the new-member notification carries no stale slug', !notif.includes(oldSlug));
+
+  await q(`delete from members where id = $1`, [m.id]);
+}
+
+console.log('\n— Seeing who has an account, and removing what is not a person —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  // Three signups from one connection that never confirm and never do
+  // anything: the shape a scripted signup actually arrives in.
+  const bots = [];
+  for (let i = 0; i < 3; i++) {
+    const email = `bot-${Date.now()}-${i}@example.com`;
+    await client().fetch('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ email, password: 'a-brand-new-password', displayName: `test${i}`, startedAt: Date.now() - 9000 }),
+    });
+    const [row] = await q(`select id from members where email = $1`, [email]);
+    if (row) bots.push(row.id);
+  }
+  check('three accounts arrive', bots.length === 3);
+
+  const shut = await (await desk.fetch('/admin/analytics')).text();
+  check('the numbers do not list anybody by default', !shut.includes('acTable'));
+  check('but the People number offers to', shut.includes('See the accounts'));
+
+  const open = await (await desk.fetch('/admin/analytics?days=30&who=1')).text();
+  check('opening it lists the accounts', open.includes('acTable'));
+  check('with their email addresses', open.includes('@example.com'));
+  check('and says what makes a script look like one', /never confirmed|one connection/.test(open));
+  // The number above counts browsers as well; saying so stops it reading as a
+  // contradiction.
+  check('and why it does not match the People number', /counts signed-out browsers/.test(open));
+
+  check('a member cannot open it',
+    [302, 307].includes((await nadia.fetch('/admin/analytics?who=1')).status));
+  check('nor can a member delete anybody',
+    (await nadia.fetch('/api/admin/members/bulk-delete', { method: 'POST', body: JSON.stringify({ ids: bots }) })).status === 403);
+
+  const gone = await (await desk.fetch('/api/admin/members/bulk-delete', {
+    method: 'POST', body: JSON.stringify({ ids: bots }) })).json();
+  check('the admin can remove them together', gone.deleted === 3);
+  check('and they are actually gone',
+    (await q(`select 1 from members where id = any($1)`, [bots])).length === 0);
+
+  // Every guard deleteMember already had still applies, one at a time.
+  const [self] = await q(`select id from members where email = 'oshi@guestlist.net'`);
+  const refused = await (await desk.fetch('/api/admin/members/bulk-delete', {
+    method: 'POST', body: JSON.stringify({ ids: [self.id] }) })).json();
+  check('an admin cannot delete themselves in a batch either', refused.deleted === 0 && refused.kept.length === 1);
+  check('and they are still here', (await q(`select 1 from members where id = $1`, [self.id])).length === 1);
+
+  check('an empty selection is refused rather than deleting everything',
+    (await desk.fetch('/api/admin/members/bulk-delete', { method: 'POST', body: JSON.stringify({ ids: [] }) })).status === 400);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));
