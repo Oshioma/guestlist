@@ -4372,3 +4372,56 @@ a.anTile:hover { border-color: var(--accent); }
   .anRow, .anRow.three { grid-template-columns: 1fr .4fr; }
   .anRow > span:nth-child(n+3) { display: none; }
 }
+
+/* The accounts list, opened from the People tile. A table rather than cards:
+   the job is scanning a column of addresses for the ones that are not people,
+   and cards make columns impossible to scan. */
+.anTileGo { display: block; margin-top: 7px; font-weight: 800; color: var(--accent-ink); }
+a.anTile:hover .anTileGo { text-decoration: underline; }
+
+.acTable { margin-top: 16px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--bg-raised); }
+.acBar {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; background: var(--surface); border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.acBarActions { display: flex; gap: 8px; flex-wrap: wrap; }
+.acDeleteBar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--danger, #a32020) 7%, transparent); font-size: 13px;
+}
+.acResult { padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+
+.acRow {
+  display: grid; grid-template-columns: 34px 1.3fr 1.8fr .8fr .9fr .7fr .8fr .8fr;
+  gap: 10px; padding: 10px 14px; font-size: 13px; align-items: center; cursor: pointer;
+}
+.acRow + .acRow { border-top: 1px solid var(--border); }
+.acRow:hover { background: var(--surface); }
+.acRow.on { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.acRow.acHead {
+  cursor: default; background: var(--surface); border-top: 0;
+  font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted);
+}
+.acRow.acHead:hover { background: var(--surface); }
+.acRow input[type="checkbox"] { width: auto; margin: 0; cursor: pointer; }
+.acName a { text-decoration: none; }
+.acName a:hover { text-decoration: underline; }
+.acName em {
+  font-style: normal; font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text-faint); margin-left: 6px;
+}
+/* Addresses are the column being scanned, so they get the monospace and the
+   room to be compared at a glance. */
+.acEmail { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
+.acYes { color: #1f7a3f; font-weight: 700; }
+.acNo { color: var(--danger, #a32020); font-weight: 700; }
+
+@media (max-width: 1100px) {
+  .acRow { grid-template-columns: 30px 1fr 1.6fr .7fr .7fr; font-size: 12px; }
+  .acRow > span:nth-child(n+6) { display: none; }
+}
+@media (max-width: 620px) {
+  .acRow { grid-template-columns: 28px 1fr 1.4fr; }
+  .acRow > span:nth-child(n+4) { display: none; }
+}

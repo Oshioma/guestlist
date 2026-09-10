@@ -2970,6 +2970,59 @@ console.log('\n— A renamed member does not break every link to themselves —'
   await q(`delete from members where id = $1`, [m.id]);
 }
 
+console.log('\n— Seeing who has an account, and removing what is not a person —');
+{
+  const desk = client();
+  check('admin login', (await desk.login('oshi@guestlist.net')) === 200);
+
+  // Three signups from one connection that never confirm and never do
+  // anything: the shape a scripted signup actually arrives in.
+  const bots = [];
+  for (let i = 0; i < 3; i++) {
+    const email = `bot-${Date.now()}-${i}@example.com`;
+    await client().fetch('/api/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ email, password: 'a-brand-new-password', displayName: `test${i}`, startedAt: Date.now() - 9000 }),
+    });
+    const [row] = await q(`select id from members where email = $1`, [email]);
+    if (row) bots.push(row.id);
+  }
+  check('three accounts arrive', bots.length === 3);
+
+  const shut = await (await desk.fetch('/admin/analytics')).text();
+  check('the numbers do not list anybody by default', !shut.includes('acTable'));
+  check('but the People number offers to', shut.includes('See the accounts'));
+
+  const open = await (await desk.fetch('/admin/analytics?days=30&who=1')).text();
+  check('opening it lists the accounts', open.includes('acTable'));
+  check('with their email addresses', open.includes('@example.com'));
+  check('and says what makes a script look like one', /never confirmed|one connection/.test(open));
+  // The number above counts browsers as well; saying so stops it reading as a
+  // contradiction.
+  check('and why it does not match the People number', /counts signed-out browsers/.test(open));
+
+  check('a member cannot open it',
+    [302, 307].includes((await nadia.fetch('/admin/analytics?who=1')).status));
+  check('nor can a member delete anybody',
+    (await nadia.fetch('/api/admin/members/bulk-delete', { method: 'POST', body: JSON.stringify({ ids: bots }) })).status === 403);
+
+  const gone = await (await desk.fetch('/api/admin/members/bulk-delete', {
+    method: 'POST', body: JSON.stringify({ ids: bots }) })).json();
+  check('the admin can remove them together', gone.deleted === 3);
+  check('and they are actually gone',
+    (await q(`select 1 from members where id = any($1)`, [bots])).length === 0);
+
+  // Every guard deleteMember already had still applies, one at a time.
+  const [self] = await q(`select id from members where email = 'oshi@guestlist.net'`);
+  const refused = await (await desk.fetch('/api/admin/members/bulk-delete', {
+    method: 'POST', body: JSON.stringify({ ids: [self.id] }) })).json();
+  check('an admin cannot delete themselves in a batch either', refused.deleted === 0 && refused.kept.length === 1);
+  check('and they are still here', (await q(`select 1 from members where id = $1`, [self.id])).length === 1);
+
+  check('an empty selection is refused rather than deleting everything',
+    (await desk.fetch('/api/admin/members/bulk-delete', { method: 'POST', body: JSON.stringify({ ids: [] }) })).status === 400);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

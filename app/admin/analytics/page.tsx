@@ -9,8 +9,10 @@
 // need explaining is a dashboard nobody trusts six months later.
 
 import Link from 'next/link';
+import { getCurrentMember } from '@/lib/auth';
+import { AccountsTable } from '@/components/admin/AccountsTable';
 import {
-  actions, byDay, catalogue, funnel, headlines, memberPlaces, recordingSince, topNights, topPages,
+  accounts, actions, byDay, catalogue, funnel, headlines, memberPlaces, recordingSince, topNights, topPages,
   WINDOWS, type Window,
 } from '@/lib/adminAnalytics';
 
@@ -51,14 +53,18 @@ const short = (iso: string) =>
 export default async function AdminAnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string }>;
+  searchParams: Promise<{ days?: string; who?: string }>;
 }) {
   const sp = await searchParams;
   const days = (WINDOWS.includes(Number(sp.days) as Window) ? Number(sp.days) : 30) as Window;
+  // The list of accounts is a long query and a long table, so it is only run
+  // when somebody has actually asked to see it.
+  const showWho = sp.who === '1';
 
-  const [tiles, daily, steps, acts, nights, pages, places, cat, since] = await Promise.all([
+  const [tiles, daily, steps, acts, nights, pages, places, cat, since, me, who] = await Promise.all([
     headlines(days), byDay(days), funnel(days), actions(days),
     topNights(days), topPages(days), memberPlaces(), catalogue(), recordingSince(),
+    getCurrentMember(), showWho ? accounts() : Promise.resolve([]),
   ]);
 
   const peak = Math.max(1, ...daily.map((d) => Math.max(d.people, d.sign_ins, d.joined)));
@@ -83,17 +89,50 @@ export default async function AdminAnalyticsPage({
       </div>
 
       <div className="anTiles">
-        {tiles.map((t) => (
-          <div className="anTile" key={t.key}>
-            <div className="anTileTop">
-              <span className="anTileLabel">{t.label}</span>
-              <Delta now={t.now} before={t.before} />
-            </div>
-            <div className="anTileNum">{t.now.toLocaleString('en-GB')}</div>
-            <div className="anTileHint">{t.hint}</div>
-          </div>
-        ))}
+        {tiles.map((t) => {
+          const body = (
+            <>
+              <div className="anTileTop">
+                <span className="anTileLabel">{t.label}</span>
+                <Delta now={t.now} before={t.before} />
+              </div>
+              <div className="anTileNum">{t.now.toLocaleString('en-GB')}</div>
+              <div className="anTileHint">
+                {t.hint}
+                {/* People and Joined are the two numbers somebody wants to go
+                    from a count to a list of names, so those two open one. */}
+                {(t.key === 'people' || t.key === 'joined') && (
+                  <span className="anTileGo">{showWho ? 'Hide the accounts' : 'See the accounts →'}</span>
+                )}
+              </div>
+            </>
+          );
+          return t.key === 'people' || t.key === 'joined' ? (
+            <Link className="anTile" key={t.key}
+                  href={`/admin/analytics?days=${days}${showWho ? '' : '&who=1'}#who`}>
+              {body}
+            </Link>
+          ) : (
+            <div className="anTile" key={t.key}>{body}</div>
+          );
+        })}
       </div>
+
+      {showWho && (
+        <section id="who">
+          <h2 className="adminTitle anH2">Everyone with an account</h2>
+          <p className="adminSub">
+            Newest first, with the address each one signed up with. The “people” number above is
+            bigger than this because it counts signed-out browsers too; an account is somebody who
+            filled the form in.
+            {' '}Two columns are here to help you spot a script rather than a person: an address
+            never confirmed, and several accounts arriving from one connection. Neither is proof —
+            a flatshare shares a connection, and plenty of real people never get round to clicking
+            the link — so nothing is ever ticked for you.
+          </p>
+          {me && <AccountsTable accounts={who} meId={me.id} />}
+        </section>
+      )}
 
       <h2 className="adminTitle anH2">Day by day</h2>
       <p className="adminSub">
