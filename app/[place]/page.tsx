@@ -10,6 +10,8 @@ import { countrySlug, countryWithArticle } from '@/lib/countries';
 import { placeEventCards } from '@/lib/placeEvents';
 import { CountryView } from './CountryView';
 import { query } from '@/lib/db';
+import { pageMeta } from '@/lib/seo';
+import type { Metadata } from 'next';
 import { getRecommendedEvents, trackRecommendationImpressions, weekendWindow } from '@/lib/recommend';
 import { toRecCards } from '@/lib/recCards';
 import { RecShelf } from '@/components/v2c/RecShelf';
@@ -20,6 +22,31 @@ import { AskPanel } from '@/components/ask/AskPanel';
 import type { EventCard as EventCardType } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
+
+// "What's on in Bristol tonight" is the search this whole product answers, and
+// until now every city page told a search engine it was called "Guestlist".
+export async function generateMetadata({ params }: { params: Promise<{ place: string }> }): Promise<Metadata> {
+  const { place } = await params;
+  const location = await getLocationBySlug(place);
+  if (location) {
+    const where = location.country_name && location.country_name !== location.name
+      ? `${location.name}, ${location.country_name}` : location.name;
+    return pageMeta({
+      title: `What's on in ${location.name} — club nights and events`,
+      description: `Tonight, this weekend and what's coming up in ${where}. Club nights, parties and live music, with the people going.`,
+      path: `/${location.slug}`,
+    });
+  }
+  const country = await getCountryBySlug(place);
+  if (country) {
+    return pageMeta({
+      title: `What's on in ${country.name} — club nights and events`,
+      description: `Club nights, parties and live music across ${country.name}, city by city.`,
+      path: `/${countrySlug(country.name)}`,
+    });
+  }
+  return { title: 'Place not found' };
+}
 
 export default async function PlacePage({ params }: { params: Promise<{ place: string }> }) {
   const { place } = await params;

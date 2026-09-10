@@ -1,3 +1,5 @@
+import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { getCurrentMember } from '@/lib/auth';
 import { isActiveMember } from '@/lib/membership';
@@ -15,6 +17,13 @@ import { placeAnchorsFor } from '@/lib/proximity';
 import { toRecCards } from '@/lib/recCards';
 import { PicksHero } from '@/components/PicksHero';
 import { AskPanel } from '@/components/ask/AskPanel';
+
+export const metadata: Metadata = pageMeta({
+  title: 'What’s on tonight — club nights and events',
+  description: 'Tonight, this weekend and what’s coming up. Club nights, parties and live music, with the people going and the tickets that are left.',
+  path: '/events',
+});
+
 
 export const dynamic = 'force-dynamic';
 

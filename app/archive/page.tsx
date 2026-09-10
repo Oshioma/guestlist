@@ -1,3 +1,5 @@
+import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 // THE ARCHIVE — browsing culture, not searching a database.
 
 import Link from 'next/link';
@@ -6,6 +8,13 @@ import { query } from '@/lib/db';
 import { archiveHighlights, searchArchive } from '@/lib/archive/core';
 import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
 import { MixCard, type MixRow } from '@/components/archive/MixCard';
+
+export const metadata: Metadata = pageMeta({
+  title: 'The Archive — flyers, clubs and nights that were',
+  description: 'Flyers, line-ups and the clubs behind them. The nights that made the scene, kept by the people who were there.',
+  path: '/archive',
+});
+
 
 export const dynamic = 'force-dynamic';
 
