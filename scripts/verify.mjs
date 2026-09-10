@@ -2883,6 +2883,48 @@ console.log('\n— The promise, under the name —');
     (await anon.fetch('/membership/terms')).status === 200);
 }
 
+console.log('\n— A confirmation link that actually leaves —');
+{
+  // The bug this holds shut: queueEmail writes a row and returns. Sending is
+  // a separate scheduled job, so a verification email sat in email_outbox as
+  // 'pending' until that job next ran — which, on a signup, is the difference
+  // between a link arriving and somebody deciding the site is broken.
+  const joiner = client();
+  const email = `verify-send-${Date.now()}@example.com`;
+  const res = await joiner.fetch('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'a-brand-new-password', displayName: 'Post Tester', startedAt: Date.now() - 9000 }),
+  });
+  check('somebody joins', res.status === 200);
+
+  const [m] = await q(`select id from members where email = $1`, [email]);
+  const rows = await q(
+    `select status from email_outbox where member_id = $1 and email_type = 'transactional:verify_email'`, [m.id]);
+  check('a confirmation email is written for them', rows.length === 1);
+  // 'dev_logged' is what a machine with no email provider records instead of
+  // 'sent'; both mean it left the queue. 'pending' is the bug.
+  check('and it has left the queue by the time signup returns',
+    rows[0] && ['sent', 'dev_logged'].includes(rows[0].status), rows[0]?.status);
+
+  // The banner's button is a resend, and it must send too.
+  const before = (await q(`select count(*)::int n from email_outbox where member_id = $1`, [m.id]))[0].n;
+  const again = await joiner.fetch('/api/auth/verify', { method: 'POST', body: '{}' });
+  check('the button asks for another one', again.status === 200);
+  const after = await q(
+    `select status from email_outbox where member_id = $1 order by created_at desc limit 1`, [m.id]);
+  check('which is a second email', (await q(`select count(*)::int n from email_outbox where member_id = $1`, [m.id]))[0].n === before + 1);
+  check('and it left the queue too',
+    after[0] && ['sent', 'dev_logged'].includes(after[0].status), after[0]?.status);
+
+  // The banner no longer implies nothing was sent.
+  const home = await (await joiner.fetch('/')).text();
+  check('the banner says a link was already sent', /We sent you a link when you joined/.test(home));
+  check('and the button offers another rather than the first',
+    /Send it again/.test(home) && !/Send me the link/.test(home));
+
+  await q(`delete from members where id = $1`, [m.id]);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

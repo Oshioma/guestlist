@@ -5,7 +5,7 @@ import { memberSlug } from '@/lib/members';
 import { notifyAdminsNewMember } from '@/lib/adminNotify';
 import { findOrCreateCity } from '@/lib/locations';
 import { canonicalCity } from '@/lib/cityNames';
-import { queueEmail } from '@/lib/email';
+import { processEmailQueue, queueEmail } from '@/lib/email';
 import { createVerificationToken, verificationEmail } from '@/lib/emailVerification';
 import { HONEYPOT_FIELD, hashIp, looksAutomated, requestIp, signupsFromIp, SIGNUPS_PER_IP_PER_DAY } from '@/lib/botCheck';
 
@@ -87,6 +87,11 @@ export async function POST(req: NextRequest) {
         bodyText: mail.bodyText,
         bodyHtml: mail.bodyHtml,
       });
+      // Queueing is not sending. The outbox is drained by a scheduled job,
+      // and a confirmation link that waits for the next run is a link that
+      // arrives after somebody has given up and closed the tab — so this one
+      // goes out on the request, the same way a password reset does.
+      await processEmailQueue(5).catch(() => undefined);
     }
   } catch (err) {
     console.error('could not send verification email', err);

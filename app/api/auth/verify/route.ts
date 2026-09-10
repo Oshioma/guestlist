@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentMember } from '@/lib/auth';
-import { queueEmail } from '@/lib/email';
+import { processEmailQueue, queueEmail } from '@/lib/email';
 import { createVerificationToken, useVerificationToken, verificationEmail } from '@/lib/emailVerification';
 
 const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
@@ -54,5 +54,9 @@ export async function POST(req: NextRequest) {
     bodyText: mail.bodyText,
     bodyHtml: mail.bodyHtml,
   });
+  // Somebody pressing "send it again" is somebody already waiting. Sending on
+  // the request rather than queueing it is the difference between a button
+  // that works and a button that appears to do nothing.
+  await processEmailQueue(5).catch(() => undefined);
   return NextResponse.json({ ok: true, sent: true });
 }

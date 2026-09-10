@@ -39,7 +39,7 @@ export function ConfirmYourEmail() {
     });
     const data = await res.json().catch(() => ({}));
     setSent(res.ok
-      ? 'Sent — check your inbox, and your spam folder if it is not there.'
+      ? 'On its way — check your inbox, and your spam folder if it is not there.'
       : (data.error ?? 'Could not send that. Try again shortly.'));
   }
 
@@ -50,13 +50,16 @@ export function ConfirmYourEmail() {
 
   return (
     <div className="cityPrompt" role="status">
+      {/* A link was sent when they joined. Saying "send me the link" implied
+          none had been, which sends people looking for an email they think
+          has not arrived yet instead of the one in their spam folder. */}
       <span>
-        Confirm your email and your profile goes live — other members can find you,
-        and you show up in your city.
+        We sent you a link when you joined — confirm your email and your profile goes
+        live, so other members can find you and you show up in your city.
       </span>
       <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button type="button" className="btnAccent" onClick={resend} style={{ fontSize: 12 }}>
-          Send me the link
+          Send it again
         </button>
         <button type="button" className="btnGhost" onClick={dismiss} style={{ fontSize: 12 }}>
           Not now
