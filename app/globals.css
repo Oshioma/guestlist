@@ -4425,3 +4425,95 @@ a.anTile:hover .anTileGo { text-decoration: underline; }
   .acRow { grid-template-columns: 28px 1fr 1.4fr; }
   .acRow > span:nth-child(n+4) { display: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   WHAT STATE IS THIS ARTICLE IN.
+   The editorial desk rendered the status as one item in a row of identical
+   uppercase text — "PUBLISHED · STORY · OSHI · 12 VIEWS" — so the one word
+   that decides whether a piece is live read exactly like the word next to it
+   that says what kind of piece it is. Colour does the work now: green is out
+   in the world, amber is waiting on you, grey is nobody's move yet.
+--------------------------------------------------------------------------- */
+.artStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.artStatus::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.artStatus.published { color: #0f7a43; background: rgba(22, 163, 74, 0.13); border-color: rgba(22, 163, 74, 0.34); }
+.artStatus.submitted { color: #9a5b00; background: rgba(217, 119, 6, 0.15); border-color: rgba(217, 119, 6, 0.38); }
+.artStatus.changes_requested { color: #9a5b00; background: rgba(217, 119, 6, 0.15); border-color: rgba(217, 119, 6, 0.38); }
+.artStatus.approved { color: #1d4ed8; background: rgba(37, 99, 235, 0.13); border-color: rgba(37, 99, 235, 0.34); }
+.artStatus.draft { color: var(--text-muted); background: var(--bg-sunken, rgba(120, 120, 120, 0.1)); border-color: var(--border); }
+.artStatus.rejected, .artStatus.archived {
+  color: var(--text-faint); background: transparent; border-color: var(--border);
+}
+/* Dark theme: the tinted grounds go muddy, so the colour moves to the text
+   and the ring and the fill is dropped to a whisper. */
+:root[data-theme='dark'] .artStatus.published { color: #4ade80; background: rgba(74, 222, 128, 0.12); border-color: rgba(74, 222, 128, 0.3); }
+:root[data-theme='dark'] .artStatus.submitted,
+:root[data-theme='dark'] .artStatus.changes_requested { color: #fbbf24; background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.3); }
+:root[data-theme='dark'] .artStatus.approved { color: #93c5fd; background: rgba(147, 197, 253, 0.12); border-color: rgba(147, 197, 253, 0.3); }
+
+/* A live piece should be obvious from the edge of the card, not only from the
+   pill inside it. An inset shadow rather than a border-left, because the card
+   sets its border inline and an inline style wins over this file. */
+.adminArticleCard.isPublished { box-shadow: inset 3px 0 0 rgba(22, 163, 74, 0.6); }
+.adminArticleCard.needsYou { box-shadow: inset 3px 0 0 rgba(217, 119, 6, 0.8); }
+
+/* ---------------------------------------------------------------------------
+   THE TWO PIECES AT THE TOP OF THE HOME PAGE.
+   One night written about, one from Balance. Picture on the right on a real
+   screen; above the words on a phone, because a 180px-wide photograph beside
+   two lines of text is worse than no photograph.
+--------------------------------------------------------------------------- */
+.homeReads { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 26px 0 30px; }
+.homeRead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 136px;
+  gap: 16px;
+  align-items: start;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.homeRead:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+/* Only one piece published yet: it takes the row rather than leaving half a
+   grid empty beside it. */
+.homeRead:only-child { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) 200px; }
+.homeRead:only-child .homeReadImg { width: 200px; height: 130px; }
+.homeReadImg {
+  width: 136px; height: 104px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: var(--bg-sunken, rgba(120, 120, 120, 0.08));
+}
+.homeReadKicker {
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--accent-ink); font-weight: 800; margin-bottom: 6px;
+}
+.homeReadTitle { font-size: 18px; line-height: 1.25; margin: 0 0 6px; font-weight: 700; }
+.homeReadExcerpt {
+  margin: 0; color: var(--text-soft); font-size: 13.5px; line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.homeReadMeta { margin-top: 8px; font-size: 12px; color: var(--text-faint); }
+@media (max-width: 880px) {
+  .homeReads { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .homeRead { grid-template-columns: 1fr; }
+  .homeReadImg { width: 100%; height: 160px; order: -1; }
+}
