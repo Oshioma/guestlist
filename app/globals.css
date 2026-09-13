@@ -4541,8 +4541,10 @@ a.anTile:hover .anTileGo { text-decoration: underline; }
   display: grid;
   grid-template-columns: minmax(0, 1fr) 372px;
   gap: 44px;
-  align-items: start;
-  margin-bottom: 26px;
+  /* stretch, not start: the advert is told to fill its column and can only do
+     that if the row gives it the height of the taller side. */
+  align-items: stretch;
+  margin: 18px 0 26px;
 }
 /* The sentence keeps its own measure; it is no longer the thing holding the
    column open. */
@@ -4612,4 +4614,66 @@ a.anTile:hover .anTileGo { text-decoration: underline; }
   /* Stacked, the carousel goes under the sentence rather than squeezing it. */
   .myGuestlistHead { grid-template-columns: 1fr; gap: 26px; }
   .readsCar { max-width: 460px; }
+}
+
+/* ---------------------------------------------------------------------------
+   THE PROMISE, AS AN ADVERT.
+   It was a sentence in a 30ch measure with a grey caveat under it and a third
+   of a screen of nothing below that. A panel instead: the line stays the
+   biggest thing, what you get is listed under it, and the button sits at the
+   bottom so the thing fills its column rather than stopping halfway down.
+--------------------------------------------------------------------------- */
+.askAd {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 26px 28px 24px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  /* A wash rather than a block of colour: this sits beside a photograph and
+     has to hold its own without shouting over it. */
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--accent) 11%, transparent), transparent 62%),
+    var(--surface);
+}
+.askAdKicker {
+  font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--accent-ink); font-weight: 800; margin-bottom: 14px;
+}
+/* Still the biggest thing on the page after the name. */
+.askAdLine {
+  margin: 0 0 20px;
+  font-size: clamp(26px, 3.4vw, 40px);
+  line-height: 1.1; letter-spacing: -0.7px;
+  font-weight: 700; color: var(--text);
+}
+.askAdLine b { font-weight: 800; }
+.askAdLineQuiet { color: var(--text-soft); }
+.askAdList {
+  list-style: none; margin: 0 0 22px; padding: 0;
+  display: grid; gap: 9px;
+}
+.askAdList li {
+  position: relative; padding-left: 24px;
+  font-size: 14.5px; line-height: 1.45; color: var(--text-soft);
+}
+.askAdList li::before {
+  content: '';
+  position: absolute; left: 4px; top: 0.55em;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent);
+}
+/* margin-top:auto is what makes this an advert that fills its box rather than
+   a paragraph that happens to have a button after it. */
+.askAdFoot { margin-top: auto; }
+.askAdBtn { display: inline-block; text-decoration: none; }
+.askAdTerms {
+  margin: 12px 0 0;
+  font-size: 12.5px; line-height: 1.5; color: var(--text-faint);
+}
+.askAdTerms a { text-decoration: underline; }
+.askAdTerms a:hover { color: var(--accent-ink); }
+
+@media (max-width: 940px) {
+  .askAd { padding: 22px 20px 20px; }
 }
