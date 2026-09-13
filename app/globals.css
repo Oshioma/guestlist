@@ -4470,50 +4470,62 @@ a.anTile:hover .anTileGo { text-decoration: underline; }
 .adminArticleCard.needsYou { box-shadow: inset 3px 0 0 rgba(217, 119, 6, 0.8); }
 
 /* ---------------------------------------------------------------------------
-   THE TWO PIECES AT THE TOP OF THE HOME PAGE.
-   One night written about, one from Balance. Picture on the right on a real
-   screen; above the words on a phone, because a 180px-wide photograph beside
-   two lines of text is worse than no photograph.
+   THE WRITING, AT THE TOP OF THE HOME PAGE.
+   A shelf that scrolls sideways rather than two cards side by side, because
+   two is all the room a grid had and Guestlist publishes more than two. The
+   picture leads at a size worth looking at — a photograph small enough to sit
+   beside a paragraph is decoration, and decoration is what nobody clicks.
 --------------------------------------------------------------------------- */
-.homeReads { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 26px 0 30px; }
+.homeReadsHead { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin: 30px 0 14px; }
+.homeReads {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+  /* The shelf runs to the edge of the screen rather than stopping at the
+     column, so it reads as something that continues — the padding puts the
+     first card back on the margin and lets the last one clear it. */
+  margin: 0 calc(50% - 50vw) 34px;
+  padding: 4px max(calc(50vw - 50%), 18px) 10px;
+  scroll-padding-left: max(calc(50vw - 50%), 18px);
+}
+.homeReads::-webkit-scrollbar { display: none; }
 .homeRead {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 136px;
-  gap: 16px;
-  align-items: start;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  flex: 0 0 344px;
+  scroll-snap-align: start;
+  display: block;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.15s ease, transform 0.15s ease;
 }
-.homeRead:hover { border-color: var(--border-strong); transform: translateY(-2px); }
-/* Only one piece published yet: it takes the row rather than leaving half a
-   grid empty beside it. */
-.homeRead:only-child { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) 200px; }
-.homeRead:only-child .homeReadImg { width: 200px; height: 130px; }
 .homeReadImg {
-  width: 136px; height: 104px;
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
   object-fit: cover;
-  border-radius: 10px;
+  border-radius: 14px;
   background: var(--bg-sunken, rgba(120, 120, 120, 0.08));
+  border: 1px solid var(--border);
+  transition: transform 0.2s ease, border-color 0.2s ease;
 }
+/* A card with no picture must not collapse to a caption floating on its own. */
+.homeReadNoImg { aspect-ratio: 3 / 2; display: block; width: 100%; border-radius: 14px;
+  background: var(--bg-sunken, rgba(120, 120, 120, 0.08)); border: 1px solid var(--border); }
+.homeRead:hover .homeReadImg { transform: translateY(-3px); border-color: var(--border-strong); }
 .homeReadKicker {
   font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--accent-ink); font-weight: 800; margin-bottom: 6px;
+  color: var(--accent-ink); font-weight: 800; margin: 14px 0 6px;
 }
-.homeReadTitle { font-size: 18px; line-height: 1.25; margin: 0 0 6px; font-weight: 700; }
+.homeReadTitle { font-size: 20px; line-height: 1.24; margin: 0 0 7px; font-weight: 700; }
+.homeRead:hover .homeReadTitle { text-decoration: underline; text-underline-offset: 3px; }
 .homeReadExcerpt {
-  margin: 0; color: var(--text-soft); font-size: 13.5px; line-height: 1.5;
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  margin: 0; color: var(--text-soft); font-size: 14px; line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.homeReadMeta { margin-top: 8px; font-size: 12px; color: var(--text-faint); }
-@media (max-width: 880px) {
-  .homeReads { grid-template-columns: 1fr; }
-}
-@media (max-width: 520px) {
-  .homeRead { grid-template-columns: 1fr; }
-  .homeReadImg { width: 100%; height: 160px; order: -1; }
+.homeReadMeta { margin-top: 9px; font-size: 12px; color: var(--text-faint); }
+@media (max-width: 620px) {
+  /* A little of the next card stays visible, which is the only reliable way
+     to say "this scrolls" without drawing an arrow nobody presses. */
+  .homeRead { flex-basis: 78vw; }
+  .homeReadTitle { font-size: 18px; }
 }

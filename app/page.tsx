@@ -199,8 +199,8 @@ export default async function HomePage(
     // One of each at the top of the page. Featured first, newest otherwise —
     // listPublishedArticles orders that way, so the Feature button on the desk
     // is what decides. Wrapped: no piece written yet must not blank the page.
-    optional('home:features', () => listPublishedArticles('events', 1), []),
-    optional('home:balance', () => listPublishedArticles('balance', 1), []),
+    optional('home:features', () => listPublishedArticles('events', 6), []),
+    optional('home:balance', () => listPublishedArticles('balance', 6), []),
   ]);
   const savedIds = new Set<string>(
     member
@@ -250,7 +250,7 @@ export default async function HomePage(
 
       <div className="wrap">
         {/* The writing, above the fold rather than below the event grid. */}
-        <HomeReads feature={features[0] ?? null} balance={balanceReads[0] ?? null} />
+        <HomeReads features={features} balance={balanceReads} />
         {!member && <GuestlistNow isAdmin={false} />}
         {/* The genres are how somebody narrows the page; they should not
             scroll away the moment the page starts being worth scrolling. */}

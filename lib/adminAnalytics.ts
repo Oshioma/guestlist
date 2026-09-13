@@ -269,6 +269,69 @@ export async function realness(days: number): Promise<Realness> {
   return row ?? { people: 0, oneHit: 0, returned: 0, members: 0 };
 }
 
+export type SearchReady = {
+  live: number;
+  noLocation: number;
+  noImage: number;
+  noDescription: number;
+  noTicket: number;
+  ready: number;
+};
+export type UnreadyEvent = {
+  id: string; slug: string; title: string; start_at: string;
+  missing_location: boolean; missing_image: boolean; missing_description: boolean;
+};
+
+/**
+ * CAN A SEARCH ENGINE ACTUALLY SHOW THIS NIGHT?
+ *
+ * Publishing schema.org Event is only half the job. Google will not give a
+ * night a rich result without a location, and a night with no venue and no
+ * city has nothing to put there — so it publishes correctly and still cannot
+ * appear in the panel this whole product should be in.
+ *
+ * The other three are not disqualifying, they are the difference between a
+ * listing that earns a click and one that does not: a picture, a sentence
+ * describing it, somewhere to buy a ticket.
+ *
+ * Counted over nights that are LIVE and still to come, because a night that
+ * already happened is not a listing anybody is competing for.
+ */
+const UPCOMING = `status = 'live' and listing_status <> 'cancelled'
+  and start_at > now() and slug is not null`;
+const NO_LOCATION = `venue_id is null and coalesce(nullif(trim(city), ''), null) is null`;
+const NO_DESCRIPTION = `coalesce(nullif(trim(coalesce(description, short_description, '')), ''), null) is null`;
+
+export async function searchReady(): Promise<SearchReady> {
+  const row = await queryOne<SearchReady>(
+    `select count(*)::int as live,
+            count(*) filter (where ${NO_LOCATION})::int as "noLocation",
+            count(*) filter (where primary_image_url is null)::int as "noImage",
+            count(*) filter (where ${NO_DESCRIPTION})::int as "noDescription",
+            count(*) filter (where ticket_url is null)::int as "noTicket",
+            count(*) filter (where not (${NO_LOCATION}) and primary_image_url is not null
+                               and not (${NO_DESCRIPTION}))::int as ready
+       from events where ${UPCOMING}`
+  );
+  return row ?? { live: 0, noLocation: 0, noImage: 0, noDescription: 0, noTicket: 0, ready: 0 };
+}
+
+/** The nights to go and fix, worst first — no location is disqualifying. */
+export async function notSearchReady(limit = 20): Promise<UnreadyEvent[]> {
+  return query<UnreadyEvent>(
+    `select id, slug, title, start_at::text,
+            (${NO_LOCATION}) as missing_location,
+            (primary_image_url is null) as missing_image,
+            (${NO_DESCRIPTION}) as missing_description
+       from events
+      where ${UPCOMING}
+        and (${NO_LOCATION} or primary_image_url is null or ${NO_DESCRIPTION})
+      order by (${NO_LOCATION}) desc, start_at
+      limit $1`,
+    [limit]
+  );
+}
+
 export type PlaceRow = { place: string; n: number };
 
 /** Where the membership is, which is the only map that decides what we chase. */
