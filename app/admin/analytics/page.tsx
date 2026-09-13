@@ -12,8 +12,8 @@ import Link from 'next/link';
 import { getCurrentMember } from '@/lib/auth';
 import { AccountsTable } from '@/components/admin/AccountsTable';
 import {
-  accounts, actions, byDay, catalogue, funnel, headlines, memberPlaces, realness, recordingSince,
-  topNights, topPages, trafficSources, visitorCountries,
+  accounts, actions, byDay, catalogue, funnel, headlines, memberPlaces, notSearchReady, realness,
+  recordingSince, searchReady, topNights, topPages, trafficSources, visitorCountries,
   WINDOWS, type Window,
 } from '@/lib/adminAnalytics';
 
@@ -73,11 +73,12 @@ export default async function AdminAnalyticsPage({
   const showWho = sp.who === '1';
 
   const [tiles, daily, steps, acts, nights, pages, places, cat, since, me, who,
-         sources, countries, real] = await Promise.all([
+         sources, countries, real, ready, unready] = await Promise.all([
     headlines(days), byDay(days), funnel(days), actions(days),
     topNights(days), topPages(days), memberPlaces(), catalogue(), recordingSince(),
     getCurrentMember(), showWho ? accounts() : Promise.resolve([]),
     trafficSources(days), visitorCountries(days), realness(days),
+    searchReady(), notSearchReady(20),
   ]);
 
   const peak = Math.max(1, ...daily.map((d) => Math.max(d.people, d.sign_ins, d.joined)));
@@ -288,6 +289,57 @@ export default async function AdminAnalyticsPage({
           </div>
         </div>
       </div>
+
+      <h2 className="adminTitle anH2">Can Google show these nights?</h2>
+      <p className="adminSub">
+        Every live night is published as structured data, but a search engine will not give one a
+        rich result — the panel with the date, the venue and the picture in it — without somewhere
+        to put it. A night with no venue <em>and</em> no city has nothing to put there, so it is
+        correct and still invisible. The other three are not disqualifying; they are the difference
+        between a listing that earns a click and one that does not.
+      </p>
+      <div className="anTiles small">
+        <div className="anTile">
+          <div className="anTileLabel">Fit to show</div>
+          <div className="anTileNum">{`${ready.ready} / ${ready.live}`}</div>
+          <div className="anTileHint">Upcoming nights with a place, a picture and a description</div>
+        </div>
+        {([
+          ['No place at all', ready.noLocation, 'Cannot get a rich result. Fix these first.'],
+          ['No picture', ready.noImage, 'Shows as text where others show a photograph'],
+          ['Nothing written', ready.noDescription, 'Nothing for a search engine to quote'],
+          ['No ticket link', ready.noTicket, 'No price, no “buy” — and nowhere for us to earn'],
+        ] as [string, number, string][]).map(([label, n, hint]) => (
+          <div className="anTile" key={label}>
+            <div className="anTileLabel">{label}</div>
+            <div className="anTileNum">{n.toLocaleString('en-GB')}</div>
+            <div className="anTileHint">{hint}</div>
+          </div>
+        ))}
+      </div>
+
+      {unready.length > 0 && (
+        <div className="anTable" style={{ marginTop: 18 }}>
+          <div className="anRow anHead three"><span>Night</span><span>Missing</span><span>When</span></div>
+          {unready.map((e) => (
+            <div className="anRow three" key={e.id}>
+              <span><Link href={`/admin/events/${e.id}`}>{e.title}</Link></span>
+              <span>
+                {[
+                  e.missing_location ? 'a place' : null,
+                  e.missing_image ? 'a picture' : null,
+                  e.missing_description ? 'a description' : null,
+                ].filter(Boolean).join(', ')}
+              </span>
+              <span>{new Date(e.start_at).toLocaleDateString('en-GB',
+                { day: 'numeric', month: 'short' })}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {unready.length === 0 && ready.live > 0 && (
+        <p className="adminSub">Every upcoming night has what it needs. Nothing to fix.</p>
+      )}
 
       <h2 className="adminTitle anH2">What there is to look at</h2>
       <p className="adminSub">Right now, not for the window. None of the numbers above can grow past what is on the site.</p>

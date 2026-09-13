@@ -3226,6 +3226,9 @@ console.log('\n— The writing is on the front page, and the desk says what stat
   check('and a piece from Balance beside it', home.includes('VERIFYBALANCEPIECE'));
   check('both with their picture', (home.match(/homeReadImg/g) ?? []).length >= 2,
     String((home.match(/homeReadImg/g) ?? []).length));
+  // A shelf rather than a row of two, because there is more than two to show.
+  check('and they sit in a shelf that scrolls', home.includes('class="homeReads"'));
+  check('with a way through to the rest of the writing', home.includes('>All writing<'));
   check('and they lead to the piece, not to nothing',
     home.includes(`/balance/${feature.slug}`) && home.includes(`/balance/${balance.slug}`));
   // Above the event grid is the whole point — below it is where they were.
@@ -3237,7 +3240,7 @@ console.log('\n— The writing is on the front page, and the desk says what stat
     `update articles set hero_image_url = null where id = $1 returning id`, [balance.id]);
   const noPic = await (await anon.fetch('/')).text();
   check('a piece with no picture still shows, without a broken one',
-    noPic.includes('VERIFYBALANCEPIECE'));
+    noPic.includes('VERIFYBALANCEPIECE') && noPic.includes('homeReadNoImg'));
   await q(`update articles set hero_image_url = $2 where id = $1`,
     [pictureless.id, `${BASE}/images/retreat-beach.jpg`]);
 
@@ -3258,6 +3261,61 @@ console.log('\n— The writing is on the front page, and the desk says what stat
   check('so an event feature is labelled as one', page.includes('Event Features'));
 
   await q(`delete from articles where id = any($1)`, [[feature.id, balance.id]]);
+}
+
+console.log('\n— Which nights a search engine can actually show —');
+{
+  // Publishing schema.org Event is only half the job: without a location
+  // there is no rich result, and a night with no venue and no city has
+  // nothing to put there. It is correct and still invisible.
+  const mk = (slug, title, cols, vals) => q(
+    `insert into events (slug, title, title_normalized, start_at, end_at, timezone, status,
+                         listing_status, published_at${cols})
+     values ($1, $2, lower($2), now() + interval '10 days', now() + interval '10 days' + interval '6 hours',
+             'Europe/London', 'live', 'confirmed', now()${vals}) returning id`,
+    [slug, title]);
+
+  const [placeless] = await mk('verify-seo-placeless', 'VERIFYNOPLACE',
+    ', primary_image_url, description', `, '/images/hero.jpg', 'Words about it.'`);
+  const [complete] = await mk('verify-seo-complete', 'VERIFYCOMPLETE',
+    ', city, country, primary_image_url, description, ticket_url',
+    `, 'London', 'United Kingdom', '/images/hero.jpg', 'Words about it.', 'https://tickets.example.com'`);
+  const [pictureless] = await mk('verify-seo-nopic', 'VERIFYNOPIC',
+    ', city, country, description', `, 'Leeds', 'United Kingdom', 'Words about it.'`);
+
+  const desk = client();
+  await desk.login('oshi@guestlist.net');
+  const page = await (await desk.fetch('/admin/analytics?days=30')).text();
+
+  check('the desk asks whether Google can show a night', page.includes('Can Google show these nights'));
+  check('and names the one that cannot be shown at all', page.includes('VERIFYNOPLACE'));
+  check('saying what it is missing', /VERIFYNOPLACE[\s\S]{0,400}a place/.test(page));
+  check('and names the one with no picture', page.includes('VERIFYNOPIC'));
+  // A night that has everything is not a job, so it must not be in the list.
+  check('a night with everything is not listed as needing work',
+    !page.includes('VERIFYCOMPLETE'));
+  check('and each one links to where it gets fixed',
+    page.includes(`/admin/events/${placeless.id}`));
+
+  // The counts themselves, straight from the query the page uses.
+  const [counts] = await q(
+    `select count(*) filter (where venue_id is null and coalesce(nullif(trim(city), ''), null) is null)::int as no_place,
+            count(*) filter (where primary_image_url is null)::int as no_pic
+       from events
+      where status = 'live' and listing_status <> 'cancelled'
+        and start_at > now() and slug is not null`);
+  check('the count of placeless nights is at least the one we made',
+    counts.no_place >= 1, String(counts.no_place));
+  check('and the count of pictureless ones too', counts.no_pic >= 1, String(counts.no_pic));
+
+  // A night already past is not a listing anybody competes for.
+  await q(`update events set start_at = now() - interval '5 days',
+                             end_at = now() - interval '5 days' + interval '4 hours'
+            where id = $1`, [placeless.id]);
+  const after = await (await desk.fetch('/admin/analytics?days=30')).text();
+  check('a night that already happened drops off the list', !after.includes('VERIFYNOPLACE'));
+
+  await q(`delete from events where slug like 'verify-seo-%'`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
