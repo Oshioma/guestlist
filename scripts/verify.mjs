@@ -3229,6 +3229,20 @@ console.log('\n— The writing is on the front page, and the desk says what stat
   // A shelf rather than a row of two, because there is more than two to show.
   check('and they sit in a shelf that scrolls', home.includes('class="homeReads"'));
   check('with a way through to the rest of the writing', home.includes('>All writing<'));
+
+  // A signed-in member gets it in the empty column beside the promise instead,
+  // one piece at a time — and Balance leads, because somebody who has just been
+  // told we can get them into any event is who the other half is for.
+  const mem = client();
+  await mem.login('dev-nadia@example.com');
+  const mine = await (await mem.fetch('/')).text();
+  check('a member gets the writing beside the promise', mine.includes('readsCarTrack'));
+  check('one piece at a time, with a way to the next', mine.includes('readsCarDot'));
+  check('and Balance is the one they see first',
+    mine.indexOf('VERIFYBALANCEPIECE') < mine.indexOf('VERIFYNIGHTPIECE'),
+    `${mine.indexOf('VERIFYBALANCEPIECE')} vs ${mine.indexOf('VERIFYNIGHTPIECE')}`);
+  // Two copies of the same articles on one page is worse than none.
+  check('and not the wide shelf as well', !mine.includes('class="homeReads"'));
   check('and they lead to the piece, not to nothing',
     home.includes(`/balance/${feature.slug}`) && home.includes(`/balance/${balance.slug}`));
   // Above the event grid is the whole point — below it is where they were.
