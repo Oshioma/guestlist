@@ -25,9 +25,21 @@ import { siteImages } from '@/lib/siteImages';
 import { EmailConfirmed } from '@/components/auth/EmailConfirmed';
 import { StickyFilters } from '@/components/StickyFilters';
 import { HomeReads } from '@/components/HomeReads';
+import { ReadsCarousel } from '@/components/ReadsCarousel';
 import { listPublishedArticles } from '@/lib/articles';
 
 export const dynamic = 'force-dynamic';
+
+// Alternate two lists, starting with the first, and keep whatever is left
+// over when one runs out.
+function interleave<T>(a: T[], b: T[]): T[] {
+  const out: T[] = [];
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (a[i]) out.push(a[i]);
+    if (b[i]) out.push(b[i]);
+  }
+  return out;
+}
 
 // MY GUESTLIST — the logged-in front door: a personalised cultural
 // magazine, not an admin dashboard.
@@ -36,7 +48,7 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
   // Every band below is secondary to "here is your Guestlist": picks, your
   // people, your scene, your places, your trips. One of them failing hides
   // that band; it must never blank the page.
-  const [weekendPicks, picks, yourPeople, danced, places, travel] = await Promise.all([
+  const [weekendPicks, picks, yourPeople, danced, places, travel, balanceReads, featureReads] = await Promise.all([
     optional('home:weekendPicks', () => getRecommendedEvents(member.id, { limit: 4, from: weekend.from, to: weekend.to, exploration: false }), []),
     optional('home:picks', () => getRecommendedEvents(member.id, { limit: 6 }), []),
     optional('home:yourPeople', () => yourPeopleUpcoming(member.id, { from: weekend.from, to: weekend.to, limit: 8 }), []),
@@ -53,6 +65,10 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
         order by tp.start_date limit 3`,
       [member.id]
     ), []),
+    // Balance first: somebody who has just been told we can get them into any
+    // event is the right person to show the other half of the site to.
+    optional('home:memberBalance', () => listPublishedArticles('balance', 5), []),
+    optional('home:memberFeatures', () => listPublishedArticles('events', 5), []),
   ]);
   const hour = new Date().getUTCHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -64,19 +80,28 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
 
   return (
     <section className="wrap myGuestlist">
-      <div className="homeKicker">{greeting}</div>
-      <h1 className="myGuestlistTitle">{firstName}, here’s your Guestlist.</h1>
+      <div className="myGuestlistHead">
+        <div>
+          <div className="homeKicker">{greeting}</div>
+          <h1 className="myGuestlistTitle">{firstName}, here’s your Guestlist.</h1>
 
-      {/* The one sentence that says what Guestlist is for. It sits directly
-          under the name because everything below it — picks, your people,
-          tonight — is the ordinary listings half; this is the half nobody
-          else does. The asterisk goes somewhere: a caveat with no page
-          behind it is a caveat hiding. */}
-      <p className="myGuestlistPitch">
-        Our members can ask us to get them on the guestlist to <b>ANY</b> event.
-        We work out the rest.
-        <Link href="/membership/terms" className="myGuestlistTerms">Terms apply*</Link>
-      </p>
+          {/* The one sentence that says what Guestlist is for. It sits directly
+              under the name because everything below it — picks, your people,
+              tonight — is the ordinary listings half; this is the half nobody
+              else does. The asterisk goes somewhere: a caveat with no page
+              behind it is a caveat hiding. */}
+          <p className="myGuestlistPitch">
+            Our members can ask us to get them on the guestlist to <b>ANY</b> event.
+            We work out the rest.
+            <Link href="/membership/terms" className="myGuestlistTerms">Terms apply*</Link>
+          </p>
+        </div>
+        {/* The column the sentence's measure leaves empty. Balance leads and
+            the two sections then alternate — concatenating them meant five
+            Balance pieces before the first night, so a member could swipe the
+            whole thing and never learn the other half exists. */}
+        <ReadsCarousel articles={interleave(balanceReads, featureReads).slice(0, 6)} />
+      </div>
 
       {travel.length > 0 && (
         <div className="travelStrip">
@@ -249,8 +274,10 @@ export default async function HomePage(
       )}
 
       <div className="wrap">
-        {/* The writing, above the fold rather than below the event grid. */}
-        <HomeReads features={features} balance={balanceReads} />
+        {/* The writing, above the fold rather than below the event grid — for
+            a visitor. A member gets it beside the promise instead, so it is
+            not on the page twice. */}
+        {!member && <HomeReads features={features} balance={balanceReads} />}
         {!member && <GuestlistNow isAdmin={false} />}
         {/* The genres are how somebody narrows the page; they should not
             scroll away the moment the page starts being worth scrolling. */}

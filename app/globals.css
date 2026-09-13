@@ -4529,3 +4529,78 @@ a.anTile:hover .anTileGo { text-decoration: underline; }
   .homeRead { flex-basis: 78vw; }
   .homeReadTitle { font-size: 18px; }
 }
+
+/* ---------------------------------------------------------------------------
+   THE WRITING, BESIDE THE PROMISE.
+   The signed-in front door set its sentence to a 30ch measure and left the
+   whole right-hand column empty. The writing goes there — one piece at a
+   time, because three half-cards in a narrow column is a list of thumbnails
+   rather than something anybody reads.
+--------------------------------------------------------------------------- */
+.myGuestlistHead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 372px;
+  gap: 44px;
+  align-items: start;
+  margin-bottom: 26px;
+}
+/* The sentence keeps its own measure; it is no longer the thing holding the
+   column open. */
+.myGuestlistHead .myGuestlistPitch { margin-bottom: 0; }
+
+.readsCar { min-width: 0; }
+.readsCarTrack {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+  border-radius: 14px;
+}
+.readsCarTrack::-webkit-scrollbar { display: none; }
+.readsCarCard {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+.readsCarImg {
+  display: block; width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 14px;
+  background: var(--bg-sunken, rgba(120, 120, 120, 0.08));
+  border: 1px solid var(--border);
+}
+.readsCarKicker {
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--accent-ink); font-weight: 800; margin: 13px 0 5px;
+}
+.readsCarTitle { font-size: 19px; line-height: 1.25; margin: 0 0 6px; font-weight: 700; }
+.readsCarCard:hover .readsCarTitle { text-decoration: underline; text-underline-offset: 3px; }
+.readsCarExcerpt {
+  margin: 0; color: var(--text-soft); font-size: 13.5px; line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.readsCarMeta { margin-top: 7px; font-size: 12px; color: var(--text-faint); }
+
+/* Dots rather than arrows: at this size an arrow is either too small to press
+   or big enough to sit on the photograph. */
+.readsCarDots { display: flex; gap: 7px; margin-top: 14px; }
+.readsCarDot {
+  width: 7px; height: 7px; padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: var(--border-strong, rgba(120, 120, 120, 0.45));
+  cursor: pointer;
+  transition: background 0.15s ease, width 0.15s ease;
+}
+.readsCarDot.on { background: var(--accent-ink); width: 20px; border-radius: 4px; }
+
+@media (max-width: 940px) {
+  /* Stacked, the carousel goes under the sentence rather than squeezing it. */
+  .myGuestlistHead { grid-template-columns: 1fr; gap: 26px; }
+  .readsCar { max-width: 460px; }
+}
