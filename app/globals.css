@@ -4587,17 +4587,26 @@ a.anTile:hover .anTileGo { text-decoration: underline; }
 .readsCarMeta { margin-top: 7px; font-size: 12px; color: var(--text-faint); }
 
 /* Dots rather than arrows: at this size an arrow is either too small to press
-   or big enough to sit on the photograph. */
-.readsCarDots { display: flex; gap: 7px; margin-top: 14px; }
+   or big enough to sit on the photograph.
+   The painted dot is 11px and the button around it is 27px, because a 7px
+   target is a thing you aim at rather than press — the padding is transparent
+   and only the content box is filled, so the dot stays small and the thing
+   you have to hit does not. */
+.readsCarDots { display: flex; gap: 2px; margin-top: 10px; margin-left: -8px; }
 .readsCarDot {
-  width: 7px; height: 7px; padding: 0;
+  width: 11px; height: 11px;
+  padding: 8px;
+  box-sizing: content-box;
+  background-clip: content-box;
   border-radius: 50%;
   border: none;
-  background: var(--border-strong, rgba(120, 120, 120, 0.45));
+  background-color: var(--border-strong, rgba(120, 120, 120, 0.5));
   cursor: pointer;
-  transition: background 0.15s ease, width 0.15s ease;
+  transition: background-color 0.15s ease, width 0.15s ease;
 }
-.readsCarDot.on { background: var(--accent-ink); width: 20px; border-radius: 4px; }
+.readsCarDot:hover { background-color: var(--text-faint); }
+.readsCarDot.on { background-color: var(--accent-ink); width: 30px; border-radius: 6px; }
+.readsCarDot:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -4px; border-radius: 10px; }
 
 @media (max-width: 940px) {
   /* Stacked, the carousel goes under the sentence rather than squeezing it. */
