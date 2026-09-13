@@ -3147,6 +3147,119 @@ console.log('\n— Where the traffic came from —');
   await q(`delete from analytics_events where anon_id like 'verify-src-%'`);
 }
 
+console.log('\n— Being findable —');
+{
+  // Guestlist read other people's sitemaps to find their nights and published
+  // none of its own, and every event page inherited one title: "Guestlist".
+  // A hundred nights, a hundred identical search results.
+  const [ev] = await q(
+    `select slug, title from events where status = 'live' and slug is not null
+      order by start_at limit 1`);
+
+  const robots = await (await anon.fetch('/robots.txt')).text();
+  check('there is a robots.txt', robots.includes('User-Agent') || robots.includes('User-agent'));
+  check('and it points at the sitemap', /Sitemap:\s*https?:\/\/\S+\/sitemap\.xml/i.test(robots));
+  check('and keeps crawlers out of the admin desk', /Disallow:\s*\/admin/i.test(robots));
+  check('and out of single-use door links', /Disallow:\s*\/d\//i.test(robots));
+
+  const sitemap = await (await anon.fetch('/sitemap.xml')).text();
+  check('there is a sitemap', sitemap.includes('<urlset'), sitemap.slice(0, 80));
+  check('with the events page in it', sitemap.includes('/events</loc>'));
+  check('and the live nights themselves', sitemap.includes(`/events/${ev.slug}</loc>`), ev.slug);
+  // A sitemap that advertises pages a stranger cannot read wastes the crawl
+  // on redirects to the login screen.
+  check('and nothing that needs signing in', !sitemap.includes('/clubmessenger</loc>')
+    && !sitemap.includes('/notifications</loc>') && !sitemap.includes('/admin'));
+
+  const page = await (await anon.fetch(`/events/${ev.slug}`)).text();
+  check('a night has its own title, not the site name',
+    page.includes(`<title>${ev.title}`) || new RegExp(`<title>[^<]*${ev.title.slice(0, 20)
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(page));
+  check('and the title still says whose site it is', /<title>[^<]*Guestlist[^<]*<\/title>/.test(page));
+  check('and a canonical, so every ?src= share does not compete with it',
+    page.includes(`rel="canonical"`) && page.includes(`/events/${ev.slug}"`));
+  check('and an og:image, so a link in a group chat shows the flyer',
+    /property="og:image"/.test(page));
+
+  // The one that decides whether a night can appear in "events near you"
+  // rather than as a blue link on page four.
+  const ld = [...page.matchAll(/<script type="application\/ld\+json"[^>]*>(.*?)<\/script>/gs)]
+    .map((m) => { try { return JSON.parse(m[1].replace(/&quot;/g, '"')); } catch { return null; } })
+    .filter(Boolean);
+  const eventLd = ld.find((x) => x['@type'] === 'Event' || x['@type'] === 'MusicEvent');
+  check('the night is published as structured data', !!eventLd, JSON.stringify(ld.map(x => x['@type'])));
+  check('naming itself and when it starts',
+    eventLd?.name === ev.title && !!eventLd?.startDate);
+  check('and where it is', !!eventLd?.location);
+  check('and it is valid JSON a crawler can read', ld.every((x) => !!x['@context']));
+
+  // A night that was pulled should not be advertised as on.
+  const [gone] = await q(
+    `update events set listing_status = 'cancelled' where slug = $1 returning slug`, [ev.slug]);
+  const cancelled = await (await anon.fetch(`/events/${gone.slug}`)).text();
+  check('a cancelled night is not published as a live event',
+    !/"@type":\s*"(Music)?Event"/.test(cancelled.replace(/&quot;/g, '"')));
+  check('and is told not to be indexed', /name="robots"[^>]*noindex|noindex/.test(cancelled));
+  await q(`update events set listing_status = 'confirmed' where slug = $1`, [gone.slug]);
+}
+
+console.log('\n— The writing is on the front page, and the desk says what state it is in —');
+{
+  // Guestlist publishes editorial and buried all of it below the event grid,
+  // so the writing existed and nobody arriving ever saw it.
+  const [me] = await q(`select id from members where email = 'dev-nadia@example.com'`);
+  const mk = async (section, title, hero) => {
+    const [s] = await q(`select id from editorial_sections where slug = $1`, [section]);
+    const [a] = await q(
+      `insert into articles (title, slug, body, excerpt, status, author_id, article_type,
+                             section_id, hero_image_url, published_at, reading_minutes)
+       values ($1, $2, $3, $4, 'published', $5, 'story', $6, $7, now(), 4) returning id, slug`,
+      [title, `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`,
+       'word '.repeat(300).trim(), `${title} — what it was actually like.`, me.id, s.id, hero]);
+    return a;
+  };
+  const feature = await mk('events', 'VERIFYNIGHTPIECE', `${BASE}/images/hero.jpg`);
+  const balance = await mk('balance', 'VERIFYBALANCEPIECE', `${BASE}/images/retreat-beach.jpg`);
+
+  const home = await (await anon.fetch('/')).text();
+  check('a night written up is on the home page', home.includes('VERIFYNIGHTPIECE'));
+  check('and a piece from Balance beside it', home.includes('VERIFYBALANCEPIECE'));
+  check('both with their picture', (home.match(/homeReadImg/g) ?? []).length >= 2,
+    String((home.match(/homeReadImg/g) ?? []).length));
+  check('and they lead to the piece, not to nothing',
+    home.includes(`/balance/${feature.slug}`) && home.includes(`/balance/${balance.slug}`));
+  // Above the event grid is the whole point — below it is where they were.
+  check('and they are above the events, not under them',
+    home.indexOf('VERIFYNIGHTPIECE') < home.indexOf('On Guestlist now'));
+
+  // A piece with no picture must not put a broken image on the front page.
+  const [pictureless] = await q(
+    `update articles set hero_image_url = null where id = $1 returning id`, [balance.id]);
+  const noPic = await (await anon.fetch('/')).text();
+  check('a piece with no picture still shows, without a broken one',
+    noPic.includes('VERIFYBALANCEPIECE'));
+  await q(`update articles set hero_image_url = $2 where id = $1`,
+    [pictureless.id, `${BASE}/images/retreat-beach.jpg`]);
+
+  // The desk rendered the status as one word in a row of identical words:
+  // "PUBLISHED · STORY · OSHI · 12 VIEWS".
+  const desk = client();
+  await desk.login('oshi@guestlist.net');
+  const page = await (await desk.fetch('/admin/articles')).text();
+  check('the desk marks a live piece as live, in its own pill',
+    /artStatus published/.test(page) && page.includes('Live'));
+  check('and says which pieces are waiting on an editor',
+    page.includes('Waiting on you'));
+  check('and can be filtered down to just those', page.includes('statePill'));
+  // It lists every section, and used to call itself "Balance articles".
+  check('and does not claim to be only Balance', !page.includes('Balance articles'));
+  // The section's own name, out of editorial_sections — not a word invented
+  // here, so renaming the section renames the label.
+  check('so an event feature is labelled as one', page.includes('Event Features'));
+
+  await q(`delete from articles where id = any($1)`, [[feature.id, balance.id]]);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failures.length) {
   console.log('Failures:', failures.join(' | '));

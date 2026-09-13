@@ -8,8 +8,24 @@ import { eventsForEntity } from '@/lib/events';
 import { EventCard } from '@/components/EventCard';
 import { FollowButton } from '@/components/FollowButton';
 import { query } from '@/lib/db';
+import { pageMeta } from '@/lib/seo';
+import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const v = await getVenueBySlug(slug);
+  if (!v) return { title: 'Venue not found' };
+  const where = [v.city, v.country].filter(Boolean).join(', ');
+  return pageMeta({
+    title: where ? `${v.name}, ${where} — what's on` : `${v.name} — what's on`,
+    description: v.description
+      ?? `Club nights and events at ${v.name}${where ? ` in ${where}` : ''}, listed on Guestlist.`,
+    path: `/venues/${v.slug}`,
+    image: v.hero_image_url,
+  });
+}
 
 export default async function VenuePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

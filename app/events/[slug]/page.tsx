@@ -21,12 +21,50 @@ import { billingEnabled, formatPence, getMembership, getPlan, membershipIsActive
 import { eventEligible, liveRequestFor } from '@/lib/accessRequests';
 import { GetMeIn } from '@/components/membership/GetMeIn';
 import { AdminItemActions } from '@/components/admin/AdminItemActions';
+import { eventSchema, pageMeta, clamp } from '@/lib/seo';
+import type { Metadata } from 'next';
 
 const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
 
 export const dynamic = 'force-dynamic';
 
 function clock(seconds:number){const m=Math.floor(seconds/60);const s=seconds%60;return `${m}:${String(s).padStart(2,'0')}`}
+
+// WHAT THIS NIGHT LOOKS LIKE ELSEWHERE.
+//
+// Every event page used to inherit the root title — "Guestlist" — so a
+// hundred nights gave a hundred identical search results, and a link pasted
+// into a group chat showed the word Guestlist rather than the flyer and the
+// name of the night. Both are fixed by the same few lines.
+//
+// The canonical matters more here than anywhere else on the site: every share
+// button adds ?src= to the URL, and without it each share looks to a crawler
+// like a separate page competing with the real one.
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const e = await getEventBySlug(slug);
+  if (!e) return { title: 'Night not found' };
+
+  const where = [e.venue_name, e.city].filter(Boolean).join(', ');
+  const when = fmtEventDate(e.start_at, e.end_at, e.timezone);
+  const title = where ? `${e.title} — ${where}, ${when}` : `${e.title} — ${when}`;
+
+  // Whoever wrote about the night said it better than a template can. The
+  // fallback only runs when nobody did.
+  const description = clamp(e.description ?? e.short_description, 300)
+    ?? [`${e.title}${where ? ` at ${where}` : ''} on ${when}.`,
+        e.lineup?.length ? `With ${e.lineup.slice(0, 4).map((a) => a.name).join(', ')}.` : '',
+        'Found on Guestlist.'].filter(Boolean).join(' ');
+
+  return pageMeta({
+    title,
+    description,
+    path: `/events/${e.slug}`,
+    image: e.primary_image_url ?? e.images?.[0]?.url ?? null,
+    // A night that never went live, or was pulled, should not be in an index.
+    noIndex: e.status !== 'live' || e.listing_status === 'cancelled',
+  });
+}
 
 export default async function EventDetailPage({ params, searchParams }: {params: Promise<{ slug: string }>;searchParams: Promise<{ src?: string }>;}) {
   const { slug } = await params;
@@ -72,7 +110,14 @@ export default async function EventDetailPage({ params, searchParams }: {params:
   const price=formatPrice(event.price_from,event.price_to,event.currency);const past=isPast(event);const location=[event.city,event.country].filter(Boolean).join(', ');
   const mapsUrl=event.latitude!=null&&event.longitude!=null?`https://www.openstreetmap.org/?mlat=${event.latitude}&mlon=${event.longitude}#map=15/${event.latitude}/${event.longitude}`:null;
 
+  // The night in the vocabulary a search engine reads. This is what decides
+  // whether it can show up in the "events near you" panel rather than as a
+  // blue link nobody scrolls to. Only for nights that are actually on.
+  const schema = event.status === 'live' && !cancelled ? eventSchema(event) : null;
+
   return <main className="wrap"><TrackView eventId={event.id} src={src}/>
+    {schema && <script type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}/>}
     <section className="detailHero">{event.primary_image_url&&<img className="bg" src={event.primary_image_url} alt=""/>}<div className="detailHeroInner"><div className="detailKicker">{eventTypeLabel(event.event_type)}{past&&' · Past event'}{event.status!=='live'&&` · ${event.status.replace('_',' ')} (admin preview)`}</div><h1 className="detailTitle">{event.title}</h1>{listingBadge&&<div style={{marginBottom:12}}><span className={`listingBadge ${listingBadge}`}>{listingBadge.replace('_',' ')}</span></div>}<div className="detailMetaRow"><span><strong>{fmtEventDate(event.start_at,event.end_at,event.timezone)}</strong></span><span>{fmtEventTime(event.start_at,event.end_at,event.timezone)}</span>{event.venue&&<span>{event.venue.name}</span>}{location&&<span>{location}</span>}</div>{event.genres.length>0&&<div className="tagRow" style={{marginTop:16}}>{event.genres.map(g=><Link key={g.slug} href={`/events?genre=${g.slug}`} className="tag">{g.name}</Link>)}</div>}</div></section>
     {cancelled&&<div className="cancelBanner">CANCELLED — this event is no longer going ahead.</div>}
     {member?.role==='admin'&&<AdminItemActions noun="event" name={event.title} editHref={`/admin/events/${event.id}`} deleteUrl={`/api/admin/events/${event.id}`} afterDelete="/events"/>}

@@ -24,6 +24,8 @@ import { optional } from '@/lib/resilient';
 import { siteImages } from '@/lib/siteImages';
 import { EmailConfirmed } from '@/components/auth/EmailConfirmed';
 import { StickyFilters } from '@/components/StickyFilters';
+import { HomeReads } from '@/components/HomeReads';
+import { listPublishedArticles } from '@/lib/articles';
 
 export const dynamic = 'force-dynamic';
 
@@ -185,7 +187,7 @@ export default async function HomePage(
   // browseEvents is the page's reason to exist, so it is deliberately NOT
   // wrapped: an empty homepage pretending all is well would be worse than an
   // error. The chips and the promoter row beside it are decoration.
-  const [events, genres, promoters] = await Promise.all([
+  const [events, genres, promoters, features, balanceReads] = await Promise.all([
     browseEvents({
       tab: 'for-you',
       sort: 'recommended',
@@ -194,6 +196,11 @@ export default async function HomePage(
     }),
     optional('home:genres', () => getTopLevelGenres(), []),
     optional('home:promoters', () => listPromoters({ sort: 'popular', limit: 4 }), []),
+    // One of each at the top of the page. Featured first, newest otherwise —
+    // listPublishedArticles orders that way, so the Feature button on the desk
+    // is what decides. Wrapped: no piece written yet must not blank the page.
+    optional('home:features', () => listPublishedArticles('events', 1), []),
+    optional('home:balance', () => listPublishedArticles('balance', 1), []),
   ]);
   const savedIds = new Set<string>(
     member
@@ -242,6 +249,8 @@ export default async function HomePage(
       )}
 
       <div className="wrap">
+        {/* The writing, above the fold rather than below the event grid. */}
+        <HomeReads feature={features[0] ?? null} balance={balanceReads[0] ?? null} />
         {!member && <GuestlistNow isAdmin={false} />}
         {/* The genres are how somebody narrows the page; they should not
             scroll away the moment the page starts being worth scrolling. */}
