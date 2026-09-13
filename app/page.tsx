@@ -26,6 +26,8 @@ import { EmailConfirmed } from '@/components/auth/EmailConfirmed';
 import { StickyFilters } from '@/components/StickyFilters';
 import { HomeReads } from '@/components/HomeReads';
 import { ReadsCarousel } from '@/components/ReadsCarousel';
+import { AskAdvert } from '@/components/membership/AskAdvert';
+import { billingEnabled, formatPence, getMembership, getPlan, membershipIsActive } from '@/lib/membership';
 import { listPublishedArticles } from '@/lib/articles';
 
 export const dynamic = 'force-dynamic';
@@ -48,7 +50,8 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
   // Every band below is secondary to "here is your Guestlist": picks, your
   // people, your scene, your places, your trips. One of them failing hides
   // that band; it must never blank the page.
-  const [weekendPicks, picks, yourPeople, danced, places, travel, balanceReads, featureReads] = await Promise.all([
+  const [weekendPicks, picks, yourPeople, danced, places, travel, balanceReads, featureReads,
+         membership, plan] = await Promise.all([
     optional('home:weekendPicks', () => getRecommendedEvents(member.id, { limit: 4, from: weekend.from, to: weekend.to, exploration: false }), []),
     optional('home:picks', () => getRecommendedEvents(member.id, { limit: 6 }), []),
     optional('home:yourPeople', () => yourPeopleUpcoming(member.id, { from: weekend.from, to: weekend.to, limit: 8 }), []),
@@ -69,6 +72,10 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
     // event is the right person to show the other half of the site to.
     optional('home:memberBalance', () => listPublishedArticles('balance', 5), []),
     optional('home:memberFeatures', () => listPublishedArticles('events', 5), []),
+    // What the advert beside the greeting should say. Somebody who already
+    // pays is told how to use it rather than asked to buy it again.
+    optional('home:membership', () => getMembership(member.id), null),
+    optional('home:plan', () => getPlan(), null),
   ]);
   const hour = new Date().getUTCHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -80,22 +87,17 @@ async function MemberHome({ member }: { member: { id: string; display_name: stri
 
   return (
     <section className="wrap myGuestlist">
-      <div className="myGuestlistHead">
-        <div>
-          <div className="homeKicker">{greeting}</div>
-          <h1 className="myGuestlistTitle">{firstName}, here’s your Guestlist.</h1>
+      <div className="homeKicker">{greeting}</div>
+      <h1 className="myGuestlistTitle">{firstName}, here’s your Guestlist.</h1>
 
-          {/* The one sentence that says what Guestlist is for. It sits directly
-              under the name because everything below it — picks, your people,
-              tonight — is the ordinary listings half; this is the half nobody
-              else does. The asterisk goes somewhere: a caveat with no page
-              behind it is a caveat hiding. */}
-          <p className="myGuestlistPitch">
-            Our members can ask us to get them on the guestlist to <b>ANY</b> event.
-            We work out the rest.
-            <Link href="/membership/terms" className="myGuestlistTerms">Terms apply*</Link>
-          </p>
-        </div>
+      <div className="myGuestlistHead">
+        {/* The half nobody else does, sold rather than stated. Everything below
+            it — picks, your people, tonight — is the ordinary listings half. */}
+        <AskAdvert
+          isMember={membershipIsActive(membership)}
+          billingLive={billingEnabled()}
+          price={plan ? formatPence(plan.price_pence, plan.currency) : ''}
+        />
         {/* The column the sentence's measure leaves empty. Balance leads and
             the two sections then alternate — concatenating them meant five
             Balance pieces before the first night, so a member could swipe the

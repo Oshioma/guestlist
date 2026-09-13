@@ -2886,8 +2886,12 @@ console.log('\n— The promise, under the name —');
   const home = await (await nadia.fetch('/')).text();
   const body = home.replace(/<script[\s\S]*?<\/script>/g, '');
   check('a signed-in member is greeted by name', /here’s your Guestlist/.test(body));
+  // The promise is an advert now, and an advert talks to the person reading
+  // it — "get you on the guestlist", not "get them". The wording moved; what
+  // it has to say did not.
   check('and told what Guestlist is actually for',
-    /Our members can ask us to get them on the guestlist to/.test(body)
+    /get you on the guestlist to/.test(body)
+    && /ANY<\/b> event/.test(body)
     && /We work out the rest/.test(body));
   // A caveat with no page behind it is a caveat hiding.
   check('and the asterisk goes somewhere', /membership\/terms[^>]*>Terms apply\*/.test(body));
@@ -3330,6 +3334,37 @@ console.log('\n— Which nights a search engine can actually show —');
   check('a night that already happened drops off the list', !after.includes('VERIFYNOPLACE'));
 
   await q(`delete from events where slug like 'verify-seo-%'`);
+}
+
+console.log('\n— The promise is an advert, not a sentence —');
+{
+  // It was a line in a 30ch measure with a grey caveat under it and a third of
+  // a screen of nothing below that. An advert has somewhere to go.
+  const notYet = client();
+  await notYet.login('dev-rob@example.com');
+  const [rob] = await q(`select id from members where email = 'dev-rob@example.com'`);
+  await q(`delete from memberships where member_id = $1`, [rob.id]);
+  const selling = await (await notYet.fetch('/')).text();
+  check('somebody without a membership is sold one', selling.includes('askAd'));
+  check('and told what they would get',
+    selling.includes('Free entrance to parties whenever we can make it happen'));
+  check('with something to press', /class="btnAccent askAdBtn"/.test(selling));
+  check('and the caveat still goes somewhere', selling.includes('/membership/terms'));
+
+  // Advertising a subscription to somebody who already pays for it is the
+  // quickest way to look like we do not know who they are.
+  const [plan] = await q(`select id from membership_plans limit 1`);
+  await q(`insert into memberships (member_id, plan_id, status, billing_source)
+           values ($1, $2, 'active', 'complimentary')
+           on conflict (member_id) do update set status = 'active', billing_source = 'complimentary'`,
+          [rob.id, plan.id]);
+  const paying = await (await notYet.fetch('/')).text();
+  check('a paying member is not asked to buy it again',
+    !paying.includes('Join the waitlist') && !/Join —/.test(paying));
+  check('they are told how to use it instead', paying.includes('Get me in'));
+  check('and it still says it is theirs', paying.includes('Your membership'));
+
+  await q(`delete from memberships where member_id = $1`, [rob.id]);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
