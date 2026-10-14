@@ -1,6 +1,7 @@
 import { query, queryOne } from './db';
 import { notifyAdminsArticleEdited, notifyAdminsNewArticle } from './adminNotify';
 import { audit } from './audit';
+import { bodyText, wordCount } from './articleBody';
 
 export type Article = {
   id:string; section_slug:string; section_name:string; author_id:string; author_name:string; author_slug:string|null; author_avatar_url:string|null;
@@ -19,8 +20,10 @@ export function articleSlug(title:string) {
   const base=title.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,70) || 'article';
   return `${base}-${Math.random().toString(36).slice(2,7)}`;
 }
-export function readingMinutes(body:string){return Math.max(1,Math.ceil(body.trim().split(/\s+/).filter(Boolean).length/220));}
-export function excerptFrom(body:string){return body.replace(/[#*_>`~\[\]]/g,'').replace(/\s+/g,' ').trim().slice(0,220);}
+// Pictures and videos are not words: they count for neither reading time nor
+// the 80-word minimum, and never end up in an excerpt.
+export function readingMinutes(body:string){return Math.max(1,Math.ceil(wordCount(body)/220));}
+export function excerptFrom(body:string){return bodyText(body).replace(/[#*_>`~\[\]]/g,'').replace(/\s+/g,' ').trim().slice(0,220);}
 
 export async function listPublishedArticles(section='balance', limit=20):Promise<Article[]> {
   return query<Article>(`${SELECT} where s.slug=$1 and a.status='published' order by a.featured desc, a.published_at desc nulls last limit $2`,[section,limit]);
@@ -108,7 +111,7 @@ export async function submitArticle(id:string,authorId:string){
   const a=await getAuthorArticle(id,authorId); if(!a) return null;
   if(!['draft','changes_requested'].includes(a.status)) throw new Error('Article is not editable');
   if(a.title.trim().length<8) throw new Error('Add a clear title');
-  if(a.body.trim().split(/\s+/).length<80) throw new Error('Article must be at least 80 words');
+  if(wordCount(a.body)<80) throw new Error('Article must be at least 80 words');
   if(!a.hero_image_url) throw new Error('Every article needs a hero image');
   const heroOk=await heroImageLoads(a.hero_image_url);
   if(!heroOk.ok) throw new Error(`Your hero image does not load — ${heroOk.why}. Pick another one.`);
