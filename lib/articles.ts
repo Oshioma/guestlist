@@ -1,6 +1,7 @@
 import { query, queryOne } from './db';
 import { notifyAdminsArticleEdited, notifyAdminsNewArticle } from './adminNotify';
 import { audit } from './audit';
+import { bodyText, parseBody, wordCount } from './articleBody';
 
 export type Article = {
   id:string; section_slug:string; section_name:string; author_id:string; author_name:string; author_slug:string|null; author_avatar_url:string|null;
@@ -19,8 +20,10 @@ export function articleSlug(title:string) {
   const base=title.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,70) || 'article';
   return `${base}-${Math.random().toString(36).slice(2,7)}`;
 }
-export function readingMinutes(body:string){return Math.max(1,Math.ceil(body.trim().split(/\s+/).filter(Boolean).length/220));}
-export function excerptFrom(body:string){return body.replace(/[#*_>`~\[\]]/g,'').replace(/\s+/g,' ').trim().slice(0,220);}
+// Pictures and videos are not words: they count for neither reading time nor
+// the 80-word minimum, and never end up in an excerpt.
+export function readingMinutes(body:string){return Math.max(1,Math.ceil(wordCount(body)/220));}
+export function excerptFrom(body:string){return bodyText(body).replace(/[#*_>`~\[\]]/g,'').replace(/\s+/g,' ').trim().slice(0,220);}
 
 export async function listPublishedArticles(section='balance', limit=20):Promise<Article[]> {
   return query<Article>(`${SELECT} where s.slug=$1 and a.status='published' order by a.featured desc, a.published_at desc nulls last limit $2`,[section,limit]);
@@ -75,6 +78,21 @@ export async function heroImageLoads(url: string): Promise<{ ok: true } | { ok: 
   }
 }
 
+/**
+ * Every picture inside the body, checked the same way as the hero: a broken
+ * one mid-article looks just as bad under Guestlist's name. Checked side by
+ * side so a photo essay doesn't take a minute to submit. Null when all load.
+ */
+export async function brokenBodyImage(body: string): Promise<string | null> {
+  const images = parseBody(body).flatMap((b) => (b.kind === 'image' ? [b] : []));
+  const results = await Promise.all(images.map((b) => heroImageLoads(b.url)));
+  const i = results.findIndex((r) => !r.ok);
+  if (i < 0) return null;
+  const r = results[i] as { ok: false; why: string };
+  const which = images[i].caption ? `"${images[i].caption.slice(0, 60)}"` : `number ${i + 1}`;
+  return `picture ${which} in the article does not load — ${r.why}`;
+}
+
 export async function createDraft(authorId:string, section='balance') {
   const safeSection=section==='events'?'events':'balance';
   return queryOne<{id:string;slug:string}>(`insert into articles(section_id,author_id,slug) select id,$1,$2 from editorial_sections where slug=$3 and active=true returning id,slug`,[authorId,articleSlug('draft'),safeSection]);
@@ -108,10 +126,12 @@ export async function submitArticle(id:string,authorId:string){
   const a=await getAuthorArticle(id,authorId); if(!a) return null;
   if(!['draft','changes_requested'].includes(a.status)) throw new Error('Article is not editable');
   if(a.title.trim().length<8) throw new Error('Add a clear title');
-  if(a.body.trim().split(/\s+/).length<80) throw new Error('Article must be at least 80 words');
+  if(wordCount(a.body)<80) throw new Error('Article must be at least 80 words');
   if(!a.hero_image_url) throw new Error('Every article needs a hero image');
   const heroOk=await heroImageLoads(a.hero_image_url);
   if(!heroOk.ok) throw new Error(`Your hero image does not load — ${heroOk.why}. Pick another one.`);
+  const brokenInBody=await brokenBodyImage(a.body);
+  if(brokenInBody) throw new Error(`The ${brokenInBody}. Replace it or delete that line.`);
   await query(`update articles set slug=$3,status='submitted',submitted_at=now(),admin_note=null,updated_at=now() where id=$1 and author_id=$2`,[id,authorId,articleSlug(a.title)]);
   // The editorial desk hears about it — and the review digest is refreshed
   // inside that call, so the bell and the queue agree.
@@ -142,7 +162,9 @@ export async function adminReviewArticle(id:string,adminId:string,action:'reques
   else if(action==='approve') await query(`update articles set status='approved',approved_at=now(),admin_note=$2,updated_at=now() where id=$1`,[id,note||null]);
   else if(action==='publish') { if(!a.hero_image_url) throw new Error('Article needs a hero image before publishing');
     const heroOk=await heroImageLoads(a.hero_image_url);
-    if(!heroOk.ok) throw new Error(`Not publishing with a broken hero image — ${heroOk.why}.`); await query(`update articles set status='published',approved_at=coalesce(approved_at,now()),published_at=coalesce(published_at,now()),admin_note=$2,updated_at=now() where id=$1`,[id,note||null]); }
+    if(!heroOk.ok) throw new Error(`Not publishing with a broken hero image — ${heroOk.why}.`);
+    const brokenInBody=await brokenBodyImage(a.body);
+    if(brokenInBody) throw new Error(`Not publishing: the ${brokenInBody}.`); await query(`update articles set status='published',approved_at=coalesce(approved_at,now()),published_at=coalesce(published_at,now()),admin_note=$2,updated_at=now() where id=$1`,[id,note||null]); }
   else if(action==='reject') await query(`update articles set status='rejected',admin_note=$2,updated_at=now() where id=$1`,[id,note||null]);
   else if(action==='archive') await query(`update articles set status='archived',featured=false,admin_note=$2,updated_at=now() where id=$1`,[id,note||null]);
   return queryOne<Article>(`${SELECT} where a.id=$1`,[id]);

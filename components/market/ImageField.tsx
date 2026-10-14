@@ -8,9 +8,9 @@ import { useState } from 'react';
 
 // Vercel rejects request bodies over ~4.5MB, so phone photos are shrunk in
 // the browser first.
-const UPLOAD_LIMIT = 4 * 1024 * 1024;
+export const UPLOAD_LIMIT = 4 * 1024 * 1024;
 
-async function shrinkImage(file: File): Promise<File> {
+export async function shrinkImage(file: File): Promise<File> {
   if (file.size <= UPLOAD_LIMIT) return file;
   if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return file; // gif: recompressing loses animation
   try {
