@@ -4698,3 +4698,5 @@ a.anTile:hover .anTileGo { text-decoration: underline; }
 .articleFigure img { display: block; width: 100%; height: auto; border-radius: 14px; background: var(--media-ph); }
 .articleFigure figcaption { margin-top: 8px; font-size: 14px; line-height: 1.5; color: var(--text-muted); }
 .articleVideo iframe { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; border: 0; border-radius: 14px; background: #000; }
+.adminArticleRead { max-width: 760px; margin-top: 10px; line-height: 1.6; }
+.adminArticleRead p { margin: 0 0 1em; white-space: pre-wrap; }
