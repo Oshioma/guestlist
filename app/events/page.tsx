@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
-import { genresParam, parseGenres, toggleGenre } from '@/lib/genreFilter';
+import { genresParam, parseGenres } from '@/lib/genreFilter';
+import { GenreChips } from '@/components/GenreChips';
 import { getCurrentMember } from '@/lib/auth';
 import { isActiveMember } from '@/lib/membership';
 import {
@@ -192,31 +193,14 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
           ))}
         </nav>
 
-        <div className="chipRow" aria-label="Genres">
-          <Link href={buildQS({ genre: null })} className={`chip${!genre ? ' active' : ''}`}>
-            All
-          </Link>
-          {/* Each chip toggles: pick as many as you like. Drum & bass brings
-              jungle with it (lib/genreFilter). */}
-          {visibleGenres.map((g) => {
-            const on = selectedGenres.includes(g.slug);
-            return (
-              <Link
-                key={g.slug}
-                href={buildQS({ genre: genresParam(toggleGenre(selectedGenres, g.slug)) })}
-                className={`chip${on ? ' active' : ''}`}
-                aria-pressed={on}
-              >
-                {g.name}
-              </Link>
-            );
-          })}
-          {!showAllGenres && moreGenres.length > 0 && (
-            <Link href={buildQS({ more: '1' })} className="chip">
-              More +
-            </Link>
-          )}
-        </div>
+        {/* Each chip toggles: pick as many as you like. Drum & bass brings
+            jungle with it (lib/genreFilter). Lights up on the tap, not when
+            the new page arrives (components/GenreChips). */}
+        <GenreChips
+          genres={visibleGenres.map((g) => ({ slug: g.slug, name: g.name }))}
+          selected={selectedGenres}
+          moreHref={!showAllGenres && moreGenres.length > 0 ? buildQS({ more: '1' }) : null}
+        />
 
         <EventSearch initial={q ?? ''} />
 
