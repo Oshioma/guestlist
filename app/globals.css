@@ -4700,3 +4700,4 @@ a.anTile:hover .anTileGo { text-decoration: underline; }
 .articleVideo iframe { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; border: 0; border-radius: 14px; background: #000; }
 .adminArticleRead { max-width: 760px; margin-top: 10px; line-height: 1.6; }
 .adminArticleRead p { margin: 0 0 1em; white-space: pre-wrap; }
+.articleHeroVideo { margin: 24px 0 8px; }
