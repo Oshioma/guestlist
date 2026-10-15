@@ -17,17 +17,16 @@
 
 import Link from 'next/link';
 import type { Article } from '@/lib/articles';
+import { CardMedia } from '@/components/balance/CardMedia';
 
 function Read({ a }: { a: Article }) {
   return (
     <Link href={`/balance/${a.slug}`} className="homeRead">
-      {a.hero_image_url
-        // eslint-disable-next-line @next/next/no-img-element
-        ? <img className="homeReadImg" src={a.hero_image_url} alt={a.hero_image_alt ?? ''} loading="lazy" />
-        // Hero images are required and checked before publishing, so this is
-        // for the day that changes: an empty frame keeps the shelf even, where
-        // a missing one would leave a caption floating on its own.
-        : <span className="homeReadNoImg" aria-hidden="true" />}
+      {/* Hero images are required and checked before publishing, so the empty
+          frame is for the day that changes: it keeps the shelf even, where a
+          missing one would leave a caption floating on its own. A video hero
+          plays right here in the card. */}
+      <CardMedia a={a} className="homeReadImg" emptyClassName="homeReadNoImg" />
       <div className="homeReadKicker">{a.section_slug === 'events' ? 'The night, written up' : a.section_name}</div>
       <h3 className="homeReadTitle">{a.title}</h3>
       {(a.excerpt || a.subtitle) && <p className="homeReadExcerpt">{a.excerpt || a.subtitle}</p>}
