@@ -55,6 +55,11 @@ import { createDraft, searchLinkableEvents, setArticleEvents, eventsForArticle, 
 import { tagSlug, pageFromParam, likePattern, listPublishedPage, tagsForSlug, publishedTagSlugs, relatedArticles, latestPublishedArticles, ARTICLES_PER_PAGE } from '@/lib/articles';
 import { articleSchema, jsonLd, SITE_URL as SEO_SITE_URL } from '@/lib/seo';
 import { articlesRss, escapeXml, rfc822 } from '@/lib/rss';
+import {
+  updateDraft, submitArticle, adminEditArticle, adminReviewArticle, recordArticleView, looksLikeBot, getAdminArticle } from '@/lib/articles';
+import { transaction } from '@/lib/db';
+import { newReadsForDigest, memberWeeklyDigestContent } from '@/lib/email';
+import type { RecommendedEvent } from '@/lib/recommend';
 import { runMonthlySuggestions, bucketGenres, probePassed, suggestionsEmail, hostOf } from '@/lib/supply/suggest';
 import { fetcherFor, renderingConfigured } from '@/lib/supply/render';
 import { parse } from 'node-html-parser';
@@ -3208,6 +3213,170 @@ async function main() {
 
     await q(`delete from articles where author_id = $1`, [author]);
     await q(`delete from members where id = $1`, [author]);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— articles: revisions, publishing, views and the digest —');
+  {
+    // Pictures are "looked at" by a stand-in, so nothing here touches the
+    // network: anything on dead.example is broken, everything else loads.
+    const looked: string[] = [];
+    const checkImage = async (url: string) => {
+      looked.push(url);
+      return /dead\.example/.test(url) ? { ok: false as const, why: 'that image gives a 404' } : { ok: true as const };
+    };
+    const words = Array.from({ length: 90 }, (_, i) => `word${i}`).join(' ');
+    const admin = (await q(`select id from members where role = 'admin' limit 1`))[0].id as string;
+    const writer = (await q(
+      `insert into members (email, display_name) values ('aw-writer@test.example', 'Article Writer') returning id`))[0].id as string;
+    const reader = (await q(
+      `insert into members (email, display_name) values ('aw-reader@test.example', 'Article Reader') returning id`))[0].id as string;
+    const draft = (await createDraft(writer))!;
+    const id = draft.id;
+    const revisions = async () => (await q(`select count(*)::int n from article_revisions where article_id = $1`, [id]))[0].n as number;
+    const statusOf = async () => (await q(`select status from articles where id = $1`, [id]))[0].status as string;
+
+    // Revisions: one per ten minutes of autosaving, not one per autosave.
+    await updateDraft(id, writer, { title: 'Ten Years of the Warehouse', body: `${words}\n\n![The room](https://img.example/room.jpg)`, hero_image_url: 'https://img.example/hero.jpg' });
+    check('the first autosave keeps a revision', (await revisions()) === 1);
+    for (let i = 0; i < 4; i++) await updateDraft(id, writer, { subtitle: `take ${i}` });
+    check('autosaves straight after it do not', (await revisions()) === 1, String(await revisions()));
+    await q(`update article_revisions set created_at = now() - interval '11 minutes' where article_id = $1`, [id]);
+    await updateDraft(id, writer, { subtitle: 'later' });
+    check('an autosave after ten minutes keeps another', (await revisions()) === 2);
+    await q(`update articles set status = 'published' where id = $1`, [id]);
+    await updateDraft(id, writer, { subtitle: 'edited while live' });
+    check('a change of status since the last revision keeps one at once', (await revisions()) === 3);
+    await q(`update articles set status = 'draft' where id = $1`, [id]);
+    await updateDraft(id, writer, { subtitle: 'back to draft' });
+    const beforeSubmit = await revisions();
+    await submitArticle(id, writer, { checkImage });
+    check('submitting always keeps one, however recent the last', (await revisions()) === beforeSubmit + 1);
+    check('the submit used the injected image check', looked.includes('https://img.example/hero.jpg'));
+
+    // An editor's edit looks at the pictures, like submit and publish do.
+    const before = await revisions();
+    let err = '';
+    try { await adminEditArticle(id, admin, { hero_image_url: 'https://dead.example/hero.jpg' }, { checkImage }); } catch (e) { err = String(e); }
+    check('an editor cannot swap in a hero that does not load', /hero image does not load/.test(err), err);
+    check('…and the article keeps its old one',
+      (await q(`select hero_image_url from articles where id = $1`, [id]))[0].hero_image_url === 'https://img.example/hero.jpg');
+    err = '';
+    try { await adminEditArticle(id, admin, { body: `${words}\n\n![Gone](https://dead.example/gone.jpg)` }, { checkImage }); } catch (e) { err = String(e); }
+    check('an editor cannot add a picture to the body that does not load', /does not load/.test(err), err);
+    err = '';
+    try { await adminEditArticle(id, admin, { hero_image_url: '' }, { checkImage }); } catch (e) { err = String(e); }
+    check('an editor cannot take the hero off a submitted piece', /needs a hero image/.test(err), err);
+    looked.length = 0;
+    const typo = await adminEditArticle(id, admin, { title: 'Ten Years of the Warehouse!' }, { checkImage });
+    check('a title fix goes through without fetching any picture', typo?.title === 'Ten Years of the Warehouse!' && looked.length === 0, looked.join());
+    check('an editor edit always keeps a revision', (await revisions()) === before + 1);
+    // A picture that is already in the piece is not re-judged by a later edit.
+    await q(`update articles set body = $2 where id = $1`, [id, `${words}\n\n![Old](https://dead.example/old.jpg)`]);
+    looked.length = 0;
+    const fix = await adminEditArticle(id, admin, { body: `${words} fixed\n\n![Old](https://dead.example/old.jpg)` }, { checkImage });
+    check('fixing words beside an old picture is not refused over that picture', !!fix && looked.length === 0, looked.join());
+    await q(`update articles set body = $2 where id = $1`, [id, `${words}\n\n![The room](https://img.example/room.jpg)`]);
+
+    // Publishing only from review.
+    for (const status of ['rejected', 'draft', 'changes_requested', 'archived']) {
+      await q(`update articles set status = $2 where id = $1`, [id, status]);
+      err = '';
+      try { await adminReviewArticle(id, admin, 'publish', undefined, false, { checkImage }); } catch (e) { err = String(e); }
+      check(`publishing a ${status} article is refused with a reason`, /^Error: Not published\. \S/.test(err), err);
+      check(`…and it stays ${status}`, (await statusOf()) === status);
+    }
+    await q(`update articles set status = 'submitted' where id = $1`, [id]);
+    const live = await adminReviewArticle(id, admin, 'publish', undefined, false, { checkImage });
+    check('a submitted article publishes', live?.status === 'published' && !!live?.published_at);
+    looked.length = 0;
+    const again = await adminReviewArticle(id, admin, 'publish', undefined, false, { checkImage });
+    check('publishing a live article again changes nothing', again?.status === 'published'
+      && String(again?.published_at) === String(live?.published_at) && looked.length === 0);
+
+    // Views: readers, not renders.
+    const article = { id, author_id: writer };
+    const browser = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1';
+    check('the writer reading their own piece is not a view',
+      !(await recordArticleView(article, { memberId: writer, ip: '203.0.113.9', userAgent: browser })));
+    for (const ua of ['facebookexternalhit/1.1', 'WhatsApp/2.23.20.0', 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                      'Slackbot-LinkExpanding 1.0', 'curl/8.4.0', '', null]) {
+      check(`a fetch by ${ua === null ? 'no user agent' : JSON.stringify(ua)} is not a view`,
+        !(await recordArticleView(article, { memberId: null, ip: '203.0.113.9', userAgent: ua })));
+    }
+    check('looksLikeBot leaves ordinary browsers alone', !looksLikeBot(browser)
+      && !looksLikeBot('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36'));
+    check('a stranger reading is a view', await recordArticleView(article, { memberId: null, ip: '203.0.113.9', userAgent: browser }));
+    check('the same stranger refreshing is not another',
+      !(await recordArticleView(article, { memberId: null, ip: '203.0.113.9', userAgent: browser })));
+    check('somebody else on another connection is', await recordArticleView(article, { memberId: null, ip: '198.51.100.4', userAgent: browser }));
+    check('a member reading is a view', await recordArticleView(article, { memberId: reader, ip: '198.51.100.7', userAgent: browser }));
+    check('the same member from another device within the half hour is not',
+      !(await recordArticleView(article, { memberId: reader, ip: '192.0.2.1', userAgent: 'Mozilla/5.0 (Macintosh) Safari/605' })));
+    await q(`update article_views set viewed_at = viewed_at - interval '31 minutes' where article_id = $1`, [id]);
+    check('the same member coming back after half an hour is', await recordArticleView(article, { memberId: reader, ip: '198.51.100.7', userAgent: browser }));
+    const counts = (await q(
+      `select a.view_count, (select count(*)::int from article_views v where v.article_id = a.id) rows from articles a where a.id = $1`, [id]))[0];
+    check('the count kept on the article matches the views behind it', counts.view_count === 4 && counts.rows === 4, JSON.stringify(counts));
+    check('lists read the kept count', (await getAdminArticle(id))?.view_count === 4);
+    const stored = await q(`select viewer_hash from article_views where article_id = $1`, [id]);
+    check('no address is stored, only a hash',
+      stored.every((r) => /^[0-9a-f]{32}$/.test(r.viewer_hash)) && !JSON.stringify(stored).includes('203.0.113'));
+    const viewCols = (await q(`select column_name from information_schema.columns where table_name = 'article_views'`)).map((r) => r.column_name);
+    check('article_views has no column for an address', !viewCols.some((c: string) => /ip|addr/.test(c)), viewCols.join());
+
+    // Event links still save, and now save together.
+    const mkEv = async (slug: string) => (await q(
+      `insert into events (slug, title, title_normalized, start_at, timezone, status, city, country)
+       values ($1, $1, $1, now() + interval '20 days', 'Europe/London', 'live', 'Leeds', 'United Kingdom') returning id`, [slug]))[0].id as string;
+    const evA = await mkEv('aw-link-a'), evB = await mkEv('aw-link-b');
+    await setArticleEvents(id, [evA, evB], writer);
+    check('setArticleEvents links what it is given', (await eventsForArticle(id)).length === 2);
+    await setArticleEvents(id, [evB], writer);
+    const nowLinked = (await eventsForArticle(id)).map((e) => e.id);
+    check('…and unlinks what it is no longer given', nowLinked.length === 1 && nowLinked[0] === evB);
+    const revs = await revisions();
+    let rolled = false;
+    try {
+      await transaction(async (tx) => {
+        await tx.query(`delete from article_events where article_id = $1`, [id]);
+        await tx.query(`insert into article_revisions (article_id, title, body, status) values ($1, 'x', 'x', 'draft')`, [id]);
+        throw new Error('half way');
+      });
+    } catch { rolled = true; }
+    check('a transaction that fails half way leaves nothing behind',
+      rolled && (await revisions()) === revs && (await eventsForArticle(id)).length === 1);
+
+    // The digest's New reads.
+    const old = (await createDraft(writer))!;
+    await q(`update articles set title = 'An Old Piece', status = 'published', published_at = now() - interval '10 days' where id = $1`, [old.id]);
+    const unpublished = (await createDraft(writer))!;
+    await q(`update articles set title = 'Not Out Yet', status = 'approved' where id = $1`, [unpublished.id]);
+    await q(`update articles set excerpt = 'Ten years of the room that taught the city to dance.' where id = $1`, [id]);
+    const reads = await newReadsForDigest();
+    const slug = (await q(`select slug from articles where id = $1`, [id]))[0].slug as string;
+    check('new reads include a piece published this week', reads.some((r) => r.slug === slug));
+    check('new reads leave out older and unpublished pieces',
+      !reads.some((r) => r.title === 'An Old Piece' || r.title === 'Not Out Yet'));
+    check('new reads are at most three', reads.length <= 3);
+    const rec = {
+      id: 'x', title: 'Warehouse Night', slug: 'warehouse-night', start_at: new Date(Date.now() + 3 * 86400_000).toISOString(),
+      end_at: null, timezone: 'Europe/London', city: 'Leeds', venue_name: 'The Room', reasons: [],
+    } as unknown as RecommendedEvent;
+    const withReads = memberWeeklyDigestContent({ memberId: reader, firstName: 'Ana', recs: [rec], reads });
+    check('the digest text lists the new reads with a link', withReads.text.includes('New reads on Balance')
+      && withReads.text.includes('Ten Years of the Warehouse!') && withReads.text.includes(`/balance/${slug}`), withReads.text);
+    check('the digest HTML lists them with link, excerpt and picture', withReads.html.includes('New reads on Balance')
+      && withReads.html.includes(`/balance/${slug}`) && withReads.html.includes('taught the city to dance')
+      && withReads.html.includes('src="https://img.example/hero.jpg"'));
+    const without = memberWeeklyDigestContent({ memberId: reader, firstName: 'Ana', recs: [rec], reads: [] });
+    check('with nothing new, the digest has no New reads section',
+      !without.text.includes('New reads') && !without.html.includes('New reads'));
+    check('…and is otherwise the same digest', without.text.includes('Warehouse Night') && without.subject === withReads.subject);
+
+    await q(`delete from articles where author_id = $1`, [writer]);
+    await q(`delete from events where slug like 'aw-link-%'`);
+    await q(`delete from members where id = any($1::uuid[])`, [[writer, reader]]);
   }
 
   // -------------------------------------------------------------------------

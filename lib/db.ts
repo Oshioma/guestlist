@@ -40,3 +40,31 @@ export async function queryOne<T = Record<string, unknown>>(
   const rows = await query<T>(text, params);
   return rows[0] ?? null;
 }
+
+// Several statements that must land together or not at all. The callback gets
+// its own client (the pool hands each `query` call whichever connection is
+// free, so a BEGIN sent through `query` would not even be on the same
+// connection as the statements after it), and anything it throws rolls the
+// lot back before the error carries on up. Keep the work inside short: with
+// three connections per instance, a transaction holding one while it waits on
+// the network is a third of the pool gone.
+export type Tx = {
+  query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;
+};
+export async function transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  const client = await db.connect();
+  try {
+    await client.query('begin');
+    const result = await fn({
+      query: async <R>(text: string, params: unknown[] = []) =>
+        (await client.query(text, params)).rows as R[],
+    });
+    await client.query('commit');
+    return result;
+  } catch (err) {
+    await client.query('rollback').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
