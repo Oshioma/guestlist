@@ -4700,3 +4700,16 @@ a.anTile:hover .anTileGo { text-decoration: underline; }
 .articleVideo iframe { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; border: 0; border-radius: 14px; background: #000; }
 .adminArticleRead { max-width: 760px; margin-top: 10px; line-height: 1.6; }
 .adminArticleRead p { margin: 0 0 1em; white-space: pre-wrap; }
+.articleHeroVideo { margin: 24px 0 8px; }
+
+/* An article card whose hero is a video (components/balance/CardMedia). */
+.cardVideo { position: relative; display: block; }
+.cardVideoPlay {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 64px; height: 64px; border-radius: 50%;
+  display: grid; place-items: center; padding-left: 4px;
+  background: rgba(0, 0, 0, 0.62); color: #fff; cursor: pointer;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35); transition: transform 0.15s ease, background 0.15s ease;
+}
+.cardVideoPlay:hover, .cardVideoPlay:focus-visible { background: #e00; transform: translate(-50%, -50%) scale(1.06); }
+.cardVideoFrame { height: auto; border: 0; }

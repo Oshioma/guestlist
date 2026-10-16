@@ -4,7 +4,25 @@
 
 import { parseBody } from '@/lib/articleBody';
 
-export function ArticleBody({ body, className }: { body: string; className?: string }) {
+// The same player for a video in the body and a video used as the hero.
+// youtube-nocookie: no tracking cookies until somebody presses play.
+export function YouTubePlayer({ id, start = 0, className = 'articleVideo' }: { id: string; start?: number; className?: string }) {
+  return (
+    <figure className={className}>
+      <iframe
+        src={`https://www.youtube-nocookie.com/embed/${id}${start ? `?start=${start}` : ''}`}
+        title="YouTube video"
+        loading="lazy"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        referrerPolicy="strict-origin-when-cross-origin"
+        allowFullScreen
+      />
+    </figure>
+  );
+}
+
+// skipVideoId: the video already playing as the hero isn't shown twice.
+export function ArticleBody({ body, className, skipVideoId }: { body: string; className?: string; skipVideoId?: string }) {
   return (
     <div className={className}>
       {parseBody(body).map((b, i) => {
@@ -17,20 +35,8 @@ export function ArticleBody({ body, className }: { body: string; className?: str
           );
         }
         if (b.kind === 'youtube') {
-          // youtube-nocookie: no tracking cookies until somebody presses play.
-          const src = `https://www.youtube-nocookie.com/embed/${b.id}${b.start ? `?start=${b.start}` : ''}`;
-          return (
-            <figure key={i} className="articleVideo">
-              <iframe
-                src={src}
-                title="YouTube video"
-                loading="lazy"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
-              />
-            </figure>
-          );
+          if (b.id === skipVideoId) return null;
+          return <YouTubePlayer key={i} id={b.id} start={b.start} />;
         }
         return <p key={i}>{b.text}</p>;
       })}

@@ -97,3 +97,22 @@ export function wordCount(body: string): number {
 export function imageLine(url: string, caption: string): string {
   return `![${caption.replace(/[[\]\n]/g, ' ').replace(/\s+/g, ' ').trim()}](${url.trim().replace(/\s/g, '%20')})`;
 }
+
+// --- A video as the hero ------------------------------------------------------
+// No new columns: a video hero is stored as image_provider 'youtube', with the
+// video's link in image_source_url and its thumbnail in hero_image_url. So
+// cards, share previews and the "does the hero load" check all still get a
+// real picture, and only the article page swaps in the player.
+
+export function youtubeWatchUrl(id: string): string {
+  return `https://www.youtube.com/watch?v=${id}`;
+}
+
+/** Largest still first; YouTube only has maxres for HD uploads, hq always exists. */
+export function youtubeThumbs(id: string): { max: string; hq: string } {
+  return { max: `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`, hq: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` };
+}
+
+export function heroVideo(a: { image_provider: string | null; image_source_url: string | null }) {
+  return a.image_provider === 'youtube' && a.image_source_url ? youtubeId(a.image_source_url) : null;
+}

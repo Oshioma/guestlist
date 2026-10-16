@@ -14,6 +14,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Article } from '@/lib/articles';
+import { CardMedia } from '@/components/balance/CardMedia';
 
 // Long enough to read a title and the first line of the excerpt. Faster than
 // this and it is a slideshow nobody can use; slower and it never moves while
@@ -124,10 +125,9 @@ export function ReadsCarousel({ articles }: { articles: Article[] }) {
       <div className="readsCarTrack" ref={track}>
         {articles.map((a) => (
           <Link href={`/balance/${a.slug}`} className="readsCarCard" key={a.id}>
-            {a.hero_image_url
-              // eslint-disable-next-line @next/next/no-img-element
-              ? <img className="readsCarImg" src={a.hero_image_url} alt={a.hero_image_alt ?? ''} loading="lazy" />
-              : <span className="readsCarImg" aria-hidden="true" />}
+            {/* Pressing play is a pointerdown on the track, so a playing
+                video also stops the carousel moving on without it. */}
+            <CardMedia a={a} className="readsCarImg" />
             <div className="readsCarKicker">
               {a.section_slug === 'events' ? 'The night, written up' : a.section_name}
             </div>
