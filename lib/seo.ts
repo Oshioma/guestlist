@@ -51,7 +51,12 @@ export function pageMeta(opts: {
   image?: string | null;
   type?: 'website' | 'article';
   publishedTime?: string | null;
+  modifiedTime?: string | null;
+  authors?: string[];
   noIndex?: boolean;
+  // A feed this page is the human-readable version of. Feed readers and
+  // browser extensions find a feed through this link, not by guessing paths.
+  feed?: { url: string; title: string };
 }): Metadata {
   const url = absolute(opts.path)!;
   const image = absolute(opts.image);
@@ -59,7 +64,10 @@ export function pageMeta(opts: {
   return {
     title: opts.title,
     description,
-    alternates: { canonical: url },
+    alternates: {
+      canonical: url,
+      ...(opts.feed ? { types: { 'application/rss+xml': [{ url: absolute(opts.feed.url)!, title: opts.feed.title }] } } : {}),
+    },
     robots: opts.noIndex ? { index: false, follow: true } : undefined,
     openGraph: {
       title: opts.title,
@@ -68,6 +76,8 @@ export function pageMeta(opts: {
       siteName: SITE_NAME,
       type: opts.type ?? 'website',
       ...(opts.publishedTime ? { publishedTime: opts.publishedTime } : {}),
+      ...(opts.modifiedTime ? { modifiedTime: opts.modifiedTime } : {}),
+      ...(opts.authors?.length ? { authors: opts.authors } : {}),
       ...(image ? { images: [{ url: image }] } : {}),
     },
     twitter: {
@@ -174,6 +184,79 @@ export function eventSchema(e: EventForSchema): Record<string, unknown> {
     ...(performers.length ? { performer: performers } : {}),
     organizer: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
   };
+}
+
+/** The wordmark, as the publisher logo search engines show beside a piece. */
+export const SITE_LOGO = `${SITE_URL}/brand/Guestlist_purple_300dpi.png`;
+
+/**
+ * A date as ISO 8601, whatever shape it arrived in. Article timestamps are
+ * typed as strings and arrive from pg as Date objects, so both are handled
+ * rather than trusting the type; anything unreadable is left out, not guessed.
+ */
+export function isoDate(d: string | Date | null | undefined): string | null {
+  if (!d) return null;
+  const t = d instanceof Date ? d : new Date(d);
+  return Number.isNaN(t.getTime()) ? null : t.toISOString();
+}
+
+type ArticleForSchema = {
+  title: string; slug: string; subtitle: string | null; excerpt: string | null;
+  hero_image_url: string | null;
+  published_at: string | Date | null; updated_at: string | Date | null;
+  author_name: string;
+  // Null when the writer's profile is not public: a link to a page that 404s
+  // is worse than no link, and it would announce a profile they chose to hide.
+  author_url?: string | null;
+  section_slug: string; section_name: string;
+  tags?: string[];
+};
+
+/**
+ * A piece of writing, in the vocabulary a search engine reads.
+ *
+ * Without it a search engine guesses the headline, the date and who wrote it
+ * from the page, and gets the date wrong often enough to matter — a piece
+ * about last summer's festival dated as today's news. An Event Feature is
+ * reporting on a night that happened, so it is a NewsArticle; a Balance piece
+ * is an essay or a reflection, so it is a plain Article. The publisher is
+ * Guestlist, with its logo, because that is whose name the piece goes out
+ * under once the desk has published it.
+ */
+export function articleSchema(a: ArticleForSchema): Record<string, unknown> {
+  const url = `${SITE_URL}/balance/${a.slug}`;
+  const description = clamp(a.excerpt || a.subtitle, 300);
+  const image = absolute(a.hero_image_url);
+  const published = isoDate(a.published_at);
+  const modified = isoDate(a.updated_at) ?? published;
+  return {
+    '@context': 'https://schema.org',
+    '@type': a.section_slug === 'events' ? 'NewsArticle' : 'Article',
+    headline: clamp(a.title, 110) ?? a.title,
+    ...(description ? { description } : {}),
+    ...(image ? { image: [image] } : {}),
+    ...(published ? { datePublished: published } : {}),
+    ...(modified ? { dateModified: modified } : {}),
+    author: { '@type': 'Person', name: a.author_name, ...(a.author_url ? { url: a.author_url } : {}) },
+    publisher: {
+      '@type': 'Organization', name: SITE_NAME, url: SITE_URL,
+      logo: { '@type': 'ImageObject', url: SITE_LOGO },
+    },
+    mainEntityOfPage: { '@type': 'WebPage', '@id': url },
+    url,
+    articleSection: a.section_name,
+    ...(a.tags?.length ? { keywords: a.tags.join(', ') } : {}),
+  };
+}
+
+/**
+ * Structured data as the body of a <script> tag. JSON.stringify leaves "<"
+ * alone, so a headline containing "</script>" would end the tag early and
+ * the rest of it would be read as HTML — escaping it keeps the JSON identical
+ * to a parser and inert to the page.
+ */
+export function jsonLd(data: unknown): string {
+  return JSON.stringify(data).replace(/</g, '\\u003c');
 }
 
 /** The site itself, so a brand search shows the name and a search box. */

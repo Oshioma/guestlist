@@ -48,6 +48,9 @@ import { resolveDuplicates, titlesMatch, localDay } from '@/lib/duplicates';
 import { parseGenres, toggleGenre, genresParam } from '@/lib/genreFilter';
 import { browseEvents } from '@/lib/events';
 import { createDraft, searchLinkableEvents, setArticleEvents, eventsForArticle, slugForSubmit } from '@/lib/articles';
+import { tagSlug, pageFromParam, likePattern, listPublishedPage, tagsForSlug, publishedTagSlugs, relatedArticles, latestPublishedArticles, ARTICLES_PER_PAGE } from '@/lib/articles';
+import { articleSchema, jsonLd, SITE_URL as SEO_SITE_URL } from '@/lib/seo';
+import { articlesRss, escapeXml, rfc822 } from '@/lib/rss';
 import { runMonthlySuggestions, bucketGenres, probePassed, suggestionsEmail, hostOf } from '@/lib/supply/suggest';
 import { fetcherFor, renderingConfigured } from '@/lib/supply/render';
 import { parse } from 'node-html-parser';
@@ -2836,6 +2839,158 @@ async function main() {
         <meta property="og:image" content="https://thin.example.com/opengraph-image" /></head><body></body></html>` } }) });
     check('a page with nothing but the drawn card still offers it',
       thin.ok && thin.draft.imageUrl === 'https://thin.example.com/opengraph-image');
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— the public face of a published piece —');
+  {
+    // Structured data: what a search engine is told about a piece.
+    const published = new Date('2026-03-14T21:30:00Z');
+    const base = {
+      title: 'After the afters', slug: 'after-the-afters-ab12c', subtitle: 'What 7am taught me',
+      excerpt: 'A piece about the hours nobody plans.', hero_image_url: '/images/afters.jpg',
+      // pg hands timestamps over as Date objects whatever the type says.
+      published_at: published as unknown as string, updated_at: new Date('2026-03-15T10:00:00Z') as unknown as string,
+      author_name: 'Sam Writer', author_url: `${SEO_SITE_URL}/members/sam-writer-abc123` as string | null,
+      section_slug: 'balance', section_name: 'Balance', tags: ['afters', 'sunrise'],
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s1 = articleSchema(base) as Record<string, any>;
+    check('a Balance piece is an Article', s1['@type'] === 'Article');
+    check('an Event Feature is a NewsArticle', articleSchema({ ...base, section_slug: 'events' })['@type'] === 'NewsArticle');
+    check('the headline and description come from the piece',
+      s1.headline === 'After the afters' && s1.description === 'A piece about the hours nobody plans.');
+    check('the hero image is an absolute URL', s1.image?.[0] === `${SEO_SITE_URL}/images/afters.jpg`, JSON.stringify(s1.image));
+    check('dates are ISO 8601 even when they arrive as Date objects',
+      s1.datePublished === '2026-03-14T21:30:00.000Z' && s1.dateModified === '2026-03-15T10:00:00.000Z');
+    check('the author is a Person with their member page',
+      s1.author?.['@type'] === 'Person' && s1.author.name === 'Sam Writer' && s1.author.url === base.author_url);
+    check('a writer with no public page gets no author url',
+      !('url' in (articleSchema({ ...base, author_url: null }).author as object)));
+    check('the publisher is Guestlist, with a logo',
+      s1.publisher?.['@type'] === 'Organization' && s1.publisher.name === 'Guestlist'
+      && /^https?:\/\/.+\.png$/.test(s1.publisher.logo?.url ?? ''));
+    check('mainEntityOfPage is the piece’s own address',
+      s1.mainEntityOfPage?.['@id'] === `${SEO_SITE_URL}/balance/after-the-afters-ab12c`);
+    check('no hero means no image, not a broken one', !('image' in articleSchema({ ...base, hero_image_url: null })));
+    check('a headline cannot close the script tag it is printed in',
+      !jsonLd(articleSchema({ ...base, title: 'Nope</script><script>alert(1)</script>' })).includes('</script>'));
+
+    // The feed.
+    const rss = articlesRss([
+      { ...base, title: 'Drum & Bass <live> "tonight"', tags: ['d&b'] },
+      { ...base, slug: 'second-one', title: 'Second', excerpt: null, subtitle: null,
+        published_at: '2026-03-01T12:00:00Z', hero_image_url: null },
+    ]);
+    const items = rss.split('<item>').slice(1);
+    check('the feed is RSS 2.0', rss.startsWith('<?xml version="1.0" encoding="UTF-8"?>') && rss.includes('<rss version="2.0"'));
+    check('the feed escapes what XML reserves',
+      rss.includes('<title>Drum &amp; Bass &lt;live&gt; &quot;tonight&quot;</title>') && rss.includes('<category>d&amp;b</category>'));
+    check('no bare ampersand anywhere in the feed', !/&(?!amp;|lt;|gt;|quot;|apos;)/.test(rss));
+    check('item links are absolute', rss.includes(`<link>${SEO_SITE_URL}/balance/after-the-afters-ab12c</link>`)
+      && rss.includes(`<guid isPermaLink="true">${SEO_SITE_URL}/balance/second-one</guid>`));
+    check('the hero travels as an absolute enclosure', items[0].includes(`<enclosure url="${SEO_SITE_URL}/images/afters.jpg"`));
+    check('pubDate is RFC 822', rss.includes('<pubDate>Sat, 14 Mar 2026 21:30:00 GMT</pubDate>'));
+    check('the channel is dated by its newest piece', rss.includes('<lastBuildDate>Sat, 14 Mar 2026 21:30:00 GMT</lastBuildDate>'));
+    check('the feed points at itself', rss.includes(`<atom:link href="${SEO_SITE_URL}/balance/rss.xml" rel="self"`));
+    check('one item per piece', items.length === 2);
+    check('a piece without a standfirst has no empty description', !items[1].includes('<description>'));
+    check('an empty feed is still a dated channel',
+      articlesRss([], { now: published }).includes('<lastBuildDate>Sat, 14 Mar 2026 21:30:00 GMT</lastBuildDate>'));
+    check('control characters are dropped, not escaped', escapeXml('a\u0007b') === 'ab');
+    check('an unreadable date is left out', rfc822('not a date') === null);
+
+    // Tag addresses.
+    check('a tag becomes a hyphenated slug', tagSlug('uk garage') === 'uk-garage');
+    check('& becomes "and"', tagSlug('drum & bass') === 'drum-and-bass' && tagSlug('drum and bass') === 'drum-and-bass');
+    check('accents are folded', tagSlug('Café Culture') === 'cafe-culture');
+    check('stray punctuation and spaces are trimmed', tagSlug('  --afters!!  ') === 'afters');
+    check('letters from other scripts are kept', tagSlug('東京 nights') === '東京-nights');
+    check('a tag of nothing but punctuation has no address', tagSlug('!!!') === null);
+
+    // Paging and search input.
+    check('?page= reads whole numbers', pageFromParam('3') === 3 && pageFromParam(['2']) === 2);
+    check('?page= rubbish is page 1', [undefined, '', '0', '-2', 'abc', '2.5'].every((v) => pageFromParam(v) === 1));
+    check('?page= is capped', pageFromParam('99999999') === 1000);
+    check('search wildcards are literal', likePattern(' 100%_off\\ ') === '%100\\%\\_off\\\\%', likePattern(' 100%_off\\ '));
+
+    // Against the database.
+    const author = (await q(`insert into members (email, display_name) values ('pages-writer@test.example', 'Pages Writer') returning id`))[0].id as string;
+    const mkA = async (o: { slug: string; title?: string; section?: string; status?: string; tags?: string[];
+                            minutesAgo?: number; body?: string; excerpt?: string | null }) => (await q(
+      `insert into articles (section_id, author_id, slug, title, body, excerpt, status, tags, published_at)
+       select s.id, $1, $2, $3, $4, $5, $6::text, $7,
+              case when $6::text = 'published' then now() - make_interval(mins => $8::int) end
+         from editorial_sections s where s.slug = $9 returning id`,
+      [author, o.slug, o.title ?? `Pages test ${o.slug}`, o.body ?? 'Words about the night.', o.excerpt ?? null,
+       o.status ?? 'published', o.tags ?? [], o.minutesAgo ?? 0, o.section ?? 'balance']))[0].id as string;
+
+    // Paging: 26 pieces under one tag, newest first, no overlaps.
+    for (let i = 0; i < 26; i++) await mkA({ slug: `pg-test-${i}`, tags: ['pager test'], minutesAgo: 1000 + i });
+    await mkA({ slug: 'pg-test-draft', tags: ['pager test'], status: 'draft' });
+    const p1 = await listPublishedPage({ tags: ['pager test'], page: 1 });
+    const p2 = await listPublishedPage({ tags: ['pager test'], page: 2 });
+    check('a page holds 24', p1.articles.length === ARTICLES_PER_PAGE && ARTICLES_PER_PAGE === 24);
+    check('page 1 has older and no newer', p1.hasOlder && !p1.hasNewer);
+    check('page 2 has the remaining 2 and no older', p2.articles.length === 2 && p2.hasNewer && !p2.hasOlder, String(p2.articles.length));
+    check('the pages never overlap', !p2.articles.some((a) => p1.articles.some((b) => b.id === a.id)));
+    check('newest first', p1.articles[0]?.slug === 'pg-test-0' && p2.articles[1]?.slug === 'pg-test-25');
+    check('drafts are never listed', ![...p1.articles, ...p2.articles].some((a) => a.slug === 'pg-test-draft'));
+    const bySection = await listPublishedPage({ section: 'balance', page: 1 });
+    check('a section page only holds that section', bySection.articles.length > 0 && bySection.articles.every((a) => a.section_slug === 'balance'));
+    const byAuthor = await listPublishedPage({ authorId: author, page: 2 });
+    check('an author’s writing pages too', byAuthor.articles.length === 2 && byAuthor.articles.every((a) => a.author_id === author));
+
+    // Search.
+    await mkA({ slug: 'srch-title', title: 'Zqxsearch in the title', minutesAgo: 50 });
+    await mkA({ slug: 'srch-body', body: 'Deep in the body it says zqxsearch once.', minutesAgo: 5 });
+    await mkA({ slug: 'srch-excerpt', excerpt: 'The excerpt mentions ZQXSEARCH loudly.', section: 'events', minutesAgo: 10 });
+    await mkA({ slug: 'srch-draft', title: 'Zqxsearch draft', status: 'submitted' });
+    await mkA({ slug: 'srch-pct', title: 'Pages test 100% off', minutesAgo: 60 });
+    const found = (await listPublishedPage({ q: 'zqxsearch' })).articles.map((a) => a.slug);
+    check('search finds title, excerpt and body, in any case, across sections',
+      ['srch-title', 'srch-body', 'srch-excerpt'].every((x) => found.includes(x)), found.join());
+    check('search never finds an unpublished piece', !found.includes('srch-draft'));
+    check('a title match ranks above newer body matches', found[0] === 'srch-title', found.join());
+    const pct = (await listPublishedPage({ q: '100%' })).articles.map((a) => a.slug);
+    check('% in a search is a literal %', pct.includes('srch-pct') && !pct.includes('srch-title'), pct.join());
+    check('_ in a search is a literal _', (await listPublishedPage({ q: 'pages_test' })).articles.length === 0);
+
+    // Tags by address.
+    await mkA({ slug: 'tag-a', tags: ['drum & bass'], minutesAgo: 1 });
+    await mkA({ slug: 'tag-b', tags: ['drum & bass'], minutesAgo: 2 });
+    await mkA({ slug: 'tag-c', tags: ['drum and bass'], minutesAgo: 3 });
+    await mkA({ slug: 'tag-draft', tags: ['secret draft tag'], status: 'draft' });
+    const dnb = await tagsForSlug('drum-and-bass');
+    check('every spelling of a tag lands on one page',
+      !!dnb && dnb.tags.includes('drum & bass') && dnb.tags.includes('drum and bass'), JSON.stringify(dnb));
+    check('the page is headed by the commonest spelling', dnb?.label === 'drum & bass');
+    check('a tag only drafts use has no page', (await tagsForSlug('secret-draft-tag')) === null);
+    check('the tag page lists both spellings’ pieces',
+      (await listPublishedPage({ tags: dnb?.tags ?? [] })).articles.filter((a) => a.slug.startsWith('tag-')).length === 3);
+    const tagSlugs = await publishedTagSlugs();
+    check('the sitemap gets published tags only',
+      tagSlugs.includes('drum-and-bass') && tagSlugs.includes('pager-test') && !tagSlugs.includes('secret-draft-tag'));
+
+    // What to read next.
+    const self = await mkA({ slug: 'rel-self', tags: ['afters', 'sunrise'], minutesAgo: 30 });
+    await mkA({ slug: 'rel-two', tags: ['afters', 'sunrise'], minutesAgo: 900 });
+    await mkA({ slug: 'rel-one', tags: ['sunrise'], section: 'events', minutesAgo: 400 });
+    await mkA({ slug: 'rel-draft', tags: ['afters', 'sunrise'], status: 'approved' });
+    await mkA({ slug: 'rel-other', tags: ['unrelated'], section: 'events', minutesAgo: 0 });
+    const rel = (await relatedArticles({ id: self, tags: ['afters', 'sunrise'], section_slug: 'balance' })).map((a) => a.slug);
+    check('related: most shared tags first, then fewer', rel[0] === 'rel-two' && rel[1] === 'rel-one', rel.join());
+    check('related: then the same section, never another section’s unrelated piece',
+      rel.length === 3 && rel[2] !== 'rel-other', rel.join());
+    check('related: never itself, never unpublished', !rel.includes('rel-self') && !rel.includes('rel-draft'));
+
+    const latest = await latestPublishedArticles(30);
+    check('the feed carries 30 at most, newest first, published only',
+      latest.length === 30 && latest.every((a) => a.status === 'published')
+      && latest.every((a, i) => i === 0 || new Date(latest[i - 1].published_at!).getTime() >= new Date(a.published_at!).getTime()));
+
+    await q(`delete from articles where author_id = $1`, [author]);
+    await q(`delete from members where id = $1`, [author]);
   }
 
   // -------------------------------------------------------------------------

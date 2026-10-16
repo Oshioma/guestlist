@@ -23,6 +23,6 @@ export async function BalanceHomeSection(){
   return <section style={{padding:'34px 0',borderTop:'1px solid var(--border)',marginTop:32}}>
     <div className="homeSectionHead" style={{marginTop:0}}><div><div className="homeKicker">Community editorial</div><h2 className="homeSectionTitle" style={{marginTop:5}}>Balance</h2></div><Link href="/balance" className="btnGhost">Explore Balance →</Link></div>
     {balance.length?<ArticleRow articles={balance}/>:<p style={{color:'var(--text-muted)'}}>Member stories are coming to Balance.</p>}
-    {eventFeatures.length>0&&<><div className="homeSectionHead" style={{marginTop:28}}><div><div className="homeKicker">From the dancefloor</div><h2 className="homeSectionTitle" style={{marginTop:5}}>Event Features</h2></div></div><ArticleRow articles={eventFeatures}/></>}
+    {eventFeatures.length>0&&<><div className="homeSectionHead" style={{marginTop:28}}><div><div className="homeKicker">From the dancefloor</div><h2 className="homeSectionTitle" style={{marginTop:5}}>Event Features</h2></div><Link href="/features" className="btnGhost">All Event Features →</Link></div><ArticleRow articles={eventFeatures}/></>}
   </section>;
 }

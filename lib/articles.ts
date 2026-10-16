@@ -270,3 +270,163 @@ export async function searchLinkableEvents(
     [term, opts.limit ?? 12, statuses]
   );
 }
+
+// --- Reading the published writing -------------------------------------------
+// Everything below is read-only and only ever returns PUBLISHED pieces: it is
+// what the public listing, tag, author, search and feed pages are built from.
+// A draft has no business turning up through a tag or a search box.
+
+/**
+ * Twenty-four to a page. It divides by the grid's three columns (and by the
+ * one column on a phone), so a full page never ends on a gap, and it is few
+ * enough that a page of photographs still loads quickly on a phone.
+ */
+export const ARTICLES_PER_PAGE = 24;
+
+/**
+ * ?page=N, read defensively. Anything that is not a whole number from 1 up —
+ * "0", "-3", "abc", "2.5" — is page 1, and a crawler's ?page=99999999 is
+ * capped, rather than throwing or asking Postgres for an absurd offset.
+ */
+export function pageFromParam(raw: string | string[] | undefined | null): number {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (!v || !/^\d{1,9}$/.test(v)) return 1;
+  return Math.min(Math.max(1, Number(v)), 1000);
+}
+
+/**
+ * A tag as it appears in an address: /balance/tag/drum-and-bass.
+ *
+ * Tags are stored the way the writer typed them, lowercased ("drum & bass",
+ * "uk garage", "café culture"). Those are not addresses, and two writers'
+ * spellings of the same thing should land on the same page — so the slug
+ * folds accents, turns "&" into "and", and joins words with hyphens. Letters
+ * from any script are kept: a tag written in Japanese is still a tag, and an
+ * address made of nothing would be worse than an encoded one. Null when there
+ * is nothing left to make an address from (a tag that was all punctuation);
+ * such a tag is shown without a link.
+ */
+export function tagSlug(tag: string): string | null {
+  const s = tag
+    .normalize('NFKD').replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+    .replace(/-+$/, '');
+  return s || null;
+}
+
+/**
+ * Search text as an ILIKE pattern. The person's % and _ are literal
+ * characters, not wildcards (the same rule as the event search in
+ * lib/events.ts), so searching "100%" does not match everything. Used with
+ * escape '\'.
+ */
+export function likePattern(q: string): string {
+  return `%${q.trim().replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+}
+
+export type ArticlePage = { articles: Article[]; page: number; hasNewer: boolean; hasOlder: boolean };
+
+/**
+ * One page of published writing, filtered any of the ways the public pages
+ * need: by section, by any of a set of tags, by author, or by a search.
+ *
+ * One more row than a page is fetched, and its presence is what "Older"
+ * means — cheaper than a count(*) over the same filter, and no count is ever
+ * shown.
+ *
+ * A section listing keeps its order — featured first, then newest — so the
+ * Feature button on the editorial desk still means something. Everywhere
+ * else it is newest first; a search puts title matches above body matches,
+ * because the piece called "Afters" is what somebody typing "afters" wants.
+ * Ties break on id, so a page boundary never shows a piece twice or skips one.
+ */
+export async function listPublishedPage(opts: {
+  section?: string; tags?: string[]; authorId?: string; q?: string;
+  page?: number; perPage?: number;
+}): Promise<ArticlePage> {
+  const page = Math.max(1, opts.page ?? 1);
+  const perPage = opts.perPage ?? ARTICLES_PER_PAGE;
+  const where = [`a.status = 'published'`];
+  const params: unknown[] = [];
+  const arg = (v: unknown) => { params.push(v); return `$${params.length}`; };
+  if (opts.section) where.push(`s.slug = ${arg(opts.section)}`);
+  // && is "shares any", which the GIN index on tags (migration 016) answers.
+  if (opts.tags?.length) where.push(`a.tags && ${arg(opts.tags)}::text[]`);
+  if (opts.authorId) where.push(`a.author_id = ${arg(opts.authorId)}`);
+  const term = opts.q?.trim();
+  let order = opts.section && !term ? `a.featured desc, a.published_at desc nulls last` : `a.published_at desc nulls last`;
+  if (term) {
+    const like = arg(likePattern(term));
+    where.push(`(a.title ilike ${like} escape '\\' or a.subtitle ilike ${like} escape '\\'
+                 or a.excerpt ilike ${like} escape '\\' or a.body ilike ${like} escape '\\')`);
+    order = `(a.title ilike ${like} escape '\\') desc, ${order}`;
+  }
+  const rows = await query<Article>(
+    `${SELECT} where ${where.join(' and ')} order by ${order}, a.id
+      limit ${arg(perPage + 1)} offset ${arg((page - 1) * perPage)}`,
+    params
+  );
+  return { articles: rows.slice(0, perPage), page, hasNewer: page > 1, hasOlder: rows.length > perPage };
+}
+
+/**
+ * Which stored tags an address stands for. Several spellings can share one
+ * slug ("drum & bass", "drum and bass"), and all of them belong on the page.
+ *
+ * The slug is not something SQL can compute the same way JS does, so this
+ * reads the distinct tags in use on published pieces — a few hundred short
+ * strings at most — and matches them here. The pieces themselves are then
+ * fetched with tags && [...], which the GIN index answers. The label is the
+ * spelling most pieces use, for the page heading.
+ */
+export async function tagsForSlug(slug: string): Promise<{ label: string; tags: string[] } | null> {
+  const rows = await query<{ tag: string; n: number }>(
+    `select t as tag, count(*)::int as n
+       from articles a, unnest(a.tags) t
+      where a.status = 'published'
+      group by t order by count(*) desc, t`
+  );
+  const matching = rows.filter((r) => tagSlug(r.tag) === slug);
+  if (!matching.length) return null;
+  return { label: matching[0].tag, tags: matching.map((r) => r.tag) };
+}
+
+/** Every tag address with a published piece behind it, for the sitemap. */
+export async function publishedTagSlugs(): Promise<string[]> {
+  const rows = await query<{ tag: string }>(
+    `select distinct t as tag from articles a, unnest(a.tags) t where a.status = 'published'`
+  );
+  return [...new Set(rows.map((r) => tagSlug(r.tag)).filter((s): s is string => !!s))];
+}
+
+/**
+ * What to read next, under a piece somebody has just finished.
+ *
+ * The pieces sharing the most tags with this one come first, then others
+ * from the same section, newest first within each — so a piece about afters
+ * suggests the other pieces about afters before whatever Balance published
+ * last. Never the piece itself, never anything unpublished.
+ */
+export async function relatedArticles(a: Pick<Article, 'id' | 'tags' | 'section_slug'>, limit = 3): Promise<Article[]> {
+  return query<Article>(
+    `${SELECT}
+      where a.status = 'published' and a.id <> $1
+        and (a.tags && $2::text[] or s.slug = $3)
+      order by (select count(*) from unnest(a.tags) t where t = any($2::text[])) desc,
+               (s.slug = $3) desc, a.published_at desc nulls last, a.id
+      limit $4`,
+    [a.id, a.tags ?? [], a.section_slug, limit]
+  );
+}
+
+/** The newest published pieces across every section — what the feed carries. */
+export async function latestPublishedArticles(limit = 30): Promise<Article[]> {
+  return query<Article>(
+    `${SELECT} where a.status = 'published' order by a.published_at desc nulls last, a.id limit $1`,
+    [limit]
+  );
+}
