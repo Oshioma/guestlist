@@ -13,6 +13,7 @@ import type { MetadataRoute } from 'next';
 import { query } from '@/lib/db';
 import { SITE_URL } from '@/lib/seo';
 import { canonicalCountry, countrySlug } from '@/lib/countries';
+import { publishedTagSlugs } from '@/lib/articles';
 
 export const revalidate = 3600;
 
@@ -63,6 +64,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             from scene_entities where slug is not null and entity_type = 'club' limit 2000`),
   ]);
 
+  // A tag page per tag on a published piece. The address is computed in JS
+  // (lib/articles.ts tagSlug), so it cannot be one more SQL string above.
+  const tagPaths = await publishedTagSlugs().catch(() => [] as string[]);
+
   // Countries come back as names ("United Kingdom") and are pages by slug.
   const countryPaths = [...new Set(
     countries
@@ -77,6 +82,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     at('/explore', null, 0.7, 'weekly'),
     at('/archive', null, 0.7, 'weekly'),
     at('/balance', null, 0.7, 'weekly'),
+    at('/features', null, 0.7, 'weekly'),
     at('/market', null, 0.6, 'weekly'),
     at('/membership', null, 0.6, 'monthly'),
     at('/business', null, 0.4, 'monthly'),
@@ -87,6 +93,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...countryPaths.map((p) => at(p, null, 0.7, 'daily')),
     ...places.map((r) => at(r.path, r.updated, 0.7, 'daily')),
     ...articles.map((r) => at(r.path, r.updated, 0.6, 'monthly')),
+    ...tagPaths.map((t) => at(`/balance/tag/${encodeURIComponent(t)}`, null, 0.4, 'weekly')),
     ...venues.map((r) => at(r.path, r.updated, 0.5, 'weekly')),
     ...artists.map((r) => at(r.path, r.updated, 0.5, 'weekly')),
     ...clubs.map((r) => at(r.path, r.updated, 0.5, 'monthly')),

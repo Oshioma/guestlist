@@ -17,6 +17,8 @@ import { MemberActions } from '@/components/v2c/MemberActions';
 import { ClubTrack } from '@/components/clubmessenger/ClubTrack';
 import { isActiveMember } from '@/lib/membership';
 import { MemberBadge } from '@/components/membership/MemberBadge';
+import { listPublishedPage, pageFromParam } from '@/lib/articles';
+import { ArticleGrid, Pager } from '@/components/balance/ArticleGrid';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,8 +45,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function MemberProfilePage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function MemberProfilePage({ params, searchParams }: {
+  params: Promise<{ slug: string }>; searchParams: Promise<{ page?: string }>;
+}) {
   const { slug } = await params;
+  const writingPage = pageFromParam((await searchParams).page);
   const viewer = await getCurrentMember();
 
   const member = await queryOne<{
@@ -87,7 +92,7 @@ export default async function MemberProfilePage({ params }: { params: Promise<{ 
   // GUESTLIST MEMBER — the badge, and only the badge, for now. "Member
   // since" and the rest of public identity are a deliberate later design.
   const guestlistMember = await isActiveMember(member.id);
-  const [taste, history, upcoming, following, connection, viewerClose, shared, viewerBlocks] = await Promise.all([
+  const [taste, history, upcoming, following, connection, viewerClose, shared, viewerBlocks, writing] = await Promise.all([
     privacy.show_taste || isSelf
       ? query<{ name: string; slug: string }>(
           `select g.name, g.slug from member_genres mg join genres g on g.id = mg.genre_id
@@ -128,6 +133,13 @@ export default async function MemberProfilePage({ params }: { params: Promise<{ 
     viewer
       ? queryOne(`select 1 from member_blocks where blocker_id = $1 and blocked_id = $2`, [viewer.id, member.id])
       : Promise.resolve(null),
+    // WRITING. What they have had published on Balance or as an Event
+    // Feature. Unlike taste or rave history this has no privacy flag of its
+    // own: a published piece already carries their name in public, so listing
+    // it here reveals nothing — and the page itself is still subject to
+    // profile_public and blocking above. Drafts and pieces under review
+    // never appear, not even to the writer: /balance/write is where those live.
+    listPublishedPage({ authorId: member.id, page: writingPage }),
   ]);
 
   const pendingIn =
@@ -272,6 +284,15 @@ export default async function MemberProfilePage({ params }: { params: Promise<{ 
           </section>
         )}
       </div>
+
+      {(writing.articles.length > 0 || writingPage > 1) && (
+        <section id="writing" style={{ marginTop: 32 }}>
+          <div className="sectionLabel">Writing</div>
+          <ArticleGrid articles={writing.articles} showSection />
+          <Pager basePath={`/members/${member.slug}`} page={writing.page} hash="#writing"
+                 hasNewer={writing.hasNewer} hasOlder={writing.hasOlder} />
+        </section>
+      )}
 
       {!viewer && (
         <div className="clubJoin" style={{ marginTop: 24 }}>
