@@ -1,4 +1,5 @@
-import { query, queryOne } from './db';
+import { createHmac } from 'node:crypto';
+import { query, queryOne, transaction } from './db';
 import { notifyAdminsArticleEdited, notifyAdminsNewArticle } from './adminNotify';
 import { audit } from './audit';
 import { bodyText, parseBody, wordCount } from './articleBody';
@@ -11,9 +12,11 @@ export type Article = {
   created_at:string; updated_at:string; view_count:number;
 };
 
+// view_count comes with a.* — it is kept on the article by recordArticleView
+// (migration 048) rather than counted from article_views for every row of
+// every list.
 const SELECT = `select a.*, s.slug section_slug, s.name section_name,
-  m.display_name author_name, m.slug author_slug, m.avatar_url author_avatar_url,
-  (select count(*)::int from article_views v where v.article_id=a.id) view_count
+  m.display_name author_name, m.slug author_slug, m.avatar_url author_avatar_url
   from articles a join editorial_sections s on s.id=a.section_id join members m on m.id=a.author_id`;
 
 export function articleSlug(title:string) {
@@ -88,13 +91,21 @@ export async function heroImageLoads(url: string): Promise<{ ok: true } | { ok: 
 }
 
 /**
+ * How a picture gets looked at. Always heroImageLoads in the app; the tests
+ * hand in their own so that a check on "does this image load" never depends
+ * on somebody else's server being up.
+ */
+export type ImageCheck = (url: string) => Promise<{ ok: true } | { ok: false; why: string }>;
+export type ImageCheckOpts = { checkImage?: ImageCheck };
+
+/**
  * Every picture inside the body, checked the same way as the hero: a broken
  * one mid-article looks just as bad under Guestlist's name. Checked side by
  * side so a photo essay doesn't take a minute to submit. Null when all load.
  */
-export async function brokenBodyImage(body: string): Promise<string | null> {
+export async function brokenBodyImage(body: string, checkImage: ImageCheck = heroImageLoads): Promise<string | null> {
   const images = parseBody(body).flatMap((b) => (b.kind === 'image' ? [b] : []));
-  const results = await Promise.all(images.map((b) => heroImageLoads(b.url)));
+  const results = await Promise.all(images.map((b) => checkImage(b.url)));
   const i = results.findIndex((r) => !r.ok);
   if (i < 0) return null;
   const r = results[i] as { ok: false; why: string };
@@ -113,7 +124,32 @@ function normalizedPatch(current:Article,p:ArticlePatch){
   const body=p.body??current.body; const type=TYPES.has(p.article_type||'')?p.article_type!:current.article_type;
   return {title:(p.title??current.title).trim().slice(0,180),subtitle:(p.subtitle??current.subtitle)?.trim().slice(0,260)||null,excerpt:(p.excerpt??current.excerpt??excerptFrom(body))?.trim().slice(0,300)||null,body:body.slice(0,120000),article_type:type,hero_image_url:(p.hero_image_url??current.hero_image_url)?.trim()||null,hero_image_alt:(p.hero_image_alt??current.hero_image_alt)?.trim().slice(0,300)||null,image_provider:(p.image_provider??current.image_provider)?.trim().slice(0,40)||null,image_credit:(p.image_credit??current.image_credit)?.trim().slice(0,200)||null,image_source_url:(p.image_source_url??current.image_source_url)?.trim()||null,tags:(p.tags??current.tags).map(x=>x.trim().toLowerCase()).filter(Boolean).slice(0,8),reading_minutes:readingMinutes(body)};
 }
-async function snapshot(a:Article,editorId:string){await query(`insert into article_revisions(article_id,editor_id,title,subtitle,excerpt,body,hero_image_url,tags,status) values($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[a.id,editorId,a.title,a.subtitle,a.excerpt,a.body,a.hero_image_url,a.tags,a.status]);}
+/**
+ * A copy of the article as it stood, before a change lands on it.
+ *
+ * The writer's editor autosaves every few seconds, and every autosave used to
+ * write one of these — a whole copy of the body each time, so an evening's
+ * writing left hundreds of near-identical rows. A history nobody can read for
+ * the noise is not a history. So an autosave only writes one when the last is
+ * more than ten minutes old, or when the article has moved status since (a
+ * published piece now being edited deserves its own "before"). The moments
+ * that matter — submit, every editorial action, an editor's own edit — always
+ * write one (`always`).
+ *
+ * One statement, so two autosaves arriving together cannot both decide the
+ * last revision is stale.
+ */
+export const REVISION_EVERY_MINUTES=10;
+async function snapshot(a:Article,editorId:string,always=false){
+  await query(
+    `insert into article_revisions(article_id,editor_id,title,subtitle,excerpt,body,hero_image_url,tags,status)
+     select $1,$2,$3,$4,$5,$6,$7,$8,$9
+      where $10::boolean or not exists (
+        select 1 from (select status,created_at from article_revisions
+                        where article_id=$1 order by created_at desc,id desc limit 1) last
+         where last.created_at > now() - make_interval(mins => $11) and last.status = $9)`,
+    [a.id,editorId,a.title,a.subtitle,a.excerpt,a.body,a.hero_image_url,a.tags,a.status,always,REVISION_EVERY_MINUTES]);
+}
 
 export async function updateDraft(id:string,authorId:string,p:ArticlePatch){
   const current=await getAuthorArticle(id,authorId); if(!current) return null;
@@ -131,27 +167,103 @@ export async function deleteAuthorArticle(id:string,authorId:string){
   await query(`delete from articles where id=$1 and author_id=$2`,[id,authorId]);
   return true;
 }
-export async function submitArticle(id:string,authorId:string){
+export async function submitArticle(id:string,authorId:string,opts:ImageCheckOpts={}){
+  const checkImage=opts.checkImage??heroImageLoads;
   const a=await getAuthorArticle(id,authorId); if(!a) return null;
   if(!['draft','changes_requested'].includes(a.status)) throw new Error('Article is not editable');
   if(a.title.trim().length<8) throw new Error('Add a clear title');
   if(wordCount(a.body)<80) throw new Error('Article must be at least 80 words');
   if(!a.hero_image_url) throw new Error('Every article needs a hero image');
-  const heroOk=await heroImageLoads(a.hero_image_url);
+  const heroOk=await checkImage(a.hero_image_url);
   if(!heroOk.ok) throw new Error(`Your hero image does not load — ${heroOk.why}. Pick another one.`);
-  const brokenInBody=await brokenBodyImage(a.body);
+  const brokenInBody=await brokenBodyImage(a.body,checkImage);
   if(brokenInBody) throw new Error(`The ${brokenInBody}. Replace it or delete that line.`);
+  // What the desk was sent, whatever the autosave throttle last kept.
+  await snapshot(a,authorId,true);
   await query(`update articles set slug=$3,status='submitted',submitted_at=now(),admin_note=null,updated_at=now() where id=$1 and author_id=$2`,[id,authorId,slugForSubmit(a.slug,a.title)]);
   // The editorial desk hears about it — and the review digest is refreshed
   // inside that call, so the bell and the queue agree.
   await notifyAdminsNewArticle(id);
   return getAuthorArticle(id,authorId);
 }
-export async function recordArticleView(articleId:string,memberId:string|null){await query(`insert into article_views(article_id,member_id) values($1,$2)`,[articleId,memberId]);}
+// --- Views -------------------------------------------------------------------
+// The view count is on the editorial desk, and it is the only number a writer
+// gets back for their work, so it should mean "somebody read this". Every
+// render of the page used to count: the writer checking how it looks, the
+// preview WhatsApp fetches when the link is shared, every crawler, and one
+// person refreshing. None of those is a reader.
 
-export async function adminEditArticle(id:string,adminId:string,p:ArticlePatch){
+// Anything that fetches a page without a person behind it. Link-preview
+// fetchers matter most — sharing a piece in a group chat would otherwise count
+// once for every app that unfurls it. No user agent at all is a script.
+const NOT_A_READER=/bot|crawl|spider|slurp|preview|facebookexternalhit|facebookcatalog|meta-externalagent|embedly|whatsapp|telegram|slack|discord|skype|linkedin|pinterest|vkshare|quora link|tumblr|outbrain|nuzzel|ia_archiver|archive\.org|headless|phantomjs|lighthouse|pagespeed|gtmetrix|pingdom|uptime|monitor|curl|wget|python|httpclient|okhttp|go-http-client|axios|node-fetch|undici|java\/|libwww|scrapy/i;
+export function looksLikeBot(userAgent:string|null|undefined){return !userAgent?.trim()||NOT_A_READER.test(userAgent);}
+
+// The same person reading twice within this is one read: a refresh, a phone
+// that dropped the page, coming back from a link in the piece.
+export const VIEW_DEDUPE_MINUTES=30;
+
+// Who is reading, as something we can compare but not reverse. A member is
+// their id; anyone else is their address and browser together (an office or a
+// festival wifi shares one address, so the address alone would merge
+// strangers). Keyed with a server secret, so the IPv4 space cannot simply be
+// hashed through to undo it. The address itself is never stored.
+export function viewerHash(v:{memberId?:string|null;ip?:string|null;userAgent?:string|null}){
+  const who=v.memberId?`m:${v.memberId}`:`a:${v.ip??''}|${v.userAgent??''}`;
+  const key=process.env.IP_HASH_SALT??process.env.SESSION_SECRET??'guestlist';
+  return createHmac('sha256',key).update(who).digest('hex').slice(0,32);
+}
+
+export type ArticleViewer={memberId:string|null;ip?:string|null;userAgent?:string|null};
+/**
+ * Count a read, if it is one. Says whether it counted.
+ *
+ * The view row and the cached articles.view_count move in one statement, so
+ * the number on the article cannot drift from the rows behind it. Two
+ * requests from one viewer in the same instant can still both count — a lock
+ * per page view would cost more than that miscount ever could.
+ */
+export async function recordArticleView(article:{id:string;author_id:string},viewer:ArticleViewer):Promise<boolean>{
+  if(viewer.memberId&&viewer.memberId===article.author_id) return false;
+  if(looksLikeBot(viewer.userAgent)) return false;
+  const counted=await query<{id:string}>(
+    `with seen as (
+       insert into article_views(article_id,member_id,viewer_hash)
+       select $1,$2,$3
+        where not exists (select 1 from article_views
+                           where article_id=$1 and viewer_hash=$3
+                             and viewed_at > now() - make_interval(mins => $4))
+       returning article_id)
+     update articles set view_count=view_count+1 where id in (select article_id from seen) returning id`,
+    [article.id,viewer.memberId,viewerHash(viewer),VIEW_DEDUPE_MINUTES]);
+  return counted.length>0;
+}
+
+const bodyImageUrls=(body:string)=>new Set(parseBody(body).flatMap((b)=>(b.kind==='image'?[b.url]:[])));
+
+export async function adminEditArticle(id:string,adminId:string,p:ArticlePatch,opts:ImageCheckOpts={}){
+  const checkImage=opts.checkImage??heroImageLoads;
   const current=await queryOne<Article>(`${SELECT} where a.id=$1`,[id]); if(!current)return null;
-  await snapshot(current,adminId); const x=normalizedPatch(current,p);
+  const x=normalizedPatch(current,p);
+  // The same look submit and publish take. An editor's save on a live piece is
+  // live the moment it lands — there is no later step to catch a hero swapped
+  // for a dead link — so it is caught here. Only pictures the edit brought in
+  // are fetched: fixing a typo should not wait on, or be refused over, every
+  // picture that was already in the piece.
+  if(x.hero_image_url!==current.hero_image_url){
+    if(!x.hero_image_url){
+      if(current.status!=='draft') throw new Error('Every article needs a hero image');
+    } else {
+      const heroOk=await checkImage(x.hero_image_url);
+      if(!heroOk.ok) throw new Error(`Not saved: that hero image does not load — ${heroOk.why}. Pick another one.`);
+    }
+  }
+  if(x.body!==current.body){
+    const before=bodyImageUrls(current.body);
+    const brokenInBody=await brokenBodyImage(x.body,(url)=>before.has(url)?Promise.resolve({ok:true as const}):checkImage(url));
+    if(brokenInBody) throw new Error(`Not saved: the ${brokenInBody}.`);
+  }
+  await snapshot(current,adminId,true);
   await query(`update articles set title=$2,subtitle=$3,excerpt=$4,body=$5,article_type=$6,hero_image_url=$7,hero_image_alt=$8,image_provider=$9,image_credit=$10,image_source_url=$11,tags=$12,reading_minutes=$13,updated_at=now() where id=$1`,[id,x.title,x.subtitle,x.excerpt,x.body,x.article_type,x.hero_image_url,x.hero_image_alt,x.image_provider,x.image_credit,x.image_source_url,x.tags,x.reading_minutes]);
   return queryOne<Article>(`${SELECT} where a.id=$1`,[id]);
 }
@@ -164,16 +276,38 @@ export async function adminDeleteArticle(id:string,adminId:string){
   await query(`delete from articles where id=$1`,[id]);
   return true;
 }
-export async function adminReviewArticle(id:string,adminId:string,action:'request_changes'|'approve'|'publish'|'reject'|'archive'|'feature',note?:string,featured?:boolean){
-  const a=await queryOne<Article>(`${SELECT} where a.id=$1`,[id]); if(!a) return null; await snapshot(a,adminId);
+// Publish is the end of review, not a way round it. It used to work from any
+// status, so a rejected piece — or a draft nobody had submitted — was one
+// click from going live. It goes out from the desk (submitted or approved);
+// publishing something already live changes nothing. Anything else is told
+// what has to happen first, in words the desk shows as they are.
+export const PUBLISHABLE=new Set(['submitted','approved']);
+const NOT_PUBLISHABLE:Record<string,string>={
+  draft:'This is still a draft — the writer has not submitted it.',
+  changes_requested:'This is back with the writer for changes. It can go out once they resubmit it.',
+  rejected:'This article was rejected. Request changes to send it back to the writer; it can go out once they resubmit it.',
+  archived:'This article was archived. Request changes to send it back to the writer; it can go out once they resubmit it.',
+};
+export async function adminReviewArticle(id:string,adminId:string,action:'request_changes'|'approve'|'publish'|'reject'|'archive'|'feature',note?:string,featured?:boolean,opts:ImageCheckOpts={}){
+  const checkImage=opts.checkImage??heroImageLoads;
+  const a=await queryOne<Article>(`${SELECT} where a.id=$1`,[id]); if(!a) return null;
+  if(action==='publish'){
+    if(a.status==='published') return a;
+    if(!PUBLISHABLE.has(a.status)) throw new Error(`Not published. ${NOT_PUBLISHABLE[a.status]??`An article that is ${a.status.replace('_',' ')} cannot be published.`}`);
+  }
+  await snapshot(a,adminId,true);
   if(action==='feature'){await query(`update articles set featured=$2,updated_at=now() where id=$1`,[id,!!featured]);}
   else if(action==='request_changes') await query(`update articles set status='changes_requested',admin_note=$2,updated_at=now() where id=$1`,[id,note||'Please make the requested changes.']);
   else if(action==='approve') await query(`update articles set status='approved',approved_at=now(),admin_note=$2,updated_at=now() where id=$1`,[id,note||null]);
   else if(action==='publish') { if(!a.hero_image_url) throw new Error('Article needs a hero image before publishing');
-    const heroOk=await heroImageLoads(a.hero_image_url);
+    const heroOk=await checkImage(a.hero_image_url);
     if(!heroOk.ok) throw new Error(`Not publishing with a broken hero image — ${heroOk.why}.`);
-    const brokenInBody=await brokenBodyImage(a.body);
-    if(brokenInBody) throw new Error(`Not publishing: the ${brokenInBody}.`); await query(`update articles set status='published',approved_at=coalesce(approved_at,now()),published_at=coalesce(published_at,now()),admin_note=$2,updated_at=now() where id=$1`,[id,note||null]); }
+    const brokenInBody=await brokenBodyImage(a.body,checkImage);
+    if(brokenInBody) throw new Error(`Not publishing: the ${brokenInBody}.`);
+    // The status rule again, in the statement itself: the image checks take a
+    // moment, and a reject that lands in that moment should win.
+    const done=await query(`update articles set status='published',approved_at=coalesce(approved_at,now()),published_at=coalesce(published_at,now()),admin_note=$2,updated_at=now() where id=$1 and status=any($3::text[]) returning id`,[id,note||null,[...PUBLISHABLE]]);
+    if(!done.length) throw new Error('Not published — the article changed while it was being checked. Reload and try again.'); }
   else if(action==='reject') await query(`update articles set status='rejected',admin_note=$2,updated_at=now() where id=$1`,[id,note||null]);
   else if(action==='archive') await query(`update articles set status='archived',featured=false,admin_note=$2,updated_at=now() where id=$1`,[id,note||null]);
   return queryOne<Article>(`${SELECT} where a.id=$1`,[id]);
@@ -232,19 +366,24 @@ export async function setArticleEvents(
   // The same rule as the picker: a writer can only ADD a published event.
   // Links that already exist are kept as they are.
   const linkable = opts.allowUnpublished ? ['live', 'new', 'needs_review', 'rejected'] : ['live'];
-  await query(
-    `delete from article_events where article_id = $1 and not (event_id = any($2::uuid[]))`,
-    [articleId, ids]
-  );
-  if (ids.length) {
-    await query(
-      `insert into article_events (article_id, event_id, linked_by)
-       select $1, e.id, $3 from events e
-        where e.id = any($2::uuid[]) and e.status::text = any($4::text[])
-       on conflict do nothing`,
-      [articleId, ids, linkedBy, linkable]
+  // Delete and insert together or not at all: a failure between the two used
+  // to leave the article linked to nothing, which on the page looks exactly
+  // like the writer having removed every event.
+  await transaction(async (tx) => {
+    await tx.query(
+      `delete from article_events where article_id = $1 and not (event_id = any($2::uuid[]))`,
+      [articleId, ids]
     );
-  }
+    if (ids.length) {
+      await tx.query(
+        `insert into article_events (article_id, event_id, linked_by)
+         select $1, e.id, $3 from events e
+          where e.id = any($2::uuid[]) and e.status::text = any($4::text[])
+         on conflict do nothing`,
+        [articleId, ids, linkedBy, linkable]
+      );
+    }
+  });
   return ids.length;
 }
 

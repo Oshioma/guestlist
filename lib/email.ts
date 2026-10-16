@@ -293,6 +293,8 @@ export function renderEmailHtml(opts: {
   events?: EmailEventBlock[];
   footerLines?: string[];
   cta?: { label: string; url: string } | null;
+  /** Further table rows under the button — a secondary section, already rendered. */
+  afterRows?: string;
   memberId?: string | null;
   emailType: string;
 }): string {
@@ -328,6 +330,7 @@ export function renderEmailHtml(opts: {
         '22px 26px 0'),
       events ? row(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${events}</table>`, '18px 26px 0') : '',
       opts.cta ? centreRow(button(opts.cta.url, opts.cta.label), '10px 26px 2px') : '',
+      opts.afterRows ?? '',
     ].join(''),
     footerHtml: `${(opts.footerLines ?? []).map(esc).join('<br/>')}${opts.footerLines?.length ? '<br/>' : ''}`
       + `${unsub}<a href="${SITE}/you/profile#settings" style="color:${BRAND.faint};">Email settings</a>`,
@@ -357,19 +360,91 @@ export function isoWeek(d = new Date()): string {
   return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
-export async function queueMemberWeeklyDigest(memberId: string): Promise<boolean> {
-  const prefs = await getEmailPrefs(memberId);
-  if (!prefs.weekly_digest) return false;
-  const member = await queryOne<{ email: string; display_name: string }>(
-    `select email, display_name from members where id = $1`, [memberId]);
-  if (!member) return false;
-  const { from, to } = weekendWindow();
-  const recs = await getRecommendedEvents(memberId, { limit: 5, from, to });
-  if (!recs.length) return false; // never an empty digest
+// --- New reads ---------------------------------------------------------------
+// Balance is written by members for members, and the weekly digest is the one
+// email nearly everyone gets — so the week's new pieces ride along under the
+// picks. A short section and only when there is something: the digest is
+// about the weekend, and three reads is a footnote to it, not a second email.
 
+export type DigestRead = {
+  slug: string; title: string; excerpt: string | null; subtitle: string | null;
+  hero_image_url: string | null;
+};
+
+export async function newReadsForDigest(limit = 3): Promise<DigestRead[]> {
+  return query<DigestRead>(
+    `select slug, title, excerpt, subtitle, hero_image_url from articles
+      where status = 'published' and published_at > now() - interval '7 days'
+      order by published_at desc
+      limit $1`,
+    [limit]
+  );
+}
+
+const readUrl = (r: DigestRead) => `${SITE}/balance/${r.slug}?src=email-weekly`;
+const readBlurb = (r: DigestRead) => {
+  const t = (r.excerpt || r.subtitle || '').replace(/\s+/g, ' ').trim();
+  return t.length > 160 ? `${t.slice(0, 157).replace(/\s+\S*$/, '')}…` : t;
+};
+// A hero stored as /images/x.jpg is one of ours; a mail client has no site to
+// resolve it against. Anything that is not http(s) after that is left out.
+const readImage = (r: DigestRead) => {
+  const u = r.hero_image_url?.startsWith('/') ? `${SITE}${r.hero_image_url}` : r.hero_image_url;
+  return u && /^https?:\/\//.test(u) ? u : null;
+};
+
+export function newReadsText(reads: DigestRead[]): string[] {
+  if (!reads.length) return [];
+  return [
+    ``,
+    `New reads on Balance:`,
+    ``,
+    ...reads.map((r) => `• ${r.title}${readBlurb(r) ? `\n  ${readBlurb(r)}` : ''}\n  ${readUrl(r)}`),
+    ``,
+  ];
+}
+
+// Rows for renderEmailHtml's afterRows. The picture sits beside the words in a
+// table cell, at a fixed small size: remote images are off by default in many
+// inboxes, and an empty 96px square is tolerable where an empty banner is not.
+export function newReadsHtml(reads: DigestRead[]): string {
+  if (!reads.length) return '';
+  const cards = reads.map((r) => {
+    const img = readImage(r);
+    const blurb = readBlurb(r);
+    return `
+      <tr><td style="padding:0 0 12px 0;">
+        <a href="${escapeHtml(readUrl(r))}" style="text-decoration:none;color:${BRAND.ink};">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                 style="border:1px solid ${BRAND.line};border-radius:14px;background:${BRAND.surface};">
+            <tr>
+              ${img ? `<td width="96" valign="top" style="padding:14px 0 14px 14px;width:96px;">
+                <img src="${escapeHtml(img)}" width="96" height="72" alt=""
+                     style="display:block;border:0;width:96px;height:72px;object-fit:cover;border-radius:10px;" /></td>` : ''}
+              <td valign="top" style="padding:14px 18px;">
+                <div style="font-size:16px;font-weight:750;letter-spacing:-0.2px;color:${BRAND.ink};">${escapeHtml(r.title)}</div>
+                ${blurb ? `<div style="font-size:13px;color:${BRAND.soft};margin-top:4px;line-height:1.5;">${escapeHtml(blurb)}</div>` : ''}
+              </td>
+            </tr>
+          </table>
+        </a>
+      </td></tr>`;
+  }).join('');
+  return row(`<div style="border-top:1px solid ${BRAND.line};padding-top:20px;font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:${BRAND.accentInk};">New reads on Balance</div>`, '26px 26px 0')
+    + row(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${cards}</table>`, '12px 26px 0');
+}
+
+/**
+ * The member digest itself, from what it is made of. Kept apart from the
+ * queueing so what goes into the email can be checked without a member who
+ * happens to have picks this weekend.
+ */
+export function memberWeeklyDigestContent(opts: {
+  memberId: string; firstName: string; recs: RecommendedEvent[]; reads: DigestRead[];
+}): { subject: string; text: string; html: string } {
+  const { memberId, firstName, recs, reads } = opts;
   const connectionNames = [...new Set(recs.flatMap((r) =>
     r.reasons.flatMap((x) => (x.code === 'CONNECTION_GOING' ? x.names.slice(0, 2) : []))))];
-  const firstName = member.display_name.split(' ')[0];
   const intro = connectionNames.length
     ? `${connectionNames.slice(0, 2).join(' and ')} ${connectionNames.length === 1 ? 'is' : 'are'} going out this weekend. Here are your picks.`
     : `Here are your picks for this weekend.`;
@@ -385,23 +460,45 @@ export async function queueMemberWeeklyDigest(memberId: string): Promise<boolean
     }),
     ``,
     `See your weekend: ${SITE}/events?tab=this-weekend`,
+    ...newReadsText(reads),
     `Stop these: ${unsubscribeUrl(memberId, 'weekly_digest')}`,
   ].join('\n');
 
-  const { outcome } = await queueEmail({
-    recipientEmail: member.email,
-    memberId,
-    emailType: 'member_weekly_digest',
+  return {
     subject: `Your weekend on Guestlist — ${recs.length} picks`,
-    bodyText: text,
-    bodyHtml: renderEmailHtml({
+    text,
+    html: renderEmailHtml({
       heading: `${firstName}, your weekend.`,
       intro,
       events: eventBlocks(recs, 'email-weekly'),
       cta: { label: 'SEE YOUR WEEKEND', url: `${SITE}/events?tab=this-weekend` },
+      afterRows: newReadsHtml(reads),
       memberId,
       emailType: 'member_weekly_digest',
     }),
+  };
+}
+
+export async function queueMemberWeeklyDigest(memberId: string): Promise<boolean> {
+  const prefs = await getEmailPrefs(memberId);
+  if (!prefs.weekly_digest) return false;
+  const member = await queryOne<{ email: string; display_name: string }>(
+    `select email, display_name from members where id = $1`, [memberId]);
+  if (!member) return false;
+  const { from, to } = weekendWindow();
+  const recs = await getRecommendedEvents(memberId, { limit: 5, from, to });
+  if (!recs.length) return false; // never an empty digest — new reads alone don't make one
+
+  const { subject, text, html } = memberWeeklyDigestContent({
+    memberId, firstName: member.display_name.split(' ')[0], recs, reads: await newReadsForDigest(),
+  });
+  const { outcome } = await queueEmail({
+    recipientEmail: member.email,
+    memberId,
+    emailType: 'member_weekly_digest',
+    subject,
+    bodyText: text,
+    bodyHtml: html,
     dedupeKey: `weekly:${memberId}:${isoWeek()}`,
   });
   return outcome === 'queued';

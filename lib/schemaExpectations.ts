@@ -52,6 +52,7 @@ export const MIGRATION_FILES: string[] = [
   '045_source_suggestions.sql',
   '046_suggestion_search_city.sql',
   '047_event_finished_outcome.sql',
+  '048_article_view_counting.sql',
 ];
 
 export const EXPECTED_TABLES: string[] = [
@@ -178,6 +179,8 @@ export const EXPECTED_COLUMNS: string[] = [
   'analytics_events.country',
   'analytics_events.referrer_host',
   'archive_mixes.scene_entity_id',
+  'article_views.viewer_hash',
+  'articles.view_count',
   'email_outbox.attempt_count',
   'email_outbox.body_html',
   'email_outbox.dedupe_key',
