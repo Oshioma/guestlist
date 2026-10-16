@@ -54,6 +54,9 @@ export default async function YouPage() {
         {/* Your profile is what other people see, so it lives behind your own
             name in the header rather than in here with the switches. */}
         <Link href="/you/profile" className="chip">Your profile</Link>
+        {/* The nights you saved or said you're going to — the list a member
+            most often comes in here looking for. */}
+        <Link href="/you/events" className="chip">Your events</Link>
         <Link href="/you/membership" className="chip">Membership</Link>
         <a href="#music" className="chip">Music</a>
         <a href="#history" className="chip">Rave history</a>

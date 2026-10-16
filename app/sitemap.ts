@@ -17,7 +17,13 @@ import { publishedTagSlugs } from '@/lib/articles';
 
 export const revalidate = 3600;
 
-type Row = { path: string; updated: string | null };
+type Row = { path: string; updated: string | null; past?: boolean };
+
+// One sitemap file may hold 50,000 addresses; past that a crawler rejects the
+// whole file. Nights get whatever the rest of the site leaves, with headroom.
+const MAX_URLS = 50_000;
+const HEADROOM = 1_000;
+const MAX_EVENT_URLS = 45_000;
 
 const at = (path: string, updated?: string | null, priority = 0.5,
             changeFrequency: 'daily' | 'weekly' | 'monthly' = 'weekly') => ({
@@ -35,13 +41,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   };
 
   const [events, venues, artists, articles, places, countries, archiveEvents, clubs] = await Promise.all([
-    // Live nights, and ones recently past — a night people looked up last week
-    // is still what they search for this week, and the page still answers it.
-    safe(`select '/events/' || slug as path, coalesce(updated_at, published_at)::text as updated
+    // Every live night, past ones included. It used to stop at sixty days,
+    // which dropped a night out of search just as it became the thing people
+    // look up — the line-up they saw, the party a friend went to — and those
+    // pages still answer that (marked as past). Upcoming nights first, so if
+    // the budget below ever bites it is the oldest history that waits.
+    safe(`select '/events/' || slug as path, coalesce(updated_at, published_at)::text as updated,
+                 coalesce(end_at, start_at + interval '6 hours') <= now() as past
             from events
            where status = 'live' and slug is not null
-             and start_at > now() - interval '60 days'
-           order by start_at desc limit 5000`),
+           order by (coalesce(end_at, start_at + interval '6 hours') > now()) desc, start_at desc
+           limit ${MAX_EVENT_URLS}`),
     safe(`select '/venues/' || slug as path, null::text as updated
             from venues where slug is not null limit 2000`),
     safe(`select '/artists/' || slug as path, null::text as updated
@@ -76,9 +86,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .map((n) => `/${countrySlug(n)}`)
   )];
 
-  return [
+  const fixed = [
     at('/', null, 1.0, 'daily'),
     at('/events', null, 0.9, 'daily'),
+    at('/events/past', null, 0.5, 'daily'),
     at('/explore', null, 0.7, 'weekly'),
     at('/archive', null, 0.7, 'weekly'),
     at('/balance', null, 0.7, 'weekly'),
@@ -89,7 +100,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     at('/clips', null, 0.4, 'monthly'),
     at('/terms', null, 0.2, 'monthly'),
     at('/privacy', null, 0.2, 'monthly'),
-    ...events.map((r) => at(r.path, r.updated, 0.8, 'daily')),
+  ];
+  const rest = [
     ...countryPaths.map((p) => at(p, null, 0.7, 'daily')),
     ...places.map((r) => at(r.path, r.updated, 0.7, 'daily')),
     ...articles.map((r) => at(r.path, r.updated, 0.6, 'monthly')),
@@ -99,4 +111,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...clubs.map((r) => at(r.path, r.updated, 0.5, 'monthly')),
     ...archiveEvents.map((r) => at(r.path, r.updated, 0.4, 'monthly')),
   ];
+  const eventBudget = Math.max(0, Math.min(MAX_EVENT_URLS, MAX_URLS - HEADROOM - fixed.length - rest.length));
+  // A night still to come changes (times, line-up, sold out); one that has
+  // happened does not, and saying so saves the crawl for the ones that do.
+  const eventUrls = events.slice(0, eventBudget).map((r) => r.past
+    ? at(r.path, r.updated, 0.4, 'monthly')
+    : at(r.path, r.updated, 0.8, 'daily'));
+  return [...fixed, ...eventUrls, ...rest];
 }

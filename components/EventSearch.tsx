@@ -34,6 +34,7 @@ export function EventSearch({ initial = '', placeholder = 'Search events, venues
     const next = value.trim();
     if (next) params.set('q', next);
     else params.delete('q');
+    params.delete('page'); // a new search starts from its first page
     const qs = params.toString();
     router.push(qs ? `?${qs}` : '?', { scroll: false });
   }

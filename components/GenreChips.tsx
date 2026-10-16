@@ -42,6 +42,7 @@ export function GenreChips({
     const value = genresParam(next);
     if (value) params.set('genre', value);
     else params.delete('genre');
+    params.delete('page'); // a different list starts from its first page
     const s = params.toString();
     return s ? `/events?${s}` : '/events';
   };

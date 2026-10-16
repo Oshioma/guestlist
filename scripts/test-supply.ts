@@ -46,7 +46,11 @@ import { pollSuggestion, dismissSuggestion } from '@/lib/supply/suggest';
 import { heldForSuggestionSql } from '@/lib/adminEvents';
 import { resolveDuplicates, titlesMatch, localDay } from '@/lib/duplicates';
 import { parseGenres, toggleGenre, genresParam } from '@/lib/genreFilter';
-import { browseEvents } from '@/lib/events';
+import { browseEvents, relatedEvents, memberEvents, pastEvents, clampOffset, MAX_BROWSE_OFFSET } from '@/lib/events';
+import { eventSchema, schemaEventStatus } from '@/lib/seo';
+import { buildIcs, icsEscape, icsFold, googleCalendarUrl, calendarEventFor } from '@/lib/ics';
+import { londonWeekend, datePresetRange, londonDayAt } from '@/lib/dateWindows';
+import { weekendWindow } from '@/lib/recommend';
 import { createDraft, searchLinkableEvents, setArticleEvents, eventsForArticle, slugForSubmit } from '@/lib/articles';
 import { tagSlug, pageFromParam, likePattern, listPublishedPage, tagsForSlug, publishedTagSlugs, relatedArticles, latestPublishedArticles, ARTICLES_PER_PAGE } from '@/lib/articles';
 import { articleSchema, jsonLd, SITE_URL as SEO_SITE_URL } from '@/lib/seo';
@@ -1197,6 +1201,219 @@ async function main() {
     const popular = await browseEvents({ tab: 'for-you', sort: 'popular' });
     check('sorting by anything but recommended does not fail', Array.isArray(popular));
     await q(`delete from events where slug like 'genre-%-night'`);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— a night in search results: organiser, status, offers —');
+  {
+    const base = {
+      title: 'Schema Night', slug: 'schema-night', short_description: 'A night.',
+      start_at: '2026-11-07T22:00:00.000Z', end_at: '2026-11-08T04:00:00.000Z',
+      city: 'Leeds', country: 'United Kingdom', price_from: '12.50', price_to: null,
+      currency: 'GBP' as string | null, primary_image_url: null, ticket_url: 'https://tickets.example.com/x',
+      listing_status: 'confirmed', promoter: null as { name: string; slug: string | null } | null,
+    };
+    const org = (s: Record<string, unknown>) => s.organizer as { name: string; url?: string };
+    const offer = (s: Record<string, unknown>) => s.offers as Record<string, string>;
+
+    const withPromoter = eventSchema({ ...base, promoter: { name: 'Hospitality', slug: 'hospitality' } });
+    check('the organiser is the promoter, with their page on Guestlist',
+      org(withPromoter).name === 'Hospitality' && org(withPromoter).url?.endsWith('/promoters/hospitality'),
+      JSON.stringify(withPromoter.organizer));
+    const unclaimed = eventSchema(base);
+    check('a night nobody has claimed falls back to Guestlist as organiser', org(unclaimed).name === 'Guestlist');
+
+    check('confirmed → EventScheduled', schemaEventStatus('confirmed') === 'https://schema.org/EventScheduled');
+    check('postponed → EventPostponed', schemaEventStatus('postponed') === 'https://schema.org/EventPostponed');
+    check('rescheduled → EventRescheduled', schemaEventStatus('rescheduled') === 'https://schema.org/EventRescheduled');
+    check('cancelled → EventCancelled',
+      eventSchema({ ...base, listing_status: 'cancelled' }).eventStatus === 'https://schema.org/EventCancelled');
+    check('sold out is still going ahead', schemaEventStatus('sold_out') === 'https://schema.org/EventScheduled');
+    check('an unknown status reads as scheduled, not as nothing', schemaEventStatus(null) === 'https://schema.org/EventScheduled');
+
+    check('tickets on sale → InStock', offer(unclaimed).availability === 'https://schema.org/InStock');
+    check('sold out → SoldOut',
+      offer(eventSchema({ ...base, listing_status: 'sold_out' })).availability === 'https://schema.org/SoldOut');
+    check('a known currency carries the price', offer(unclaimed).price === '12.5' && offer(unclaimed).priceCurrency === 'GBP');
+    const noCurrency = offer(eventSchema({ ...base, currency: null }));
+    check('no currency, no price — never a GBP guess',
+      !('price' in noCurrency) && !('priceCurrency' in noCurrency) && !!noCurrency.availability);
+    const euro = offer(eventSchema({ ...base, currency: 'EUR', price_from: '0' }));
+    check('a free night abroad keeps its own currency', euro.price === '0' && euro.priceCurrency === 'EUR');
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— add to calendar: the .ics file and the Google link —');
+  {
+    const ev = {
+      uid: 'event-1234@www.guestlist.net',
+      title: 'Jungle, Bass; and \\ Friends',
+      start: new Date('2026-11-07T22:00:00Z'),
+      end: null,
+      location: 'Hangar 34, Liverpool',
+      url: 'https://www.guestlist.net/events/jungle-bass',
+      description: 'Line one\nLine two — with a long tail of words so this line has to be folded somewhere sensible, and an emoji 🎧 near the end 🎧🎧🎧',
+    };
+    const ics = buildIcs(ev, new Date('2026-10-16T09:08:07.123Z'));
+    const lines = ics.split('\r\n');
+    check('every line ends in CRLF', ics.endsWith('\r\n') && !/[^\r]\n/.test(ics));
+    check('it is one VEVENT inside a VCALENDAR',
+      lines[0] === 'BEGIN:VCALENDAR' && ics.includes('\r\nBEGIN:VEVENT\r\n') && ics.includes('\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'));
+    check('UID and DTSTAMP are present', ics.includes('\r\nUID:event-1234@www.guestlist.net\r\n') && ics.includes('\r\nDTSTAMP:20261016T090807Z\r\n'));
+    check('DTSTART is in UTC', ics.includes('\r\nDTSTART:20261107T220000Z\r\n'));
+    check('no end time means six hours', ics.includes('\r\nDTEND:20261108T040000Z\r\n'));
+    check('text is escaped', ics.includes('SUMMARY:Jungle\\, Bass\\; and \\\\ Friends')
+      && ics.includes('LOCATION:Hangar 34\\, Liverpool'));
+    check('a newline becomes \\n', icsEscape('a\r\nb\nc') === 'a\\nb\\nc');
+    const enc = new TextEncoder();
+    check('no line is longer than 75 octets', lines.every((l) => enc.encode(l).length <= 75),
+      lines.map((l) => enc.encode(l).length).join());
+    const unfolded = ics.replace(/\r\n /g, '');
+    check('unfolding gives the description back whole, emoji and all',
+      unfolded.includes(`DESCRIPTION:${icsEscape(ev.description)}\r\n`));
+    const folded = icsFold('X:' + '🎧'.repeat(40));
+    check('folding never splits a character', !folded.includes('�')
+      && folded.split('\r\n ').every((part) => [...part].every((c) => c === '🎧' || c === 'X' || c === ':')));
+    check('a short line is left alone', icsFold('SUMMARY:Hi') === 'SUMMARY:Hi');
+    check('a cancelled night says so',
+      buildIcs({ ...ev, cancelled: true }).includes('\r\nSTATUS:CANCELLED\r\n'));
+
+    const g = new URL(googleCalendarUrl({ ...ev, end: new Date('2026-11-08T03:00:00Z') }));
+    check('the Google link opens the add-event screen with the dates',
+      g.host === 'calendar.google.com' && g.searchParams.get('action') === 'TEMPLATE'
+      && g.searchParams.get('dates') === '20261107T220000Z/20261108T030000Z'
+      && g.searchParams.get('text') === ev.title && g.searchParams.get('location') === ev.location);
+
+    const fromRow = calendarEventFor({
+      id: 'abc', slug: 'a-night', title: 'A Night', start_at: '2026-11-07T22:00:00Z', end_at: null,
+      short_description: null, city: 'Leeds', country: 'United Kingdom', listing_status: 'confirmed',
+      venue: { name: 'Canal Mills', address: 'Armley Road', city: 'Leeds', country: 'United Kingdom' },
+    }, 'https://www.guestlist.net');
+    check('a listing becomes a calendar entry with a stable id and the full place',
+      fromRow.uid === 'event-abc@www.guestlist.net' && fromRow.location === 'Canal Mills, Armley Road, Leeds, United Kingdom'
+      && fromRow.url === 'https://www.guestlist.net/events/a-night', JSON.stringify(fromRow));
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— this weekend, today and tomorrow are London’s, not the server’s —');
+  {
+    const iso = (d: Date | null) => d?.toISOString();
+    // 23:30 UTC on Thursday 9 July is already 00:30 on Friday in London.
+    const lateThu = new Date('2026-07-09T23:30:00Z');
+    const w = londonWeekend(lateThu);
+    check('just after midnight on a summer Friday it is this weekend already',
+      iso(w.from) === '2026-07-09T23:00:00.000Z' && iso(w.to) === '2026-07-13T05:00:00.000Z', `${iso(w.from)} → ${iso(w.to)}`);
+    const sun = londonWeekend(new Date('2026-07-12T20:00:00Z'));
+    check('on Sunday it is the weekend we are in', iso(sun.from) === '2026-07-09T23:00:00.000Z');
+    const winter = londonWeekend(new Date('2026-01-07T12:00:00Z'));
+    check('in winter London is UTC', iso(winter.from) === '2026-01-09T00:00:00.000Z' && iso(winter.to) === '2026-01-12T06:00:00.000Z');
+    const today = datePresetRange('today', lateThu);
+    check('"today" starts at London midnight', iso(today.from) === '2026-07-09T23:00:00.000Z' && iso(today.to) === '2026-07-10T23:00:00.000Z');
+    const tomorrow = datePresetRange('tomorrow', lateThu);
+    check('"tomorrow" is the next London day', iso(tomorrow.from) === '2026-07-10T23:00:00.000Z');
+    // The clocks go back on Sunday 25 October: a week from Friday 23rd ends at
+    // midnight GMT, not at 23:00 or 01:00.
+    const week = datePresetRange('week', new Date('2026-10-23T10:00:00Z'));
+    check('a week across the clock change still ends at midnight',
+      iso(week.from) === '2026-10-22T23:00:00.000Z' && iso(week.to) === '2026-10-30T00:00:00.000Z', `${iso(week.from)} → ${iso(week.to)}`);
+    check('no preset, no window', datePresetRange(undefined).from === null && datePresetRange('nonsense').to === null);
+    check('a London day at a time', iso(londonDayAt(lateThu, 3, 6)) === '2026-07-13T05:00:00.000Z');
+    const picks = weekendWindow(lateThu);
+    check('the weekend picks agree it is Friday in London',
+      picks.from.getTime() === lateThu.getTime() && iso(picks.to) === '2026-07-13T05:00:00.000Z', `${iso(picks.from)} → ${iso(picks.to)}`);
+    const midweek = weekendWindow(new Date('2026-07-08T12:00:00Z'));
+    check('…and midweek they point at Friday midnight London',
+      iso(midweek.from) === '2026-07-09T23:00:00.000Z' && iso(midweek.to) === '2026-07-13T05:00:00.000Z');
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— more like this, a page at a time, the past, and your events —');
+  {
+    await q(`insert into genres (name, slug) values ('Relt Family', 'relt-family'), ('Relt Other', 'relt-other')
+             on conflict do nothing`);
+    await q(`insert into genres (name, slug, parent_genre_id)
+             select 'Relt Child', 'relt-child', id from genres where slug = 'relt-family'
+             on conflict do nothing`);
+    const mk = async (slug: string, opts: { days: number; city: string; genre?: string; listing?: string }) => {
+      const id = (await q(
+        `insert into events (slug, title, title_normalized, start_at, timezone, status, city, country, published_at, listing_status)
+         values ($1, $1, $1, now() + ($2 || ' days')::interval, 'Europe/London', 'live', $3, 'United Kingdom', now(), $4)
+         returning id`, [slug, String(opts.days), opts.city, opts.listing ?? 'confirmed']))[0].id as string;
+      if (opts.genre) {
+        await q(`insert into event_genres (event_id, genre_id, source, confidence)
+                 select $1, id, 'manual', 90 from genres where slug = $2`, [id, opts.genre]);
+      }
+      return id;
+    };
+    const self = await mk('relt-self', { days: 10, city: 'Reltford', genre: 'relt-family' });
+    const sameCity = await mk('relt-same-city', { days: 30, city: 'reltford', genre: 'relt-child' });
+    const elsewhere = await mk('relt-elsewhere', { days: 3, city: 'Otherton', genre: 'relt-family' });
+    const otherGenre = await mk('relt-other-genre', { days: 4, city: 'Reltford', genre: 'relt-other' });
+    const cancelled = await mk('relt-cancelled', { days: 5, city: 'Reltford', genre: 'relt-family', listing: 'cancelled' });
+    const finished = await mk('relt-finished', { days: -3, city: 'Reltford', genre: 'relt-family' });
+
+    const related = (await relatedEvents({ id: self, city: 'Reltford' })).map((e) => e.id);
+    check('a related night in the same city comes first, even if it is later',
+      related[0] === sameCity && related[1] === elsewhere, related.join());
+    check('the genre family counts (a subgenre is related to its parent)', related.includes(sameCity));
+    check('never itself, another genre, a cancelled or a finished night',
+      !related.includes(self) && !related.includes(otherGenre) && !related.includes(cancelled) && !related.includes(finished));
+    check('no more than asked for', (await relatedEvents({ id: self, city: 'Reltford' }, 1)).length === 1);
+    const noGenre = await mk('relt-no-genre', { days: 6, city: 'Reltford' });
+    check('a night with no genres has nothing to be like', (await relatedEvents({ id: noGenre, city: 'Reltford' })).length === 0);
+
+    // Paging: seven nights at the same minute, three a page. Ties are broken
+    // on the id, so no page repeats a night and none is skipped.
+    const sameMinute: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      sameMinute.push((await q(
+        `insert into events (slug, title, title_normalized, start_at, timezone, status, city, country, published_at)
+         values ($1, $1, $1, date_trunc('minute', now()) + interval '12 days', 'Europe/London', 'live', 'Pagetown', 'United Kingdom', now())
+         returning id`, [`page-night-${i}`]))[0].id as string);
+    }
+    for (const sort of ['soonest', 'recommended', 'popular', 'newest'] as const) {
+      const pages: string[][] = [];
+      for (let p = 0; p < 3; p++) {
+        pages.push((await browseEvents({ tab: 'for-you', city: 'Pagetown', sort, limit: 3, offset: p * 3 })).map((e) => e.id));
+      }
+      const all = pages.flat();
+      check(`paging (${sort}) shows every night exactly once`,
+        pages[0].length === 3 && pages[2].length === 1 && new Set(all).size === 7 && sameMinute.every((id) => all.includes(id)),
+        pages.map((x) => x.length).join('/'));
+    }
+    check('a silly offset is clamped', clampOffset(-5) === 0 && clampOffset(1e9) === MAX_BROWSE_OFFSET && clampOffset(Number.NaN) === 0);
+
+    // The past: finished live nights, newest first, cancelled left out.
+    const pastCancelled = await mk('relt-past-cancelled', { days: -2, city: 'Reltford', genre: 'relt-family', listing: 'cancelled' });
+    const older = await mk('relt-finished-older', { days: -40, city: 'Reltford' });
+    const pastAll = (await pastEvents({ limit: 120 })).map((e) => e.id);
+    check('a finished night is in the past list, newest first',
+      pastAll.includes(finished) && pastAll.includes(older) && pastAll.indexOf(finished) < pastAll.indexOf(older));
+    check('upcoming and cancelled nights are not', !pastAll.includes(self) && !pastAll.includes(pastCancelled));
+    const p1 = (await pastEvents({ limit: 1 })).map((e) => e.id);
+    const p2 = (await pastEvents({ limit: 1, offset: 1 })).map((e) => e.id);
+    check('the past pages too', p1.length === 1 && p2.length === 1 && p1[0] !== p2[0] && p1[0] === pastAll[0] && p2[0] === pastAll[1]);
+
+    // Your events: saved / interested / going, coming up and recently.
+    const who = (await q(`insert into members (email, display_name) values ('my-events@test.example', 'Mine') returning id`))[0].id as string;
+    await q(`insert into member_event_actions (member_id, event_id, saved_at) values ($1, $2, now())`, [who, sameCity]);
+    await q(`insert into member_event_actions (member_id, event_id, rsvp, rsvp_at) values ($1, $2, 'going', now())`, [who, elsewhere]);
+    await q(`insert into member_event_actions (member_id, event_id, rsvp, rsvp_at) values ($1, $2, 'interested', now())`, [who, cancelled]);
+    await q(`insert into member_event_actions (member_id, event_id, rsvp, rsvp_at) values ($1, $2, 'going', now())`, [who, finished]);
+    const mine = await memberEvents(who);
+    const up = mine.upcoming.map((e) => e.id);
+    check('your events: saved, going and interested are all there, soonest first',
+      up.join() === [elsewhere, cancelled, sameCity].join(), up.join());
+    check('…a cancelled one stays, so you find out', mine.upcoming.find((e) => e.id === cancelled)?.listing_status === 'cancelled');
+    check('…and each knows how you marked it',
+      mine.upcoming.find((e) => e.id === sameCity)?.saved === true && mine.upcoming.find((e) => e.id === elsewhere)?.rsvp === 'going');
+    check('the night you went to is under recently', mine.past.map((e) => e.id).join() === finished);
+    check('somebody else sees none of it', (await memberEvents(
+      (await q(`select id from members where id <> $1 limit 1`, [who]))[0].id)).upcoming.every((e) => !up.includes(e.id)));
+
+    await q(`delete from members where id = $1`, [who]);
+    await q(`delete from events where slug like 'relt-%' or slug like 'page-night-%'`);
+    await q(`delete from genres where slug in ('relt-child', 'relt-family', 'relt-other')`);
   }
 
   // -------------------------------------------------------------------------

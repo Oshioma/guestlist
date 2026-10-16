@@ -57,6 +57,8 @@ export function FilterControls({
       if (v) params.set(k, v);
       else params.delete(k);
     }
+    // A different filter is a different list: start it from the top.
+    params.delete('page');
     if (updates.genre) track('genre_selected', { genreSlug: updates.genre });
     if (updates.city) track('location_selected', { city: updates.city });
     const s = params.toString();
