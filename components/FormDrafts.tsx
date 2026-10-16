@@ -59,6 +59,18 @@ export function clearAllFormDrafts() {
   } catch { /* ignore */ }
 }
 
+// Drop this page's drafts after the editor saved them some other way than a
+// form submit (the article editor saves with a button, then moves on).
+export function clearFormDraftsHere() {
+  const here = `${PREFIX}${location.pathname}#`;
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(here)) localStorage.removeItem(k);
+    }
+  } catch { /* ignore */ }
+}
+
 function isField(el: EventTarget | null): el is Field {
   return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement;
 }

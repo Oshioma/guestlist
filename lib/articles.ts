@@ -28,6 +28,8 @@ export function excerptFrom(body:string){return bodyText(body).replace(/[#*_>`~\
 export async function listPublishedArticles(section='balance', limit=20):Promise<Article[]> {
   return query<Article>(`${SELECT} where s.slug=$1 and a.status='published' order by a.featured desc, a.published_at desc nulls last limit $2`,[section,limit]);
 }
+// Any status — only for showing a writer or an editor their own unpublished piece.
+export async function getArticleBySlug(slug:string):Promise<Article|null>{return queryOne<Article>(`${SELECT} where a.slug=$1`,[slug]);}
 export async function getPublishedArticle(slug:string):Promise<Article|null>{return queryOne<Article>(`${SELECT} where a.slug=$1 and a.status='published'`,[slug]);}
 export async function listAuthorArticles(authorId:string):Promise<Article[]>{return query<Article>(`${SELECT} where a.author_id=$1 order by a.updated_at desc`,[authorId]);}
 export async function getAuthorArticle(id:string,authorId:string):Promise<Article|null>{return queryOne<Article>(`${SELECT} where a.id=$1 and a.author_id=$2`,[id,authorId]);}
