@@ -78,25 +78,36 @@ export async function assessDuplicate(input: DuplicateCandidateInput): Promise<D
   }
 
   // 2. Similarity scoring against events within ±2 days.
+  //
+  // Every event in the window comes back, but not its lineup: the database
+  // counts how many of OUR artists are on it (lineup_overlap) and how long it
+  // is (lineup_size), which is all the scoring below uses. Shipping each
+  // candidate's whole lineup for every item a scan imports was most of what
+  // this query read. With no artists of our own, the lineup isn't looked at.
+  const inputNorm = normalizeTitle(input.title);
+  const inputArtists = new Set(input.artistNames.map((a) => a.toLowerCase()));
   const candidates = await query<{
     id: string; title: string; title_normalized: string | null; city: string | null;
     venue_id: string | null; promoter_id: string | null; start_at: string;
-    lineup: string[] | null;
+    lineup_overlap: number; lineup_size: number;
   }>(
     `select e.id, e.title, e.title_normalized, e.city, e.venue_id, e.promoter_id, e.start_at,
-            (select array_agg(lower(a.name)) from event_artists ea
-              join artists a on a.id = ea.artist_id where ea.event_id = e.id) as lineup
+            coalesce(lu.overlap, 0) as lineup_overlap, coalesce(lu.size, 0) as lineup_size
        from events e
+       left join lateral (
+         select count(*) filter (where lower(a.name) = any($3))::int as overlap,
+                count(*)::int as size
+           from event_artists ea join artists a on a.id = ea.artist_id
+          where ea.event_id = e.id
+       ) lu on cardinality($3::text[]) > 0
       where e.status <> 'rejected'
         and ($2::uuid is null or e.id <> $2)
         and e.start_at between $1::timestamptz - interval '2 days'
                            and $1::timestamptz + interval '2 days'`,
-    [input.startAt, input.excludeEventId ?? null]
+    [input.startAt, input.excludeEventId ?? null, [...inputArtists]]
   );
   if (!candidates.length) return none;
 
-  const inputNorm = normalizeTitle(input.title);
-  const inputArtists = new Set(input.artistNames.map((a) => a.toLowerCase()));
   let best: DuplicateAssessment = none;
 
   for (const c of candidates) {
@@ -118,9 +129,9 @@ export async function assessDuplicate(input: DuplicateCandidateInput): Promise<D
 
     if (input.promoterId && c.promoter_id === input.promoterId) { score += 8; reasons.push('same promoter'); }
 
-    if (inputArtists.size && c.lineup?.length) {
-      const overlap = c.lineup.filter((a) => inputArtists.has(a)).length;
-      const ratio = overlap / Math.min(inputArtists.size, c.lineup.length);
+    if (inputArtists.size && c.lineup_size) {
+      const overlap = c.lineup_overlap;
+      const ratio = overlap / Math.min(inputArtists.size, c.lineup_size);
       if (ratio >= 0.5) { score += 12; reasons.push('overlapping lineup'); }
       else if (overlap > 0) { score += 5; reasons.push('shared artist'); }
     }

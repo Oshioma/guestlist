@@ -6,7 +6,7 @@ import { GenreChips } from '@/components/GenreChips';
 import { getCurrentMember } from '@/lib/auth';
 import { isActiveMember } from '@/lib/membership';
 import {
-  browseEvents, getLiveCities, getTopLevelGenres,
+  browseEvents, getFilterGenres, getLiveCities, getTopLevelGenres,
   type BrowseParams, type BrowseTab,
 } from '@/lib/events';
 import { query } from '@/lib/db';
@@ -114,11 +114,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   ]);
 
   // All genres (with parents) for the genre filter select.
-  const allGenres = await query<{ name: string; slug: string; parent_name: string | null }>(
-    `select g.name, g.slug, pg.name as parent_name
-       from genres g left join genres pg on pg.id = g.parent_genre_id
-      where g.active order by coalesce(pg.sort_order, g.sort_order), g.parent_genre_id nulls first, g.sort_order`
-  );
+  const allGenres = await getFilterGenres();
 
   // Personalised picks on the unfiltered For You / This Weekend tabs.
   const noFilters = !genre && !eventType && !city && !datePreset && !price;
