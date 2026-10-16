@@ -1,7 +1,15 @@
 // Event queries for discovery, detail and admin surfaces.
 
+import { unstable_cache } from 'next/cache';
 import { query, queryOne } from './db';
 import { placeAnchorsFor, proximityTierSql, DEFAULT_HOME } from './proximity';
+
+// The city and genre lists are the same for everybody, yet every visit to a
+// force-dynamic page (/events, the homepage, /promoters) re-ran them — the city
+// count alone had been run ~9 million times. They are now kept in Next's shared
+// data cache for a few minutes: a new city or genre shows up within that, and
+// the database answers once per window instead of once per page view.
+const SHARED_LIST_SECONDS = 300;
 
 export type GenreTag = { id: string; name: string; slug: string; parent_genre_id: string | null };
 
@@ -406,22 +414,40 @@ export async function getEventBySlug(slug: string, includeUnpublished = false): 
   );
 }
 
-export async function getTopLevelGenres(): Promise<GenreTag[]> {
-  return query<GenreTag>(
-    `select id, name, slug, parent_genre_id from genres
-      where parent_genre_id is null and active
-      order by sort_order, name`
-  );
-}
+export const getTopLevelGenres = unstable_cache(
+  async (): Promise<GenreTag[]> =>
+    query<GenreTag>(
+      `select id, name, slug, parent_genre_id from genres
+        where parent_genre_id is null and active
+        order by sort_order, name`
+    ),
+  ['events:top-level-genres'],
+  { revalidate: SHARED_LIST_SECONDS }
+);
 
-export async function getLiveCities(): Promise<{ city: string; country: string | null; n: number }[]> {
-  return query(
-    `select e.city, min(e.country) as country, count(*)::int as n
-       from events e
-      where e.status = 'live' and e.city is not null and ${UPCOMING_SQL}
-      group by e.city order by n desc, e.city`
-  ) as Promise<{ city: string; country: string | null; n: number }[]>;
-}
+/** Every active genre with its parent's name, for the /events genre filter. */
+export const getFilterGenres = unstable_cache(
+  async (): Promise<{ name: string; slug: string; parent_name: string | null }[]> =>
+    query<{ name: string; slug: string; parent_name: string | null }>(
+      `select g.name, g.slug, pg.name as parent_name
+         from genres g left join genres pg on pg.id = g.parent_genre_id
+        where g.active order by coalesce(pg.sort_order, g.sort_order), g.parent_genre_id nulls first, g.sort_order`
+    ),
+  ['events:filter-genres'],
+  { revalidate: SHARED_LIST_SECONDS }
+);
+
+export const getLiveCities = unstable_cache(
+  async (): Promise<{ city: string; country: string | null; n: number }[]> =>
+    query<{ city: string; country: string | null; n: number }>(
+      `select e.city, min(e.country) as country, count(*)::int as n
+         from events e
+        where e.status = 'live' and e.city is not null and ${UPCOMING_SQL}
+        group by e.city order by n desc, e.city`
+    ),
+  ['events:live-cities'],
+  { revalidate: SHARED_LIST_SECONDS }
+);
 
 export async function getMemberAction(
   memberId: string,
