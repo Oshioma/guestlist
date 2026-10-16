@@ -47,6 +47,7 @@ import { heldForSuggestionSql } from '@/lib/adminEvents';
 import { resolveDuplicates, titlesMatch, localDay } from '@/lib/duplicates';
 import { parseGenres, toggleGenre, genresParam } from '@/lib/genreFilter';
 import { browseEvents } from '@/lib/events';
+import { createDraft, searchLinkableEvents, setArticleEvents, eventsForArticle, slugForSubmit } from '@/lib/articles';
 import { runMonthlySuggestions, bucketGenres, probePassed, suggestionsEmail, hostOf } from '@/lib/supply/suggest';
 import { fetcherFor, renderingConfigured } from '@/lib/supply/render';
 import { parse } from 'node-html-parser';
@@ -1103,6 +1104,49 @@ async function main() {
     check('a second purge has nothing to do', (await purgeFinishedUnpublished()) === 0);
     void [ok, dup, pastNew, pastReview, pastDup, pastLive, pastRejected, endedToday, onNow];
     await q(`delete from events where slug like 'purge-%'`);
+  }
+
+  // -------------------------------------------------------------------------
+  console.log('\n— articles: the event picker and the article address —');
+  {
+    // The address: a placeholder draft gets a real one once, then keeps it.
+    const first = slugForSubmit('draft-ab12c', 'Inside the Jungle Revival');
+    check('first submit turns the draft address into a real one',
+      /^inside-the-jungle-revival-[a-z0-9]+$/.test(first), first);
+    check('a resubmit after changes keeps the same address',
+      slugForSubmit(first, 'Inside the Jungle Revival, Revised') === first);
+
+    // The picker: writers only find published events.
+    const member = (await q(`select id from members where role <> 'admin' limit 1`))[0]?.id
+      ?? (await q(`insert into members (email, display_name) values ('writer@test.example', 'Writer') returning id`))[0].id;
+    const mk = async (slug: string, status: string) => (await q(
+      `insert into events (slug, title, title_normalized, start_at, timezone, status, city, country)
+       values ($1, $2, lower($2), now() + interval '20 days', 'Europe/London', $3::event_status, 'Leeds', 'United Kingdom')
+       returning id`, [slug, `Picker Test ${status}`, status]))[0].id as string;
+    const live = await mk('picker-live', 'live');
+    const pending = await mk('picker-new', 'new');
+    const review = await mk('picker-review', 'needs_review');
+
+    const asWriter = (await searchLinkableEvents('picker test')).map((e) => e.id);
+    check('a writer searching events only finds published ones',
+      asWriter.includes(live) && !asWriter.includes(pending) && !asWriter.includes(review), asWriter.join());
+    const asAdmin = (await searchLinkableEvents('picker test', { includeUnpublished: true })).map((e) => e.id);
+    check('an admin also finds events waiting for review',
+      asAdmin.includes(live) && asAdmin.includes(pending) && asAdmin.includes(review));
+
+    // Linking by id cannot get round the picker.
+    const draft = await createDraft(member, 'events');
+    await setArticleEvents(draft!.id, [live, pending], member);
+    const linked = (await eventsForArticle(draft!.id)).map((e) => e.id);
+    check('a writer cannot link an unpublished event by its id', linked.includes(live) && !linked.includes(pending));
+    await setArticleEvents(draft!.id, [live, pending], member, { allowUnpublished: true });
+    check('an admin can', (await eventsForArticle(draft!.id)).some((e) => e.id === pending));
+    await setArticleEvents(draft!.id, [live, pending], member);
+    check('a link that already exists is kept when a writer saves',
+      (await eventsForArticle(draft!.id)).some((e) => e.id === pending));
+
+    await q(`delete from articles where id = $1`, [draft!.id]);
+    await q(`delete from events where slug like 'picker-%'`);
   }
 
   // -------------------------------------------------------------------------

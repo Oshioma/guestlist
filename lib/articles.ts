@@ -20,6 +20,12 @@ export function articleSlug(title:string) {
   const base=title.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,70) || 'article';
   return `${base}-${Math.random().toString(36).slice(2,7)}`;
 }
+// A draft is created with a placeholder address (draft-xxxxx). Its first
+// submit gives it a real one, from the title — and from then on it keeps it,
+// so a link shared before a round of changes still works after it.
+export function slugForSubmit(currentSlug:string, title:string){
+  return /^draft-[a-z0-9]+$/.test(currentSlug) ? articleSlug(title) : currentSlug;
+}
 // Pictures and videos are not words: they count for neither reading time nor
 // the 80-word minimum, and never end up in an excerpt.
 export function readingMinutes(body:string){return Math.max(1,Math.ceil(wordCount(body)/220));}
@@ -135,7 +141,7 @@ export async function submitArticle(id:string,authorId:string){
   if(!heroOk.ok) throw new Error(`Your hero image does not load — ${heroOk.why}. Pick another one.`);
   const brokenInBody=await brokenBodyImage(a.body);
   if(brokenInBody) throw new Error(`The ${brokenInBody}. Replace it or delete that line.`);
-  await query(`update articles set slug=$3,status='submitted',submitted_at=now(),admin_note=null,updated_at=now() where id=$1 and author_id=$2`,[id,authorId,articleSlug(a.title)]);
+  await query(`update articles set slug=$3,status='submitted',submitted_at=now(),admin_note=null,updated_at=now() where id=$1 and author_id=$2`,[id,authorId,slugForSubmit(a.slug,a.title)]);
   // The editorial desk hears about it — and the review digest is refreshed
   // inside that call, so the bell and the queue agree.
   await notifyAdminsNewArticle(id);
@@ -219,9 +225,13 @@ export async function articlesForEvent(eventId: string): Promise<LinkedArticle[]
 // The whole set is replaced in one go: the editor sends what the article is
 // about now, not a diff, so an event removed in the UI really is unlinked.
 export async function setArticleEvents(
-  articleId: string, eventIds: string[], linkedBy: string | null
+  articleId: string, eventIds: string[], linkedBy: string | null,
+  opts: { allowUnpublished?: boolean } = {}
 ): Promise<number> {
   const ids = [...new Set(eventIds.filter((id) => /^[0-9a-f-]{36}$/.test(id)))].slice(0, 30);
+  // The same rule as the picker: a writer can only ADD a published event.
+  // Links that already exist are kept as they are.
+  const linkable = opts.allowUnpublished ? ['live', 'new', 'needs_review', 'rejected'] : ['live'];
   await query(
     `delete from article_events where article_id = $1 and not (event_id = any($2::uuid[]))`,
     [articleId, ids]
@@ -229,9 +239,10 @@ export async function setArticleEvents(
   if (ids.length) {
     await query(
       `insert into article_events (article_id, event_id, linked_by)
-       select $1, e.id, $3 from events e where e.id = any($2::uuid[])
+       select $1, e.id, $3 from events e
+        where e.id = any($2::uuid[]) and e.status::text = any($4::text[])
        on conflict do nothing`,
-      [articleId, ids, linkedBy]
+      [articleId, ids, linkedBy, linkable]
     );
   }
   return ids.length;
@@ -239,15 +250,23 @@ export async function setArticleEvents(
 
 // Event picker for the editor: title search, soonest first, upcoming before
 // past so tonight is not buried under a decade of archive.
-export async function searchLinkableEvents(q: string, limit = 12): Promise<LinkedEvent[]> {
+//
+// Writers only ever find PUBLISHED events. Anything still in New or Needs
+// Review has not been approved, and a member drafting an article must not be
+// able to read our review queue through the picker. Admins also see events
+// waiting for review, so a feature can be linked before the event goes live.
+export async function searchLinkableEvents(
+  q: string, opts: { includeUnpublished?: boolean; limit?: number } = {}
+): Promise<LinkedEvent[]> {
   const term = `%${q.trim().toLowerCase()}%`;
+  const statuses = opts.includeUnpublished ? ['live', 'new', 'needs_review'] : ['live'];
   return query<LinkedEvent>(
     `select e.id, e.slug, e.title, e.start_at::text, e.end_at::text, e.timezone,
             e.city, e.primary_image_url, e.status
        from events e
-      where lower(e.title) like $1 and e.status in ('live', 'new', 'needs_review')
+      where lower(e.title) like $1 and e.status::text = any($3::text[])
       order by (e.start_at < now()), e.start_at
       limit $2`,
-    [term, limit]
+    [term, opts.limit ?? 12, statuses]
   );
 }

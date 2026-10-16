@@ -28,7 +28,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const q = req.nextUrl.searchParams.get('q')?.trim() ?? '';
     return NextResponse.json({
       linked: await eventsForArticle(id),
-      results: q.length >= 2 ? await searchLinkableEvents(q) : [],
+      results: q.length >= 2
+        ? await searchLinkableEvents(q, { includeUnpublished: me.role === 'admin' })
+        : [],
     });
   } catch (e) {
     if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: e.status });
@@ -45,7 +47,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     const body = await req.json().catch(() => ({}));
     const eventIds: string[] = Array.isArray(body.eventIds) ? body.eventIds.map(String) : [];
-    await setArticleEvents(id, eventIds, me.id);
+    await setArticleEvents(id, eventIds, me.id, { allowUnpublished: me.role === 'admin' });
     return NextResponse.json({ linked: await eventsForArticle(id) });
   } catch (e) {
     if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: e.status });
