@@ -4544,8 +4544,10 @@ a.anTile:hover .anTileGo { text-decoration: underline; }
 --------------------------------------------------------------------------- */
 .myGuestlistHead {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 372px;
-  gap: 44px;
+  /* Advert one third, the writing two: the reads lead with a picture or a
+     video worth looking at, and a narrow column made them thumbnails. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 32px;
   /* stretch, not start: the advert is told to fill its column and can only do
      that if the row gives it the height of the taller side. */
   align-items: stretch;
@@ -4618,7 +4620,7 @@ a.anTile:hover .anTileGo { text-decoration: underline; }
 @media (max-width: 940px) {
   /* Stacked, the carousel goes under the sentence rather than squeezing it. */
   .myGuestlistHead { grid-template-columns: 1fr; gap: 26px; }
-  .readsCar { max-width: 460px; }
+  .readsCar { max-width: 640px; }
 }
 
 /* ---------------------------------------------------------------------------
@@ -4713,3 +4715,8 @@ a.anTile:hover .anTileGo { text-decoration: underline; }
 }
 .cardVideoPlay:hover, .cardVideoPlay:focus-visible { background: #e00; transform: translate(-50%, -50%) scale(1.06); }
 .cardVideoFrame { height: auto; border: 0; }
+.articlePreviewNote { margin: 0 0 16px; padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px dashed var(--border-strong); font-size: 14px; }
+.articlePreviewNote a { font-weight: 700; }
+
+/* In its one-third column the advert's headline steps down so it doesn't wrap word by word. */
+.myGuestlistHead .askAdLine { font-size: clamp(24px, 2.3vw, 32px); }
