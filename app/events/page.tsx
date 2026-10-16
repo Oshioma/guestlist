@@ -7,8 +7,10 @@ import { getCurrentMember } from '@/lib/auth';
 import { isActiveMember } from '@/lib/membership';
 import {
   browseEvents, getFilterGenres, getLiveCities, getTopLevelGenres,
+  BROWSE_PAGE_SIZE, clampOffset,
   type BrowseParams, type BrowseTab,
 } from '@/lib/events';
+import { datePresetRange } from '@/lib/dateWindows';
 import { query } from '@/lib/db';
 import { EventCard } from '@/components/EventCard';
 import { FilterControls } from '@/components/FilterControls';
@@ -40,24 +42,6 @@ const TABS: { key: BrowseTab; label: string }[] = [
 
 const INLINE_GENRES = ['house', 'drum-and-bass', 'jungle', 'techno', 'garage', 'disco', 'trance', 'reggae-and-dub'];
 
-function datePresetRange(preset: string | undefined): { from: Date | null; to: Date | null } {
-  if (!preset) return { from: null, to: null };
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const plus = (base: Date, days: number) => {
-    const d = new Date(base);
-    d.setDate(d.getDate() + days);
-    return d;
-  };
-  switch (preset) {
-    case 'today': return { from: start, to: plus(start, 1) };
-    case 'tomorrow': return { from: plus(start, 1), to: plus(start, 2) };
-    case 'week': return { from: start, to: plus(start, 7) };
-    case 'month': return { from: start, to: plus(start, 31) };
-    default: return { from: null, to: null };
-  }
-}
-
 type Search = { [key: string]: string | string[] | undefined };
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
@@ -82,6 +66,12 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   const lng = one(sp.lng) ? Number(one(sp.lng)) : null;
   const showAllGenres = one(sp.more) === '1';
   const q = (one(sp.q) ?? '').trim().slice(0, 120) || null;
+  // ?page=2 and on. Plain links rather than infinite scroll: every page is a
+  // real address that works without JavaScript, can be shared, and is one a
+  // crawler can follow to the nights past the first sixty.
+  const pageRaw = Math.floor(Number(one(sp.page)));
+  const offset = clampOffset((Number.isFinite(pageRaw) && pageRaw > 1 ? pageRaw - 1 : 0) * BROWSE_PAGE_SIZE);
+  const page = offset / BROWSE_PAGE_SIZE + 1;
 
   const { from, to } = datePresetRange(datePreset);
 
@@ -91,7 +81,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   // (lib/proximity), signed in or not.
   const homeCountry = (await placeAnchorsFor(member?.id)).map((p) => p.country_name).find(Boolean) ?? null;
 
-  const [events, genres, cities] = await Promise.all([
+  const [eventsPlusOne, genres, cities] = await Promise.all([
     browseEvents({
       tab,
       genreSlugs: selectedGenres,
@@ -108,10 +98,17 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
       q,
       member: member ? { id: member.id, home_country: member.home_country } : null,
       homeCountry,
+      // One more than a page, so we know whether there is a next one
+      // without counting the lot.
+      limit: BROWSE_PAGE_SIZE + 1,
+      offset,
     }),
     getTopLevelGenres(),
     getLiveCities(),
   ]);
+
+  const hasMore = eventsPlusOne.length > BROWSE_PAGE_SIZE;
+  const events = eventsPlusOne.slice(0, BROWSE_PAGE_SIZE);
 
   // All genres (with parents) for the genre filter select.
   const allGenres = await getFilterGenres();
@@ -119,7 +116,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   // Personalised picks on the unfiltered For You / This Weekend tabs.
   const noFilters = !genre && !eventType && !city && !datePreset && !price;
   let picks: Awaited<ReturnType<typeof getRecommendedEvents>> = [];
-  if (member && noFilters && (tab === 'for-you' || tab === 'this-weekend')) {
+  if (member && noFilters && page === 1 && (tab === 'for-you' || tab === 'this-weekend')) {
     const window = tab === 'this-weekend' ? weekendWindow() : { from: null, to: null };
     picks = await getRecommendedEvents(member.id, {
       limit: 8, from: window.from, to: window.to,
@@ -152,6 +149,15 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
     const s = params.toString();
     return s ? `/events?${s}` : '/events';
   };
+
+  // The paging links carry everything that shaped this list — the search and
+  // "near me" too, which the tab and chip links above deliberately let go of.
+  // Any other link starts again from page one.
+  const pageQS = (n: number | null) => buildQS({
+    q, page: n && n > 1 ? String(n) : null,
+    lat: lat != null && lng != null ? String(lat) : null,
+    lng: lat != null && lng != null ? String(lng) : null,
+  });
 
   const inlineGenres = genres.filter((g) => INLINE_GENRES.includes(g.slug));
   const moreGenres = genres.filter((g) => !INLINE_GENRES.includes(g.slug));
@@ -213,7 +219,9 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
       <div className="resultMeta">
         {events.length === 0
           ? null
-          : `${events.length} event${events.length === 1 ? '' : 's'}`}
+          : page === 1 && !hasMore
+            ? `${events.length} event${events.length === 1 ? '' : 's'}`
+            : `Events ${offset + 1}–${offset + events.length}`}
       </div>
 
       {events.length > 0 ? (
@@ -221,6 +229,13 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
           {events.map((e) => (
             <EventCard key={e.id} event={e} saved={savedIds.has(e.id)} isSignedIn={!!member} />
           ))}
+        </div>
+      ) : page > 1 ? (
+        // Past the end of the list (an old link, or the list shrank since the
+        // last page was built): not an empty search, just nowhere further.
+        <div className="emptyState">
+          <h3>That’s everything.</h3>
+          <p><Link href={pageQS(null)}>Back to the start</Link></p>
         </div>
       ) : (
         <div className="emptyState">
@@ -269,6 +284,20 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
           </div>
         </div>
       )}
+
+      {(hasMore || page > 1) && (
+        <nav className="pager" aria-label="More events">
+          {page > 1 && (
+            <Link href={pageQS(page - 1)} className="btnGhost" rel="prev">← Previous</Link>
+          )}
+          {hasMore && (
+            <Link href={pageQS(page + 1)} className="btnAccent" rel="next">Load more</Link>
+          )}
+        </nav>
+      )}
+      <p className="pagerAside">
+        <Link href="/events/past">Past events →</Link>
+      </p>
 
       {/* Ask sits under the listings: browse what's on first, then ask when
           the list hasn't answered it. */}

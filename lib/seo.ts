@@ -112,7 +112,26 @@ type EventForSchema = {
   venue_name?: string | null;
   lineup?: { name: string }[];
   genres?: { name: string }[];
+  listing_status?: string | null;
+  promoter?: { name: string; slug: string | null } | null;
 };
+
+// What a promoter has told us about the night, in the words Google reads.
+// Without this every night said EventScheduled — including the ones the page
+// itself announces as CANCELLED, which is the version people saw in search.
+// A sold-out night is still going ahead; it is the tickets that have gone
+// (offers.availability, below).
+const EVENT_STATUS: Record<string, string> = {
+  confirmed: 'https://schema.org/EventScheduled',
+  sold_out: 'https://schema.org/EventScheduled',
+  postponed: 'https://schema.org/EventPostponed',
+  rescheduled: 'https://schema.org/EventRescheduled',
+  cancelled: 'https://schema.org/EventCancelled',
+};
+
+export function schemaEventStatus(listingStatus: string | null | undefined): string {
+  return EVENT_STATUS[listingStatus ?? 'confirmed'] ?? EVENT_STATUS.confirmed;
+}
 
 /**
  * A night, in the vocabulary a search engine reads.
@@ -152,17 +171,34 @@ export function eventSchema(e: EventForSchema): Record<string, unknown> {
                      ...(country ? { addressCountry: country } : {}) } }
       : null;
 
+  // A price only means something with its currency. Plenty of the nights we
+  // read abroad come with a number and no currency, and calling a Berlin
+  // "15" fifteen pounds is precisely the made-up detail this avoids — so a
+  // price whose currency we do not know is left out, not defaulted to GBP.
   const price = e.price_from != null ? Number(e.price_from) : null;
   const offers = e.ticket_url
     ? {
         '@type': 'Offer',
         url: e.ticket_url,
-        ...(price != null && Number.isFinite(price)
-          ? { price: String(price), priceCurrency: e.currency ?? 'GBP' }
+        ...(price != null && Number.isFinite(price) && e.currency
+          ? { price: String(price), priceCurrency: e.currency }
           : {}),
-        availability: 'https://schema.org/InStock',
+        availability: e.listing_status === 'sold_out'
+          ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock',
       }
     : null;
+
+  // Who is putting the night on. Google wants an organizer and treats the
+  // site that lists a night as a poor answer, so the promoter comes first,
+  // with the page that is theirs on Guestlist. Guestlist only stands in when
+  // nobody has claimed the night.
+  const organizer = e.promoter?.name
+    ? {
+        '@type': 'Organization',
+        name: e.promoter.name,
+        ...(e.promoter.slug ? { url: `${SITE_URL}/promoters/${e.promoter.slug}` } : {}),
+      }
+    : { '@type': 'Organization', name: SITE_NAME, url: SITE_URL };
 
   const performers = (e.lineup ?? []).slice(0, 12)
     .map((a) => ({ '@type': 'PerformingGroup', name: a.name }));
@@ -174,7 +210,7 @@ export function eventSchema(e: EventForSchema): Record<string, unknown> {
     url: `${SITE_URL}/events/${e.slug}`,
     startDate: e.start_at,
     ...(e.end_at ? { endDate: e.end_at } : {}),
-    eventStatus: 'https://schema.org/EventScheduled',
+    eventStatus: schemaEventStatus(e.listing_status),
     eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
     ...(clamp(e.description ?? e.short_description, 400)
       ? { description: clamp(e.description ?? e.short_description, 400) } : {}),
@@ -182,7 +218,7 @@ export function eventSchema(e: EventForSchema): Record<string, unknown> {
     ...(location ? { location } : {}),
     ...(offers ? { offers } : {}),
     ...(performers.length ? { performer: performers } : {}),
-    organizer: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
+    organizer,
   };
 }
 

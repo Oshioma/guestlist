@@ -2,7 +2,9 @@ import { OutboundLink } from '@/components/OutboundLink';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getCurrentMember } from '@/lib/auth';
-import { getEventBySlug, getMemberAction } from '@/lib/events';
+import { getEventBySlug, getMemberAction, relatedEvents } from '@/lib/events';
+import { EventCard } from '@/components/EventCard';
+import { calendarEventFor, googleCalendarUrl } from '@/lib/ics';
 import { eventTypeLabel, fmtEventDate, fmtEventTime, formatPrice, isPast } from '@/lib/util';
 import { SocialPanel } from '@/components/SocialPanel';
 import { TrackView } from '@/components/TrackView';
@@ -21,7 +23,7 @@ import { billingEnabled, formatPence, getMembership, getPlan, membershipIsActive
 import { eventEligible, liveRequestFor } from '@/lib/accessRequests';
 import { GetMeIn } from '@/components/membership/GetMeIn';
 import { AdminItemActions } from '@/components/admin/AdminItemActions';
-import { eventSchema, pageMeta, clamp } from '@/lib/seo';
+import { eventSchema, pageMeta, clamp, SITE_URL } from '@/lib/seo';
 import type { Metadata } from 'next';
 
 const SITE = process.env.SITE_URL ?? 'https://www.guestlist.net';
@@ -100,6 +102,12 @@ export default async function EventDetailPage({ params, searchParams }: {params:
   // articlesForEvent only returns published ones.
   const writtenAbout=await articlesForEvent(event.id);
 
+  // More like this: same sound, same city first (lib/events relatedEvents).
+  // Shown on past nights too — somebody reading about last month's party is
+  // the person most likely to want the next one.
+  const related=event.status==='live'?await relatedEvents({id:event.id,city:event.city},6):[];
+  const relatedSaved=new Set<string>(member&&related.length?(await query<{event_id:string}>(`select event_id from member_event_actions where member_id=$1 and saved_at is not null and event_id=any($2::uuid[])`,[member.id,related.map(r=>r.id)])).map(r=>r.event_id):[]);
+
   const nowMs=Date.now(),startMs=new Date(event.start_at).getTime();
   const endMs=event.end_at?new Date(event.end_at).getTime():startMs+6*3600_000;
   const tonight=event.status==='live'&&event.listing_status!=='cancelled'&&startMs<nowMs+24*3600_000&&endMs+CLUB_LIMITS.presenceGraceHours*3600_000>nowMs;
@@ -112,14 +120,26 @@ export default async function EventDetailPage({ params, searchParams }: {params:
 
   // The night in the vocabulary a search engine reads. This is what decides
   // whether it can show up in the "events near you" panel rather than as a
-  // blue link nobody scrolls to. Only for nights that are actually on.
-  const schema = event.status === 'live' && !cancelled ? eventSchema(event) : null;
+  // blue link nobody scrolls to. Every live listing gets it — a cancelled or
+  // postponed night included, because Google's advice is to keep the page
+  // and say so in eventStatus (lib/seo), not to go quiet and leave the old
+  // "scheduled" result standing.
+  const schema = event.status === 'live' ? eventSchema(event) : null;
+
+  // Add to calendar: only for a live night that is still to come.
+  const calendar = event.status === 'live' && !past && !cancelled
+    ? { ics: `/events/${event.slug}/calendar.ics`, google: googleCalendarUrl(calendarEventFor(event, SITE_URL)) }
+    : null;
 
   return <main className="wrap"><TrackView eventId={event.id} src={src}/>
     {schema && <script type="application/ld+json"
       dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}/>}
     <section className="detailHero">{event.primary_image_url&&<img className="bg" src={event.primary_image_url} alt=""/>}<div className="detailHeroInner"><div className="detailKicker">{eventTypeLabel(event.event_type)}{past&&' · Past event'}{event.status!=='live'&&` · ${event.status.replace('_',' ')} (admin preview)`}</div><h1 className="detailTitle">{event.title}</h1>{listingBadge&&<div style={{marginBottom:12}}><span className={`listingBadge ${listingBadge}`}>{listingBadge.replace('_',' ')}</span></div>}<div className="detailMetaRow"><span><strong>{fmtEventDate(event.start_at,event.end_at,event.timezone)}</strong></span><span>{fmtEventTime(event.start_at,event.end_at,event.timezone)}</span>{event.venue&&<span>{event.venue.name}</span>}{location&&<span>{location}</span>}</div>{event.genres.length>0&&<div className="tagRow" style={{marginTop:16}}>{event.genres.map(g=><Link key={g.slug} href={`/events?genre=${g.slug}`} className="tag">{g.name}</Link>)}</div>}</div></section>
     {cancelled&&<div className="cancelBanner">CANCELLED — this event is no longer going ahead.</div>}
+    {/* A past night keeps its page — people look up the party they went to,
+        and the archive (/events/past) links here — but it must not read like
+        one you can still go to. */}
+    {past&&!cancelled&&<div className="pastBanner"><strong>THIS NIGHT HAS HAPPENED.</strong> It took place on {fmtEventDate(event.start_at,event.end_at,event.timezone)}. <Link href="/events">See what’s on next</Link> · <Link href="/events/past">More past events</Link></div>}
     {member?.role==='admin'&&<AdminItemActions noun="event" name={event.title} editHref={`/admin/events/${event.id}`} deleteUrl={`/api/admin/events/${event.id}`} afterDelete="/events"/>}
     <div className="detailColumns"><div>
       {event.short_description&&<p className="prose" style={{fontSize:18,color:'var(--text)'}}>{event.short_description}</p>}
@@ -141,6 +161,8 @@ export default async function EventDetailPage({ params, searchParams }: {params:
           in a group chat is a link nobody opens. */}
       <ShareRow url={`${SITE}/events/${event.slug}`} title={event.title}
                 blurb={[fmtEventDate(event.start_at,event.end_at,event.timezone),event.venue?.name,event.city].filter(Boolean).join(' · ')}
-                eventId={event.id} label="Send it on"/></aside></div>
+                eventId={event.id} label="Send it on"/>
+      {calendar&&<div className="calendarRow" aria-label="Add to calendar"><a className="btnGhost" href={calendar.ics} download>Add to calendar</a><a className="btnGhost" href={calendar.google} target="_blank" rel="noopener noreferrer">Google Calendar ↗</a></div>}</aside></div>
+    {related.length>0&&<section style={{marginTop:44}}><div className="sectionLabel">{past?'Coming up, like this':'More like this'}</div><div className="cardGrid">{related.map(r=><EventCard key={r.id} event={r} saved={relatedSaved.has(r.id)} isSignedIn={!!member}/>)}</div></section>}
   </main>;
 }

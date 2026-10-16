@@ -3,6 +3,7 @@
 import { unstable_cache } from 'next/cache';
 import { query, queryOne } from './db';
 import { placeAnchorsFor, proximityTierSql, DEFAULT_HOME } from './proximity';
+import { londonWeekend } from './dateWindows';
 
 // The city and genre lists are the same for everybody, yet every visit to a
 // force-dynamic page (/events, the homepage, /promoters) re-ran them — the city
@@ -73,27 +74,26 @@ export type BrowseParams = {
   /** Free text: the night's name, its venue, its city, its promoter, its line-up. */
   q?: string | null;
   limit?: number;
+  /** Rows to skip, for ?page=2 and on. */
+  offset?: number;
 };
+
+/** One page of /events and /events/past. */
+export const BROWSE_PAGE_SIZE = 60;
+// Deep offsets make Postgres sort and throw away everything before them; past
+// a few thousand rows nobody is paging, they are a crawler. 100 pages of 60.
+export const MAX_BROWSE_OFFSET = 6000;
+
+export function clampOffset(offset: number | null | undefined): number {
+  const n = Math.floor(Number(offset) || 0);
+  return Math.min(Math.max(n, 0), MAX_BROWSE_OFFSET);
+}
 
 // Upcoming = not yet finished (events with no end time get a 6h grace window).
 const UPCOMING_SQL = `coalesce(e.end_at, e.start_at + interval '6 hours') > now()`;
 // Cancelled events stay on their own pages (clearly marked) but leave the
 // browse grid; sold out / postponed remain listed with badges.
 const LISTABLE_SQL = `e.listing_status <> 'cancelled'`;
-
-function weekendWindow(): { from: Date; to: Date } {
-  // Friday 00:00 → Monday 06:00 of the current/next weekend, local server time.
-  const now = new Date();
-  const day = now.getDay(); // 0 Sun … 6 Sat
-  const friOffset = day === 0 ? -2 : 5 - day; // Sun belongs to the current weekend
-  const fri = new Date(now);
-  fri.setDate(now.getDate() + friOffset);
-  fri.setHours(0, 0, 0, 0);
-  const mon = new Date(fri);
-  mon.setDate(fri.getDate() + 3);
-  mon.setHours(6, 0, 0, 0);
-  return { from: fri, to: mon };
-}
 
 export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
   const where: string[] = [`e.status = 'live'`, UPCOMING_SQL, LISTABLE_SQL];
@@ -105,7 +105,9 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
 
   switch (params.tab) {
     case 'this-weekend': {
-      const { from, to } = weekendWindow();
+      // Friday to Monday morning in London, whatever the server's clock says
+      // (lib/dateWindows).
+      const { from, to } = londonWeekend();
       // Any overlap with the weekend window (multi-day festivals included).
       where.push(
         `e.start_at < ${arg(to)} and coalesce(e.end_at, e.start_at + interval '6 hours') > ${arg(from)}`
@@ -243,11 +245,15 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
     )`;
   }
 
+  // Every order ends on the id. Two nights starting at the same minute (and
+  // on a Saturday at 22:00 there are dozens) otherwise come back in whatever
+  // order Postgres likes that time, and with paging that means a night can
+  // appear on page one and again on page two while another is never shown.
   const orderBy = {
-    recommended: `${proximityTier} asc, e.featured desc, ${genreAffinity} desc, e.start_at asc`,
-    soonest: `e.start_at asc`,
-    popular: `(pop.going_count * 2 + pop.interested_count) desc, e.start_at asc`,
-    newest: `coalesce(e.published_at, e.created_at) desc`,
+    recommended: `${proximityTier} asc, e.featured desc, ${genreAffinity} desc, e.start_at asc, e.id`,
+    soonest: `e.start_at asc, e.id`,
+    popular: `(pop.going_count * 2 + pop.interested_count) desc, e.start_at asc, e.id`,
+    newest: `coalesce(e.published_at, e.created_at) desc, e.id`,
   }[params.sort];
 
   const rows = await query<EventCard & { distance_km: number | null }>(
@@ -282,7 +288,7 @@ export async function browseEvents(params: BrowseParams): Promise<EventCard[]> {
        ) av on true
       where ${where.join(' and ')}
       order by ${orderBy}
-      limit ${Math.min(params.limit ?? 60, 120)}`,
+      limit ${Math.min(params.limit ?? BROWSE_PAGE_SIZE, 121)} offset ${clampOffset(params.offset)}`,
     args
   );
   return rows;
@@ -342,6 +348,135 @@ export async function eventsForEntity(
       order by e.start_at ${when === 'upcoming' ? 'asc' : 'desc'}
       limit ${Math.min(limit, 60)}`,
     args
+  );
+}
+
+// The columns and joins an EventCard is built from, for the lists below.
+// browseEvents and eventsForEntity predate this and spell it out themselves.
+const CARD_SELECT = `
+    select e.id, e.title, e.slug, e.short_description, e.start_at, e.end_at, e.timezone,
+           e.city, e.country, e.event_type, e.price_from, e.price_to, e.currency,
+           e.primary_image_url, e.featured, e.listing_status,
+           v.name as venue_name,
+           pop.going_count, pop.interested_count,
+           coalesce(gj.genres, '[]'::json) as genres,
+           coalesce(av.going_avatars, '[]'::json) as going_avatars`;
+const CARD_JOINS = `
+      left join venues v on v.id = e.venue_id
+      cross join lateral (
+        select count(*) filter (where mea.rsvp = 'going')::int as going_count,
+               count(*) filter (where mea.rsvp = 'interested')::int as interested_count
+          from member_event_actions mea where mea.event_id = e.id
+      ) pop
+      left join lateral (
+        select json_agg(json_build_object('name', g.name, 'slug', g.slug) order by g.sort_order) as genres
+          from event_genres eg join genres g on g.id = eg.genre_id where eg.event_id = e.id
+      ) gj on true
+      left join lateral (
+        select json_agg(json_build_object('display_name', m.display_name, 'avatar_url', m.avatar_url)) as going_avatars
+          from (
+            select m2.display_name, m2.avatar_url
+              from member_event_actions mea join members m2 on m2.id = mea.member_id
+             where mea.event_id = e.id and mea.rsvp = 'going'
+             order by mea.rsvp_at asc limit 4
+          ) m
+      ) av on true`;
+
+const FINISHED_SQL = `coalesce(e.end_at, e.start_at + interval '6 hours') <= now()`;
+
+/**
+ * MORE LIKE THIS.
+ *
+ * Somebody on a night's page has already told us what they are into — that
+ * night. Whether it suits them or not, the next thing they want is the same
+ * sound, ideally in the same city, so that is the order: shares a genre and
+ * is in the same city, then shares a genre anywhere. A genre counts as shared
+ * through its family (jungle sits under drum & bass), because that difference
+ * matters to a promoter tagging a night far more than to somebody looking for
+ * one. Upcoming, live and not cancelled only — and never the night itself.
+ *
+ * A night with no genres has nothing to be like, and gets nothing rather than
+ * a list of whatever happens to be on.
+ */
+export async function relatedEvents(
+  event: { id: string; city: string | null },
+  limit = 6
+): Promise<EventCard[]> {
+  return query<EventCard>(
+    `with fam as (
+       select distinct coalesce(g.parent_genre_id, g.id) as family_id
+         from event_genres eg join genres g on g.id = eg.genre_id
+        where eg.event_id = $1
+     )
+     ${CARD_SELECT}
+       from events e
+       ${CARD_JOINS}
+      where e.status = 'live' and ${UPCOMING_SQL} and ${LISTABLE_SQL}
+        and e.id <> $1
+        and exists (
+          select 1 from event_genres eg2 join genres g2 on g2.id = eg2.genre_id
+           where eg2.event_id = e.id
+             and coalesce(g2.parent_genre_id, g2.id) in (select family_id from fam)
+        )
+      order by ($2::text is not null and lower(e.city) = lower($2::text)) desc nulls last,
+               e.start_at asc, e.id
+      limit ${Math.min(Math.max(Math.floor(limit), 1), 24)}`,
+    [event.id, event.city]
+  );
+}
+
+export type MemberEventCard = EventCard & {
+  saved: boolean;
+  rsvp: 'interested' | 'going' | null;
+};
+
+/**
+ * Everything a member has put their hand up for — saved, interested or
+ * going — split into what is still to come and what has just happened.
+ *
+ * Cancelled nights stay in the upcoming list, unlike everywhere else: this is
+ * the one place somebody finds out the night they were going to has been
+ * called off, and the card says so. The past is the last 90 days; anything
+ * older is history, which lives on the profile (lib/scene).
+ */
+export async function memberEvents(memberId: string): Promise<{
+  upcoming: MemberEventCard[];
+  past: MemberEventCard[];
+}> {
+  const list = (when: string, order: string, limit: number) =>
+    query<MemberEventCard>(
+      `${CARD_SELECT},
+              (mine.saved_at is not null) as saved, mine.rsvp
+         from member_event_actions mine
+         join events e on e.id = mine.event_id
+         ${CARD_JOINS}
+        where mine.member_id = $1 and e.status = 'live'
+          and (mine.saved_at is not null or mine.rsvp is not null)
+          and ${when}
+        order by ${order}
+        limit ${limit}`,
+      [memberId]
+    );
+  const [upcoming, past] = await Promise.all([
+    list(UPCOMING_SQL, 'e.start_at asc, e.id', 120),
+    list(`${FINISHED_SQL} and e.start_at > now() - interval '90 days'`, 'e.start_at desc, e.id', 24),
+  ]);
+  return { upcoming, past };
+}
+
+/**
+ * The archive of nights that have happened: live listings that finished,
+ * newest first, a page at a time (/events/past). Cancelled ones are left out
+ * — they never happened, and their own pages still say so.
+ */
+export async function pastEvents(opts: { offset?: number; limit?: number } = {}): Promise<EventCard[]> {
+  return query<EventCard>(
+    `${CARD_SELECT}
+       from events e
+       ${CARD_JOINS}
+      where e.status = 'live' and ${FINISHED_SQL} and ${LISTABLE_SQL}
+      order by e.start_at desc, e.id
+      limit ${Math.min(Math.max(Math.floor(opts.limit ?? BROWSE_PAGE_SIZE), 1), 121)} offset ${clampOffset(opts.offset)}`
   );
 }
 

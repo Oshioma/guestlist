@@ -9,6 +9,7 @@
 import { query } from './db';
 import { NEAR_KM } from './events';
 import { DEFAULT_HOME } from './proximity';
+import { londonDate, londonDayAt } from './dateWindows';
 import { tasteGenreIds } from './taste';
 import { track } from './analytics';
 
@@ -419,16 +420,15 @@ export async function trackRecommendationImpressions(
   }
 }
 
-// The upcoming weekend window. Mon–Thu: next Friday 00:00 UTC → Monday
-// 06:00 UTC. Fri–Sun: now → the coming Monday 06:00 UTC (late Sunday
-// finishes count as the same weekend).
+// The upcoming weekend window. Mon–Thu: next Friday 00:00 → Monday 06:00.
+// Fri–Sun: now → the coming Monday 06:00 (late Sunday finishes count as the
+// same weekend). In London time, not UTC: on a summer Friday between midnight
+// and one in the morning UTC still says Thursday, and the picks pointed at
+// next weekend while people were already out (lib/dateWindows).
 export function weekendWindow(now = new Date()): { from: Date; to: Date } {
-  const day = now.getUTCDay(); // 0 Sun … 6 Sat
-  const isWeekend = day === 5 || day === 6 || day === 0;
-  const from = isWeekend
-    ? now
-    : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + (5 - day)));
-  const daysToMonday = day === 0 ? 1 : 8 - day; // from *now's* weekday
-  const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysToMonday, 6, 0, 0));
-  return { from, to };
+  const { weekday } = londonDate(now); // 0 Sun … 6 Sat
+  const isWeekend = weekday === 5 || weekday === 6 || weekday === 0;
+  const from = isWeekend ? now : londonDayAt(now, 5 - weekday);
+  const daysToMonday = weekday === 0 ? 1 : 8 - weekday; // from *now's* weekday
+  return { from, to: londonDayAt(now, daysToMonday, 6) };
 }

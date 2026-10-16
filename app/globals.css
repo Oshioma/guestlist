@@ -1361,6 +1361,27 @@ section:first-child > .sectionLabel:first-child { margin-top: 0; }
   letter-spacing: 0.6px;
   margin-top: 18px;
 }
+/* A night that has been and gone: still a page worth having, clearly not one to buy tickets from. */
+.pastBanner {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 14px 18px;
+  font-size: 14px;
+  margin-top: 18px;
+}
+.pastBanner strong { color: var(--text); letter-spacing: 0.6px; }
+.pastBanner a { text-decoration: underline; }
+
+/* Add to calendar, under the share row on an event. */
+.calendarRow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.calendarRow .btnGhost { padding: 7px 13px; font-size: 11px; }
+
+/* /events and /events/past paging. */
+.pager { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 28px 0 8px; }
+.pagerAside { text-align: center; font-size: 13px; color: var(--text-muted); margin: 10px 0 40px; }
+.pagerAside a { text-decoration: underline; }
 
 /* ---------- entity profile pages ---------- */
 
